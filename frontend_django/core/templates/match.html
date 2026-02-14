@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Матчи{% endblock %}
+{% block content %}
+<h1>Матчи</h1>
+{% for m in matches %}
+  <div class="card">#{{ m.id }} {{ m.teamA }} {{ m.scoreA }} - {{ m.scoreB }} {{ m.teamB }} | {{ m.round }} | {{ m.status }}</div>
+{% empty %}
+  <div class="card">Матчи недоступны</div>
+{% endfor %}
+{% if is_admin or is_judge %}
+<form method="post" class="card mt">{% csrf_token %}
+  {{ form.as_p }}
+  <button class="btn" type="submit">Update result</button>
+</form>
+{% endif %}
+{% endblock %}

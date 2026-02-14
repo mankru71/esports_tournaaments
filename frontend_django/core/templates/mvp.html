@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}MVP{% endblock %}
+{% block content %}
+<h1>MVP</h1>
+<p>Открыто: {{ mvp.isOpen|default:"N/A" }}</p>
+<h3>Кандидаты</h3>
+{% for c in mvp.candidates %}
+<div class="card">{{ c.name }}
+  {% if mvp.isOpen %}
+  <form method="post">{% csrf_token %}<input type="hidden" name="player_id" value="{{ c.id }}"><button class="btn small" type="submit">Vote</button></form>
+  {% endif %}
+</div>
+{% empty %}<div class="card">Нет кандидатов</div>{% endfor %}
+<h3>Результаты</h3>
+{% for r in mvp.results %}<div class="card">{{ r.name }} — {{ r.votes }}</div>{% empty %}<div class="card">Нет результатов</div>{% endfor %}
+{% endblock %}

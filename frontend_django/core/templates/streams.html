@@ -1,21 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Трансляции — Киберспортивный турнир{% endblock %}
-
+{% block title %}Трансляции{% endblock %}
 {% block content %}
-  <h1>Прямые трансляции</h1>
-  <p class="muted">Смотри матчи топ‑уровня в прямом эфире.</p>
-
-  <div class="grid mt">
-    {% for s in streams %}
-      <div class="card">
-        <div class="card-title">{{ s.title }}</div>
-        <div class="meta">Игра: <span class="strong">{{ s.game }}</span></div>
-        <div class="meta">Стример: <span class="strong">{{ s.streamer }}</span></div>
-        <div class="meta">Зрителей: <span class="strong">{{ s.viewer_count }}</span></div>
-        <div class="mt">
-          <button class="btn small" type="button" disabled>Смотреть (демо)</button>
-        </div>
-      </div>
-    {% endfor %}
-  </div>
+<h1>Трансляции</h1>
+<div class="grid mt">
+  {% for s in streams %}
+    <div class="card">
+      <div class="card-title">{{ s.provider|default:"N/A" }}</div>
+      <div>URL: {{ s.url|default:"N/A" }}</div>
+      <div>Online: {{ s.status.online|default:"N/A" }}</div>
+      <div>Viewers: {{ s.status.viewers|default:"N/A" }}</div>
+    </div>
+  {% endfor %}
+</div>
 {% endblock %}

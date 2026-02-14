@@ -1,24 +1,49 @@
-import requests
+import base64
 import json
 import logging
+import time
+from dataclasses import dataclass
+from typing import Any
+
+import requests
 from django.conf import settings
-from django.core.cache import cache
-from functools import wraps
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class ApiResult:
+    ok: bool
+    data: Any = None
+    error: dict | None = None
+
+
 class CSharpApiClient:
-    """Клиент для взаимодействия с C# API"""
-    
+    """Клиент для взаимодействия с C# API с единым форматом ошибок."""
+
     def __init__(self):
-        self.base_url = settings.C_SHARP_API['BASE_URL']
-        self.timeout = settings.C_SHARP_API.get('TIMEOUT', 30)
+        self.base_url = settings.DJANGO_API_BASE_URL.rstrip("/")
+        self.timeout = settings.C_SHARP_API.get("TIMEOUT", 30)
         self.session = requests.Session()
-        
-    def _handle_request(self, method, endpoint, data=None, params=None):
-        """Обработка HTTP запросов"""
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        
+
+    def _build_url(self, endpoint: str) -> str:
+        return f"{self.base_url}/{endpoint.lstrip('/')}"
+
+    def _decode_exp(self, token: str) -> int | None:
+        try:
+            payload = token.split(".")[1]
+            padding = "=" * (-len(payload) % 4)
+            decoded = base64.urlsafe_b64decode(payload + padding)
+            return int(json.loads(decoded.decode("utf-8")).get("exp"))
+        except Exception:
+            return None
+
+    def _request(self, method: str, endpoint: str, data=None, params=None, token: str | None = None) -> ApiResult:
+        url = self._build_url(endpoint)
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
         try:
             response = self.session.request(
                 method=method,
@@ -26,81 +51,106 @@ class CSharpApiClient:
                 json=data,
                 params=params,
                 timeout=self.timeout,
-                headers={'Content-Type': 'application/json'}
+                headers=headers,
             )
-            response.raise_for_status()
-            return response.json() if response.content else None
-        except requests.exceptions.Timeout:
-            logger.error(f"C# API timeout: {url}")
-            return None
-        except requests.exceptions.RequestException as e:
-            logger.error(f"C# API error: {e}")
-            return None
-    
-    def _cache_wrapper(self, func, cache_key, timeout=300):
-        """Декоратор для кэширования"""
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if settings.C_SHARP_API.get('ENABLE_CACHE', True):
-                cached_result = cache.get(cache_key)
-                if cached_result:
-                    logger.debug(f"Cache hit: {cache_key}")
-                    return cached_result
-            
-            result = func(*args, **kwargs)
-            
-            if result and settings.C_SHARP_API.get('ENABLE_CACHE', True):
-                cache.set(cache_key, result, timeout)
-            
-            return result
-        return wrapper
-    
-    # Методы API
-    
-    def get_tournaments(self):
-        """Получить список турниров"""
-        cache_key = 'csharp_api_tournaments'
-        func = lambda: self._handle_request('GET', 'api/tournament')
-        return self._cache_wrapper(func, cache_key)()
-    
-    def get_tournament(self, tournament_id):
-        """Получить детали турнира"""
-        cache_key = f'csharp_api_tournament_{tournament_id}'
-        func = lambda: self._handle_request('GET', f'api/tournament/{tournament_id}')
-        return self._cache_wrapper(func, cache_key, timeout=60)()
-    
-    def get_stats(self):
-        """Получить статистику"""
-        cache_key = 'csharp_api_stats'
-        func = lambda: self._handle_request('GET', 'api/tournament/stats')
-        return self._cache_wrapper(func, cache_key, timeout=30)()
-    
-    def get_nominees(self):
-        """Получить список номинантов"""
-        cache_key = 'csharp_api_nominees'
-        func = lambda: self._handle_request('GET', 'api/voting/nominees')
-        return self._cache_wrapper(func, cache_key)()
-    
-    def vote(self, nominee_id, session_id, ip_address):
-        """Проголосовать за номинанта"""
-        data = {
-            'NomineeId': nominee_id,
-            'VoterSession': session_id,
-            'VoterIp': ip_address
-        }
-        return self._handle_request('POST', 'api/voting/vote', data=data)
-    
-    def has_voted(self, session_id):
-        """Проверить, голосовал ли пользователь"""
-        return self._handle_request('GET', f'api/voting/hasvoted/{session_id}')
-    
-    def health_check(self):
-        """Проверить доступность API"""
-        try:
-            response = self.session.get(f"{self.base_url}/api/health", timeout=5)
-            return response.status_code == 200
-        except:
-            return False
+        except requests.exceptions.RequestException as exc:
+            logger.error("C# API connection error: %s", exc)
+            return ApiResult(ok=False, error={"code": "api_unavailable", "message": "API недоступно", "details": str(exc)})
 
-# Синглтон экземпляр клиента
+        if 200 <= response.status_code < 300:
+            if not response.content:
+                return ApiResult(ok=True, data=None)
+            try:
+                return ApiResult(ok=True, data=response.json())
+            except ValueError:
+                return ApiResult(ok=True, data={"raw": response.text})
+
+        body = {}
+        try:
+            body = response.json()
+        except ValueError:
+            pass
+
+        if response.status_code == 401:
+            return ApiResult(ok=False, error={"code": "unauthorized", "message": "Требуется вход", "details": body})
+        if response.status_code == 403:
+            return ApiResult(ok=False, error={"code": "forbidden", "message": "Недостаточно прав", "details": body})
+        if response.status_code >= 500:
+            return ApiResult(ok=False, error={"code": "server_error", "message": "API недоступно", "details": body})
+
+        return ApiResult(
+            ok=False,
+            error={
+                "code": f"http_{response.status_code}",
+                "message": body.get("message") or body.get("title") or "Ошибка API",
+                "details": body,
+            },
+        )
+
+    def token_expired(self, token: str | None) -> bool:
+        if not token:
+            return True
+        exp = self._decode_exp(token)
+        if not exp:
+            return False
+        return exp <= int(time.time())
+
+    # Auth
+    def login(self, email: str, password: str) -> ApiResult:
+        return self._request("POST", "auth/login", data={"email": email, "password": password})
+
+    def register(self, email: str, password: str, role: str = "captain") -> ApiResult:
+        return self._request("POST", "auth/register", data={"email": email, "password": password, "role": role})
+
+    def me(self, token: str) -> ApiResult:
+        return self._request("GET", "auth/me", token=token)
+
+    # Tournaments
+    def get_tournaments(self, token: str | None = None) -> ApiResult:
+        return self._request("GET", "tournament", token=token)
+
+    def get_tournament(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", f"tournament/{tournament_id}", token=token)
+
+    def get_stats(self) -> ApiResult:
+        return self._request("GET", "tournament/stats")
+
+    # Matches / MVP / Streams / Analytics
+    def get_matches(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", "matches", params={"tournamentId": tournament_id}, token=token)
+
+    def update_match_result(self, match_id: int, score_a: int, score_b: int, token: str) -> ApiResult:
+        return self._request("PUT", f"matches/{match_id}/result", data={"scoreA": score_a, "scoreB": score_b}, token=token)
+
+    def get_mvp(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", "mvp/results", params={"tournamentId": tournament_id}, token=token)
+
+    def vote_mvp(self, tournament_id: int, player_id: int, token: str) -> ApiResult:
+        return self._request("POST", "mvp/vote", data={"tournamentId": tournament_id, "playerId": player_id}, token=token)
+
+    def get_streams(self, token: str | None = None) -> ApiResult:
+        return self._request("GET", "streams/status", token=token)
+
+    def get_analytics(self, token: str | None = None) -> ApiResult:
+        return self._request("GET", "analytics", token=token)
+
+    # legacy voting
+    def get_nominees(self) -> ApiResult:
+        return self._request("GET", "voting/nominees")
+
+    def vote(self, nominee_id: int, session_id: str | None, ip_address: str) -> ApiResult:
+        return self._request(
+            "POST",
+            "voting/vote",
+            data={"nomineeId": nominee_id, "voterSession": session_id or "", "voterIp": ip_address},
+        )
+
+    def has_voted(self, session_id: str) -> ApiResult:
+        return self._request("GET", f"voting/hasvoted/{session_id}")
+
+    def health_check(self) -> bool:
+        result = self._request("GET", "health")
+        return result.ok
+
+
 api_client = CSharpApiClient()
