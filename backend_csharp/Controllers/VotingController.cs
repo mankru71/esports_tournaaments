@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace Controllers
 {
@@ -22,8 +23,11 @@ namespace Controllers
 
         public class VoteRequest
         {
+            [Required]
             public int NomineeId { get; set; }
+            [Required]
             public string VoterSession { get; set; } = string.Empty;
+            [Required]
             public string VoterIp { get; set; } = string.Empty;
         }
 

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Аналитика{% endblock %}
+{% block content %}
+<h1>Аналитика</h1>
+<h3>Статистика игроков</h3>
+{% for p in analytics.playerStats %}<div class="card">{{ p.player }}: {{ p.kills|default:"N/A" }}</div>{% empty %}<div class="card">Нет данных</div>{% endfor %}
+<h3>Популярность дисциплин</h3>
+{% for d in analytics.disciplinePopularity %}<div class="card">{{ d.discipline }}: {{ d.value }}</div>{% empty %}<div class="card">Нет данных</div>{% endfor %}
+{% endblock %}

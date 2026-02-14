@@ -1,36 +1,16 @@
-  {% extends "base.html" %}
-  {% block title %}{{ tournament.name }} — Турнир{% endblock %}
-
-  {% block content %}
-    <div class="row">
-      <div>
-        <h1>{{ tournament.name }}</h1>
-        <p class="muted">
-          Игра: <span class="strong">{{ tournament.game }}</span> ·
-          Призовой фонд: <span class="strong">{{ tournament.prize_pool }}</span> ·
-          Старт: <span class="strong">{{ tournament.start_date }}</span>
-        </p>
-      </div>
-      <div class="right">
-        <a class="btn" href="{% url 'registration' %}">Подать заявку</a>
-      </div>
-    </div>
-
-    <h2 class="mt">Сетка матчей</h2>
-    <div class="bracket">
-      {% for round in matches %}
-        <div class="card bracket-col">
-          <div class="card-title">{{ round.round }}</div>
-          <div class="bracket-list">
-            {% for g in round.games %}
-              <div class="match">
-                <div class="team {% if g.winner == 1 %}win{% endif %}">{{ g.p1 }} <span class="score">{{ g.s1 }}</span></div>
-                <div class="team {% if g.winner == 2 %}win{% endif %}">{{ g.p2 }} <span class="score">{{ g.s2 }}</span></div>
-                {% if g.is_final %}<div class="tag">Финал</div>{% endif %}
-              </div>
-            {% endfor %}
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-  {% endblock %}
+{% extends "base.html" %}
+{% block title %}{{ tournament.name }}{% endblock %}
+{% block content %}
+<h1>{{ tournament.name }}</h1>
+<p>Дисциплина: {{ tournament.discipline }} | Формат: {{ tournament.format }} | Призовой фонд: {{ tournament.prizePool }} | Старт: {{ tournament.startDate }}</p>
+{% if is_admin %}
+  <button class="btn">Approve registration</button>
+  <button class="btn">Generate bracket</button>
+{% endif %}
+<h2>Матчи</h2>
+{% for m in matches %}
+  <div class="card">{{ m.round }}: {{ m.teamA }} {{ m.scoreA }} - {{ m.scoreB }} {{ m.teamB }} ({{ m.status }})</div>
+{% empty %}
+  <div class="card">Нет данных</div>
+{% endfor %}
+{% endblock %}

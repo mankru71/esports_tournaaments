@@ -5,32 +5,25 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Киберспортивный турнир{% endblock %}</title>
- <link rel="stylesheet" href="{% static 'core/base.css' %}">
-<link rel="stylesheet" href="{% static 'core/layout.css' %}">
-<link rel="stylesheet" href="{% static 'core/components.css' %}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'core/base.css' %}">
+  <link rel="stylesheet" href="{% static 'core/layout.css' %}">
+  <link rel="stylesheet" href="{% static 'core/components.css' %}">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">Esports Arena Pro</div>
     <nav class="nav">
-      <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
-        <span class="nav-icon">🏠</span> Панель
-      </a>
-      <a href="{% url 'tournaments' %}" class="{% if request.resolver_match.url_name == 'tournaments' or request.resolver_match.url_name == 'tournament_detail' %}active{% endif %}">
-        <span class="nav-icon">🏆</span> Турниры
-      </a>
-      <a href="{% url 'registration' %}" class="{% if request.resolver_match.url_name == 'registration' %}active{% endif %}">
-        <span class="nav-icon">📝</span> Регистрация
-      </a>
-      <a href="{% url 'streams' %}" class="{% if request.resolver_match.url_name == 'streams' %}active{% endif %}">
-        <span class="nav-icon">🎥</span> Трансляции
-      </a>
-      <a href="{% url 'voting' %}" class="{% if request.resolver_match.url_name == 'voting' %}active{% endif %}">
-        <span class="nav-icon">⭐</span> Голосование
-      </a>
+      <a href="{% url 'dashboard' %}">🏠 Панель</a>
+      <a href="{% url 'tournaments' %}">🏆 Турниры</a>
+      <a href="{% url 'registration' %}">📝 Регистрация</a>
+      <a href="{% url 'streams' %}">🎥 Трансляции</a>
+      <a href="{% url 'voting' %}">⭐ Голосование</a>
+      <a href="{% url 'analytics' %}">📊 Аналитика</a>
+      {% if current_user %}
+        <a href="{% url 'logout' %}">🚪 Выход ({{ current_user.role }})</a>
+      {% else %}
+        <a href="{% url 'login' %}">🔐 Вход</a>
+      {% endif %}
     </nav>
   </header>
 
@@ -42,31 +35,7 @@
         {% endfor %}
       </div>
     {% endif %}
-
     {% block content %}{% endblock %}
   </main>
-
-  <footer class="footer">
-    <div>© {% now "Y" %} жесткий проект по практике</div>
-    <div class="footer-meta mt">v2.0 • Поддержка: нету(</div>
-  </footer>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const cards = document.querySelectorAll('.card');
-      cards.forEach((card, index) => {
-        card.style.animationDelay = `${index * 0.1}s`;
-      });
-      
-      const voteButtons = document.querySelectorAll('button[type="submit"]');
-      voteButtons.forEach(button => {
-        button.addEventListener('click', function(e) {
-          if (this.disabled) return;
-          this.innerHTML = '<span>Голос засчитан! ✓</span>';
-          this.disabled = true;
-        });
-      });
-    });
-  </script>
 </body>
 </html>

@@ -13,8 +13,11 @@ DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # C# API конфигурация
+DJANGO_API_BASE_URL = os.getenv('DJANGO_API_BASE_URL', os.getenv('C_SHARP_API_BASE_URL', 'http://csharp-api:5000/api'))
+PUBLIC_API_BASE_URL = os.getenv('PUBLIC_API_BASE_URL', '/api')
+
 C_SHARP_API = {
-    'BASE_URL': os.getenv('C_SHARP_API_BASE_URL', 'http://csharp-api:5000'),
+    'BASE_URL': DJANGO_API_BASE_URL,
     'TIMEOUT': int(os.getenv('C_SHARP_API_TIMEOUT', '30')),
     'ENABLE_CACHE': os.getenv('C_SHARP_API_ENABLE_CACHE', 'True') == 'True',
 }

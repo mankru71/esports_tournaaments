@@ -1,15 +1,20 @@
-from django.contrib import admin
-from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import path
 
 from core import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.dashboard, name='dashboard'),
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
     path('tournaments/', views.tournaments, name='tournaments'),
     path('tournaments/<int:tournament_id>/', views.tournament_detail, name='tournament_detail'),
+    path('tournaments/<int:tournament_id>/matches/', views.match_center, name='match_center'),
+    path('tournaments/<int:tournament_id>/mvp/', views.mvp, name='mvp'),
+    path('analytics/', views.analytics, name='analytics'),
     path('registration/', views.registration, name='registration'),
     path('streams/', views.streams, name='streams'),
     path('voting/', views.voting, name='voting'),

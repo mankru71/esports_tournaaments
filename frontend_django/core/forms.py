@@ -1,5 +1,17 @@
 from django import forms
 
+
+class LoginForm(forms.Form):
+    email = forms.EmailField(label='Email')
+    password = forms.CharField(label='Пароль', widget=forms.PasswordInput)
+
+
+class MatchResultForm(forms.Form):
+    match_id = forms.IntegerField(min_value=1, label='ID матча')
+    score_a = forms.IntegerField(min_value=0, label='Счет Team A')
+    score_b = forms.IntegerField(min_value=0, label='Счет Team B')
+
+
 class RegistrationForm(forms.Form):
     MODE_CHOICES = [
         ('team', 'Команда'),

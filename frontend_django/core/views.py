@@ -1,132 +1,274 @@
 from datetime import date
-from django.shortcuts import render, redirect
+
 from django.contrib import messages
-from django.conf import settings
-from .forms import RegistrationForm
+from django.http import HttpResponseForbidden
+from django.shortcuts import redirect, render
+
 from .api_client import api_client
+from .forms import LoginForm, MatchResultForm, RegistrationForm
+
+
+ROLE_ADMIN = "admin"
+ROLE_JUDGE = "judge"
+ROLE_CAPTAIN = "captain"
+
+
+def _normalize_tournament(item):
+    return {
+        "id": item.get("id"),
+        "name": item.get("name", "N/A"),
+        "discipline": item.get("discipline") or item.get("game") or "N/A",
+        "format": item.get("format", "N/A"),
+        "status": item.get("status", "N/A"),
+        "startDate": item.get("startDate") or item.get("start_date") or "N/A",
+        "prizePool": item.get("prizePool") or item.get("prize_pool") or item.get("totalAmount") or "N/A",
+        "participants": item.get("participants") or f"{item.get('currentParticipants', 'N/A')}/{item.get('maxParticipants', 'N/A')}",
+    }
+
+
+def _normalize_match(item):
+    return {
+        "id": item.get("id"),
+        "teamA": item.get("teamA", "N/A"),
+        "teamB": item.get("teamB", "N/A"),
+        "scoreA": item.get("scoreA", 0),
+        "scoreB": item.get("scoreB", 0),
+        "status": item.get("status", "N/A"),
+        "round": item.get("round", "N/A"),
+        "groupName": item.get("groupName", "N/A"),
+        "streamUrl": item.get("streamUrl", "N/A"),
+    }
+
+
+def _read_current_user(request):
+    token = request.session.get("api_token")
+    if not token or api_client.token_expired(token):
+        request.session.pop("api_token", None)
+        request.session.pop("current_user", None)
+        return None
+
+    cached_user = request.session.get("current_user")
+    if cached_user:
+        return cached_user
+
+    me_result = api_client.me(token)
+    if not me_result.ok:
+        request.session.pop("api_token", None)
+        request.session.pop("current_user", None)
+        return None
+
+    request.session["current_user"] = me_result.data
+    return me_result.data
+
+
+def _role_flags(user):
+    role = (user or {}).get("role", "guest")
+    return {
+        "is_admin": role == ROLE_ADMIN,
+        "is_judge": role == ROLE_JUDGE,
+        "is_captain": role == ROLE_CAPTAIN,
+        "current_user": user,
+    }
+
+
+def _process_result_error(request, result):
+    if result.ok:
+        return None
+    code = (result.error or {}).get("code")
+    message = (result.error or {}).get("message", "Ошибка API")
+    if code == "unauthorized":
+        request.session.pop("api_token", None)
+        request.session.pop("current_user", None)
+        messages.info(request, "Сессия истекла. Войдите заново.")
+        return redirect("login")
+    if code == "forbidden":
+        messages.error(request, "Недостаточно прав")
+        return HttpResponseForbidden("Недостаточно прав")
+
+    messages.error(request, message)
+    return None
+
 
 def dashboard(request):
-    # Получаем статистику из C# API
-    stats_data = api_client.get_stats()
-    
-    if stats_data:
-        stats = {
-            "players": stats_data.get('totalPlayers', 12000),
-            "tournaments": stats_data.get('activeTournaments', 3),
-            "viewers": stats_data.get('totalViewers', 860000),
-            "events_today": stats_data.get('eventsToday', 4),
-            "today": date.today(),
-        }
+    stats_result = api_client.get_stats()
+    if not stats_result.ok:
+        messages.info(request, "API недоступно, показаны демо-данные")
+        stats = {"players": 12000, "tournaments": 3, "viewers": 860000, "events_today": 4, "today": date.today()}
     else:
-        # Fallback на локальные данные если API недоступно
+        payload = stats_result.data or {}
         stats = {
-            "players": 12000,
-            "tournaments": 3,
-            "viewers": 860000,
-            "events_today": 4,
+            "players": payload.get("totalPlayers", 12000),
+            "tournaments": payload.get("activeTournaments", 3),
+            "viewers": payload.get("totalViewers", 860000),
+            "events_today": payload.get("eventsToday", 4),
             "today": date.today(),
         }
-    
-    return render(request, "dashboard.html", {"stats": stats})
+
+    context = {"stats": stats}
+    context.update(_role_flags(_read_current_user(request)))
+    return render(request, "dashboard.html", context)
+
+
+def login_view(request):
+    if request.method == "POST":
+        form = LoginForm(request.POST)
+        if form.is_valid():
+            login_result = api_client.login(form.cleaned_data["email"], form.cleaned_data["password"])
+            if login_result.ok:
+                request.session["api_token"] = login_result.data.get("token")
+                request.session["current_user"] = login_result.data.get("user", {})
+                messages.success(request, "Вход выполнен")
+                return redirect("dashboard")
+            messages.error(request, (login_result.error or {}).get("message", "Ошибка входа"))
+    else:
+        form = LoginForm()
+
+    return render(request, "login.html", {"form": form, **_role_flags(_read_current_user(request))})
+
+
+def logout_view(request):
+    request.session.flush()
+    messages.info(request, "Вы вышли из системы")
+    return redirect("login")
+
 
 def tournaments(request):
-    # Получаем турниры из C# API
-    tournaments_data = api_client.get_tournaments()
-    
+    token = request.session.get("api_token")
+    result = api_client.get_tournaments(token=token)
+    redirect_or_none = _process_result_error(request, result)
+    if redirect_or_none:
+        return redirect_or_none
+
+    tournaments_data = [_normalize_tournament(item) for item in (result.data or [])] if result.ok else []
     if not tournaments_data:
-        # Fallback данные
-        tournaments_data = [
-            {
-                "id": 1,
-                "name": "Чемпионат Major по CS:GO",
-                "game": "CS:GO",
-                "prizePool": "$1 000 000",
-                "participants": "24/32",
-                "startDate": "24 октября 2026",
-                "status": "Регистрация",
-            },
-            # ... остальные турниры
-        ]
-    
-    return render(request, "tournaments.html", {"tournaments": tournaments_data})
+        tournaments_data = [_normalize_tournament({"id": 1, "name": "Demo Tournament"})]
+
+    return render(request, "tournaments.html", {"tournaments": tournaments_data, **_role_flags(_read_current_user(request))})
+
 
 def tournament_detail(request, tournament_id: int):
-    tournament = api_client.get_tournament(tournament_id)
-    
-    if not tournament:
-        messages.error(request, "Турнир не найден.")
+    token = request.session.get("api_token")
+    tournament_result = api_client.get_tournament(tournament_id, token=token)
+    redirect_or_none = _process_result_error(request, tournament_result)
+    if redirect_or_none:
+        return redirect_or_none
+
+    if not tournament_result.ok:
+        messages.error(request, "Турнир не найден")
         return redirect("tournaments")
-    
-    return render(request, "tournament_detail.html", {
-        "tournament": tournament,
-        "matches": tournament.get('matches', [])
-    })
+
+    matches_result = api_client.get_matches(tournament_id, token=token)
+    matches = [_normalize_match(item) for item in (matches_result.data or [])] if matches_result.ok else []
+
+    return render(
+        request,
+        "tournament_detail.html",
+        {
+            "tournament": _normalize_tournament(tournament_result.data or {}),
+            "matches": matches,
+            **_role_flags(_read_current_user(request)),
+        },
+    )
+
+
+def match_center(request, tournament_id: int):
+    token = request.session.get("api_token")
+    user = _read_current_user(request)
+    roles = _role_flags(user)
+    result_form = MatchResultForm(request.POST or None)
+
+    if request.method == "POST":
+        if not (roles["is_admin"] or roles["is_judge"]):
+            messages.error(request, "Недостаточно прав")
+            return HttpResponseForbidden("Недостаточно прав")
+        if result_form.is_valid():
+            update_result = api_client.update_match_result(
+                result_form.cleaned_data["match_id"],
+                result_form.cleaned_data["score_a"],
+                result_form.cleaned_data["score_b"],
+                token=token,
+            )
+            redirect_or_none = _process_result_error(request, update_result)
+            if redirect_or_none:
+                return redirect_or_none
+            if update_result.ok:
+                messages.success(request, "Результат обновлен")
+            else:
+                messages.error(request, (update_result.error or {}).get("message", "Ошибка обновления"))
+
+    matches_result = api_client.get_matches(tournament_id, token=token)
+    matches = [_normalize_match(item) for item in (matches_result.data or [])] if matches_result.ok else []
+    if not matches:
+        messages.info(request, "Матчи недоступны, показан пустой список")
+
+    return render(request, "match.html", {"matches": matches, "form": result_form, **roles})
+
 
 def voting(request):
-    # Получаем номинантов из C# API
-    nominees = api_client.get_nominees()
-    
-    if not nominees:
-        # Fallback данные
-        nominees = [
-            {"id": 1, "name": "s1mple", "team": "NaVi", "role": "Снайпер", "kda": "1.42", "rating": "1.35", "votes": 1240},
-            # ... остальные номинанты
-        ]
-    
-    # Проверяем, голосовал ли пользователь
+    nominees_result = api_client.get_nominees()
+    nominees = nominees_result.data if nominees_result.ok and nominees_result.data else [{"id": 1, "name": "s1mple", "team": "NaVi", "role": "AWP", "kda": "1.20", "rating": "1.30", "votes": 0}]
+
     session_id = request.session.session_key
     has_voted = False
-    
     if session_id:
         voted_data = api_client.has_voted(session_id)
-        has_voted = voted_data.get('hasVoted', False) if voted_data else False
-    
+        has_voted = voted_data.ok and (voted_data.data or {}).get("hasVoted", False)
+
     if request.method == "POST":
         if has_voted:
-            messages.info(request, "Ты уже голосовал(а) в этой сессии.")
+            messages.info(request, "Ты уже голосовал(а) в этой сессии")
             return redirect("voting")
-        
-        try:
-            nominee_id = int(request.POST.get("nominee_id", "0"))
-        except ValueError:
-            nominee_id = 0
-        
-        # Голосуем через C# API
-        ip_address = request.META.get('REMOTE_ADDR', '')
-        vote_result = api_client.vote(nominee_id, session_id, ip_address)
-        
-        if vote_result and vote_result.get('success'):
-            messages.success(request, vote_result.get('message', 'Голос засчитан!'))
-            request.session['voted'] = True
+        nominee_id = int(request.POST.get("nominee_id", "0"))
+        vote_result = api_client.vote(nominee_id, session_id, request.META.get("REMOTE_ADDR", ""))
+        if vote_result.ok and (vote_result.data or {}).get("success"):
+            messages.success(request, (vote_result.data or {}).get("message", "Голос засчитан"))
             return redirect("voting")
+        messages.error(request, (vote_result.error or {}).get("message", "Ошибка голосования"))
+
+    return render(request, "voting.html", {"nominees": nominees, "has_voted": has_voted, **_role_flags(_read_current_user(request))})
+
+
+def mvp(request, tournament_id: int):
+    token = request.session.get("api_token")
+    roles = _role_flags(_read_current_user(request))
+
+    if request.method == "POST":
+        player_id = int(request.POST.get("player_id", "0"))
+        vote_result = api_client.vote_mvp(tournament_id, player_id, token=token)
+        redirect_or_none = _process_result_error(request, vote_result)
+        if redirect_or_none:
+            return redirect_or_none
+        if vote_result.ok:
+            messages.success(request, "Голос MVP принят")
         else:
-            error_msg = vote_result.get('message', 'Ошибка при голосовании') if vote_result else 'Ошибка соединения'
-            messages.error(request, error_msg)
-    
-    return render(request, "voting.html", {
-        "nominees": nominees,
-        "voted_id": request.session.get('voted_id'),
-        "has_voted": has_voted
-    })
+            messages.error(request, (vote_result.error or {}).get("message", "Ошибка голосования"))
+
+    mvp_result = api_client.get_mvp(tournament_id, token=token)
+    payload = mvp_result.data if mvp_result.ok else {"isOpen": False, "candidates": [], "results": []}
+    return render(request, "mvp.html", {"mvp": payload, "tournament_id": tournament_id, **roles})
 
 
 def registration(request):
-    """Страница регистрации (учебная форма).
-
-    Сейчас данные не сохраняются в БД, а просто валидируются и показывается сообщение.
-    (Можно расширить и отправлять в C# API/сохранять в Django модели.)
-    """
     if request.method == "POST":
         form = RegistrationForm(request.POST, request.FILES)
         if form.is_valid():
-            messages.success(request, "Заявка принята! (учебный режим)")
+            messages.success(request, "Заявка принята")
             return redirect("registration")
     else:
         form = RegistrationForm()
 
-    return render(request, "registration.html", {"form": form})
+    return render(request, "registration.html", {"form": form, **_role_flags(_read_current_user(request))})
 
 
 def streams(request):
-    """Страница стримов (пока статическая)."""
-    return render(request, "streams.html")
+    result = api_client.get_streams(token=request.session.get("api_token"))
+    streams_data = result.data if result.ok and result.data else [{"provider": "Twitch", "url": "N/A", "status": {"online": False, "viewers": 0}}]
+    return render(request, "streams.html", {"streams": streams_data, **_role_flags(_read_current_user(request))})
+
+
+def analytics(request):
+    result = api_client.get_analytics(token=request.session.get("api_token"))
+    payload = result.data if result.ok else {"playerStats": [], "disciplinePopularity": []}
+    if not result.ok:
+        messages.info(request, "Аналитика недоступна")
+    return render(request, "analytics.html", {"analytics": payload, **_role_flags(_read_current_user(request))})
