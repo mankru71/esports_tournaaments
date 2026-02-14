@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Голосование — Киберспортивный турнир{% endblock %}
+
+{% block content %}
+  <h1>Голосование</h1>
+  <p class="muted">Выбери игрока недели. Голос можно отдать один раз за сессию.</p>
+
+  <div class="grid mt">
+    {% for n in nominees %}
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="card-title">{{ n.name }}</div>
+            <div class="meta">{{ n.team }} · {{ n.role }}</div>
+          </div>
+          <div class="right">
+            <span class="pill">Голосов: {{ n.votes }}</span>
+          </div>
+        </div>
+
+        <div class="stats mt">
+          <div>КДА: <span class="strong">{{ n.kda }}</span></div>
+          <div>Рейтинг: <span class="strong">{{ n.rating }}</span></div>
+        </div>
+
+        <form method="post" class="mt">
+          {% csrf_token %}
+          <input type="hidden" name="nominee_id" value="{{ n.id }}">
+          <button class="btn small" type="submit" {% if voted_id %}disabled{% endif %}>
+            {% if voted_id %}Голос уже отдан{% else %}Проголосовать{% endif %}
+          </button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}

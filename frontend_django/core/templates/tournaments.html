@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Турниры — Киберспортивный турнир{% endblock %}
+
+{% block content %}
+  <h1>Турниры</h1>
+  <p class="muted">Актуальные и прошедшие турниры.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Название</th>
+          <th>Игра</th>
+          <th>Призовой фонд</th>
+          <th>Участники</th>
+          <th>Дата старта</th>
+          <th>Статус</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tournaments %}
+          <tr>
+            <td class="strong">{{ t.name }}</td>
+            <td>{{ t.game }}</td>
+            <td>{{ t.prize_pool }}</td>
+            <td>{{ t.participants }}</td>
+            <td>{{ t.start_date }}</td>
+            <td><span class="pill">{{ t.status }}</span></td>
+            <td><a class="btn small" href="{% url 'tournament_detail' t.id %}">Открыть</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

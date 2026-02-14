@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  csharp-api:
+    build:
+      context: ./backend_csharp
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    container_name: esports_csharp_api
+    ports:
+      - "5000:5000"  
+    env_file:
+      - ./.env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:5000
+    networks:
+      - esports-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  django-app:
+    build:
+      context: ./frontend_django
+      dockerfile: Dockerfile
+    container_name: esports_django_frontend
+    ports:
+      - "8000:8000"    
+    env_file:
+      - ./.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=esports_tournament.settings
+      - C_SHARP_API_BASE_URL=http://csharp-api:5000
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-your-secret-key}
+      - DJANGO_DEBUG=${DJANGO_DEBUG:-True}
+      - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - DB_NAME=${DB_NAME:-esports_db}
+      - DB_USER=${DB_USER:-esports_user}
+      - DB_PASSWORD=${DB_PASSWORD:-esports123}
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - ./frontend_django:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      csharp-api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - esports-network
+    restart: unless-stopped
+    command: >
+      sh -c "until pg_isready -h ${DB_HOST:-postgres} -U ${DB_USER:-esports_user} -d ${DB_NAME:-esports_db}; do echo 'waiting for postgres...'; sleep 1; done &&
+             python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: esports_postgres
+    env_file:
+      - ./.env
+    environment:
+      - POSTGRES_DB=${DB_NAME:-esports_db}
+      - POSTGRES_USER=${DB_USER:-esports_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-esports123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
+    networks:
+      - esports-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: esports_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - esports-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  nginx:
+    image: nginx:alpine
+    container_name: esports_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - static_volume:/static
+      - media_volume:/media
+    depends_on:
+      - django-app
+    networks:
+      - esports-network
+    restart: unless-stopped
+
+networks:
+  esports-network:
+    driver: bridge
+
+volumes:
+  csharp_data:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:

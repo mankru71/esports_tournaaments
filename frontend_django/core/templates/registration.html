@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Регистрация — Киберспортивный турнир{% endblock %}
+
+{% block content %}
+  <h1>Регистрация</h1>
+  <p class="muted">Присоединяйся к арене: зарегистрируй команду или себя на ближайшие турниры.</p>
+
+  <div class="card mt">
+    <form method="post" enctype="multipart/form-data" class="form">
+      {% csrf_token %}
+
+      <div class="form-row">
+        <div class="field">
+          <label>{{ form.mode.label }}</label>
+          {{ form.mode }}
+          {% if form.mode.errors %}<div class="error">{{ form.mode.errors|striptags }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-row two">
+        <div class="field">
+          <label for="{{ form.contact_name.id_for_label }}">{{ form.contact_name.label }}</label>
+          {{ form.contact_name }}
+          {% if form.contact_name.errors %}<div class="error">{{ form.contact_name.errors|striptags }}</div>{% endif %}
+        </div>
+        <div class="field">
+          <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+          {{ form.email }}
+          {% if form.email.errors %}<div class="error">{{ form.email.errors|striptags }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-row two">
+        <div class="field">
+          <label for="{{ form.team_name.id_for_label }}">{{ form.team_name.label }}</label>
+          {{ form.team_name }}
+          <div class="hint">Если регистрируешься как игрок — можно оставить пустым.</div>
+          {% if form.team_name.errors %}<div class="error">{{ form.team_name.errors|striptags }}</div>{% endif %}
+        </div>
+        <div class="field">
+          <label for="{{ form.logo.id_for_label }}">{{ form.logo.label }}</label>
+          {{ form.logo }}
+          {% if form.logo.errors %}<div class="error">{{ form.logo.errors|striptags }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="{{ form.players.id_for_label }}">{{ form.players.label }}</label>
+          {{ form.players }}
+          {% if form.players.errors %}<div class="error">{{ form.players.errors|striptags }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn" type="submit">Отправить заявку</button>
+        <a class="btn ghost" href="{% url 'tournaments' %}">Посмотреть турниры</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

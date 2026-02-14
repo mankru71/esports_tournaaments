@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Панель — Киберспортивный турнир{% endblock %}
+
+{% block content %}
+  <h1>Панель дома</h1>
+  <p class="muted">Короткая сводка по турниру и активностям.</p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Игроков</div>
+      <div class="card-value">{{ stats.players }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Турниров</div>
+      <div class="card-value">{{ stats.tournaments }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Зрителей</div>
+      <div class="card-value">{{ stats.viewers }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Событий сегодня</div>
+      <div class="card-value">{{ stats.events_today }}</div>
+    </div>
+  </div>
+
+  {% comment %} <div class="card mt">
+    <div class="card-title">Что можно сделать</div>
+    <ul class="list">
+      <li>Открыть список турниров и посмотреть сетку матчей</li>
+      <li>Подать заявку на участие</li>
+      <li>Смотреть трансляции</li>
+      <li>Проголосовать за игрока недели</li>
+    </ul>
+  </div> {% endcomment %}
+{% endblock %}
