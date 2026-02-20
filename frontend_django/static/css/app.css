@@ -1,5 +1,4 @@
-:root,
-:root[data-theme="dark"] {
+html[data-theme="dark"] {
   --bg: #090c1a;
   --surface: #141b30;
   --surface-2: #1b2540;
@@ -15,7 +14,7 @@
   --bg-gradient: radial-gradient(circle at top right, #16233f, var(--bg) 40%);
 }
 
-:root[data-theme="light"] {
+html[data-theme="light"] {
   --bg: #eff3fb;
   --surface: #ffffff;
   --surface-2: #f4f7ff;
@@ -36,6 +35,7 @@ body {
   font-family: "Inter", "Segoe UI", sans-serif;
   color: var(--text);
   background: var(--bg-gradient);
+  background-color: var(--bg);
 }
 
 a { color: var(--accent); }
@@ -78,7 +78,7 @@ main { flex: 1; }
 
 .navbar-toggler { border-color: var(--border); }
 .navbar-toggler-icon { filter: invert(1); }
-:root[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
+html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 
 .brand-mark { color: var(--accent); }
 
@@ -215,6 +215,11 @@ textarea::placeholder { color: var(--muted); }
   color: var(--text);
 }
 
+.text-bg-dark,
+.text-bg-secondary {
+  color: var(--text) !important;
+  background-color: color-mix(in srgb, var(--surface-2) 85%, transparent) !important;
+}
 
 @media (max-width: 992px) {
   .page-hero { flex-direction: column; align-items: start; }
