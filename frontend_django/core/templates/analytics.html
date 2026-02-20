@@ -1,9 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Аналитика{% endblock %}
 {% block content %}
-<h1>Аналитика</h1>
-<h3>Статистика игроков</h3>
-{% for p in analytics.playerStats %}<div class="card">{{ p.player }}: {{ p.kills|default:"N/A" }}</div>{% empty %}<div class="card">Нет данных</div>{% endfor %}
-<h3>Популярность дисциплин</h3>
-{% for d in analytics.disciplinePopularity %}<div class="card">{{ d.discipline }}: {{ d.value }}</div>{% empty %}<div class="card">Нет данных</div>{% endfor %}
+<section>
+  <div class="page-hero">
+    <div>
+      <h1 class="h3 mb-2">Аналитика</h1>
+      <p class="text-muted mb-0">Ключевые метрики по игрокам и дисциплинам.</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="section-panel p-3 h-100">
+        <h2 class="h5 mb-3">Статистика игроков</h2>
+        {% for p in analytics.playerStats %}
+          <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>{{ p.player }}</span><span class="fw-semibold">{{ p.kills|default:"н/д" }} убийств</span></div>
+        {% empty %}
+          <div class="empty-state">Данные о игроках отсутствуют.</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-panel p-3 h-100">
+        <h2 class="h5 mb-3">Популярность дисциплин</h2>
+        {% for d in analytics.disciplinePopularity %}
+          <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>{{ d.discipline }}</span><span class="fw-semibold">{{ d.value }}</span></div>
+        {% empty %}
+          <div class="empty-state">Данные о дисциплинах отсутствуют.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
 {% endblock %}

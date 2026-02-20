@@ -5,7 +5,7 @@
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Турниры</h1>
-      <p class="text-muted mb-0">Следи за статусами, форматами и матчами в единой таблице.</p>
+      <p class="text-muted mb-0">Следите за статусами, форматом и матчами в единой таблице.</p>
     </div>
     <a class="btn btn-outline-accent" href="{% url 'registration' %}">Подать заявку</a>
   </div>
@@ -15,13 +15,7 @@
       <table class="table table-striped align-middle mb-0">
         <thead>
           <tr>
-            <th>Название</th>
-            <th>Дисциплина</th>
-            <th>Формат</th>
-            <th>Призовой фонд</th>
-            <th>Старт</th>
-            <th>Статус</th>
-            <th class="text-end">Действия</th>
+            <th>Название</th><th>Дисциплина</th><th>Формат</th><th>Призовой фонд</th><th>Старт</th><th>Статус</th><th class="text-end">Действия</th>
           </tr>
         </thead>
         <tbody>
@@ -32,9 +26,7 @@
             <td>{{ t.format }}</td>
             <td>{{ t.prizePool }}</td>
             <td>{{ t.startDate }}</td>
-            <td>
-              <span class="badge badge-status status-{{ t.status|lower }}">{{ t.status }}</span>
-            </td>
+            <td><span class="badge badge-status status-{{ t.status }}">{{ t.status_label }}</span></td>
             <td>
               <div class="d-flex justify-content-end flex-wrap gap-2">
                 <a class="btn btn-sm btn-outline-light" href="{% url 'tournament_detail' t.id %}">Открыть</a>
@@ -44,7 +36,7 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="text-center text-muted py-4">Турниров пока нет.</td></tr>
+          <tr><td colspan="7" class="py-4"><div class="empty-state">Турниров пока нет. Создайте первый турнир.</div></td></tr>
         {% endfor %}
         </tbody>
       </table>

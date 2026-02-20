@@ -29,7 +29,7 @@ curl http://localhost/ | Select-Object -First 20
 
 | Ссылка | Что это |
 |---|---|
-| `http://localhost/` | Главная (dashboard) |
+| `http://localhost/` | Главная |
 | `http://localhost/login/` | Вход |
 | `http://localhost/logout/` | Выход |
 | `http://localhost/tournaments/` | Список турниров |
@@ -42,28 +42,25 @@ curl http://localhost/ | Select-Object -First 20
 | `http://localhost/voting/` | Голосование |
 | `http://localhost/admin/` | Django Admin |
 
-### API (C# через nginx)
-
-| Ссылка | Что это |
-|---|---|
-| `http://localhost/api/health` | Health-check API |
-| `http://localhost/api/auth/login` | Логин |
-| `http://localhost/api/tournament` | Турниры |
-| `http://localhost/api/demo/seed` | Demo seed endpoint (алиас к mock ratings) |
-| `http://localhost/api/ratings/mock` | Mock ratings |
-
-### SignalR (C# через nginx)
-
-| Ссылка | Что это |
-|---|---|
-| `http://localhost/hubs/matches` | Hub endpoint |
-| `http://localhost/hubs/matches/negotiate?negotiateVersion=1` | Negotiate endpoint |
-
-
 ## UI заметки
 
-- Единый тёмный интерфейс подключается через `http://localhost/static/css/app.css` (Bootstrap 5 + кастомная тема).
-- Общий layout и навигация доступны на всех страницах UI через `http://localhost/`.
+- Реализованы две темы интерфейса: тёмная (по умолчанию) и светлая.
+- Переключатель темы находится в правой части верхней панели: кнопка **🌙/☀️ Тёмная/Светлая**.
+- Выбор темы сохраняется в `localStorage` (ключ `theme`) и восстанавливается при следующем открытии сайта.
+- Все страницы используют единый layout и стили (`Bootstrap 5 + static/css/app.css`).
+
+## UI demo checklist (визуальная проверка)
+
+1. Открыть `http://localhost/` и проверить читабельность шапки.
+2. Нажать переключатель темы и убедиться, что цвета меняются без перезагрузки.
+3. Перезагрузить страницу и убедиться, что выбранная тема сохранилась.
+4. Проверить страницу входа: карточка, поля, кнопки и подсказки.
+5. Проверить страницу регистрации: ошибки формы и единый стиль с входом.
+6. Проверить таблицу турниров на мобильной ширине (горизонтальный скролл у таблицы).
+7. Открыть карточку турнира и убедиться в отображении статусов бейджей.
+8. Открыть страницы матчей, MVP, стримов, аналитики и голосования.
+9. Проверить empty-state блоки на страницах без данных.
+10. Проверить, что все тексты интерфейса отображаются на русском языке.
 
 ## Если порт 80 занят
 

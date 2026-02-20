@@ -1,15 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Трансляции{% endblock %}
+{% block title %}Стримы{% endblock %}
 {% block content %}
-<h1>Трансляции</h1>
-<div class="grid mt">
-  {% for s in streams %}
-    <div class="card">
-      <div class="card-title">{{ s.provider|default:"N/A" }}</div>
-      <div>URL: {{ s.url|default:"N/A" }}</div>
-      <div>Online: {{ s.status.online|default:"N/A" }}</div>
-      <div>Viewers: {{ s.status.viewers|default:"N/A" }}</div>
+<section>
+  <div class="page-hero">
+    <div>
+      <h1 class="h3 mb-2">Стримы</h1>
+      <p class="text-muted mb-0">Подключённые источники трансляций по турнирам.</p>
     </div>
-  {% endfor %}
-</div>
+  </div>
+
+  <div class="row g-3">
+    {% for s in streams %}
+      <div class="col-md-6 col-xl-4">
+        <div class="card p-3 h-100">
+          <div class="card-title h6 mb-2">{{ s.provider|default:"Неизвестный провайдер" }}</div>
+          <div class="small mb-1">Ссылка: {{ s.url|default:"н/д" }}</div>
+          <div class="small mb-1">Статус: {% if s.status.online %}<span class="text-success">В эфире</span>{% else %}<span class="text-muted">Оффлайн</span>{% endif %}</div>
+          <div class="small">Зрителей: {{ s.status.viewers|default:"0" }}</div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12"><div class="empty-state">Нет активных стримов.</div></div>
+    {% endfor %}
+  </div>
+</section>
 {% endblock %}

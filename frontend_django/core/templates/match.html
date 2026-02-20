@@ -1,16 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Матчи{% endblock %}
 {% block content %}
-<h1>Матчи</h1>
-{% for m in matches %}
-  <div class="card">#{{ m.id }} {{ m.teamA }} {{ m.scoreA }} - {{ m.scoreB }} {{ m.teamB }} | {{ m.round }} | {{ m.status }}</div>
-{% empty %}
-  <div class="card">Матчи недоступны</div>
-{% endfor %}
-{% if is_admin or is_judge %}
-<form method="post" class="card mt">{% csrf_token %}
-  {{ form.as_p }}
-  <button class="btn" type="submit">Update result</button>
-</form>
-{% endif %}
+<section>
+  <div class="page-hero">
+    <div>
+      <h1 class="h3 mb-2">Матчи турнира</h1>
+      <p class="text-muted mb-0">Просмотр сетки и оперативное обновление результатов.</p>
+    </div>
+    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">К списку турниров</a>
+  </div>
+
+  <div class="table-panel p-3 p-md-4 mb-3">
+    {% if matches %}
+      <div class="table-responsive">
+        <table class="table table-striped align-middle mb-0">
+          <thead><tr><th>ID</th><th>Раунд</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
+          <tbody>
+            {% for m in matches %}
+            <tr>
+              <td>#{{ m.id }}</td><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td>
+              <td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">Матчи недоступны.</div>
+    {% endif %}
+  </div>
+
+  {% if is_admin or is_judge %}
+  <div class="form-card p-4">
+    <h2 class="h5 mb-3">Обновить результат матча</h2>
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+      <div class="col-md-4"><label class="form-label">{{ form.match_id.label }}</label>{{ form.match_id }}</div>
+      <div class="col-md-4"><label class="form-label">{{ form.score_a.label }}</label>{{ form.score_a }}</div>
+      <div class="col-md-4"><label class="form-label">{{ form.score_b.label }}</label>{{ form.score_b }}</div>
+      <div class="col-12"><button class="btn btn-accent" type="submit">Сохранить результат</button></div>
+    </form>
+  </div>
+  {% endif %}
+</section>
 {% endblock %}

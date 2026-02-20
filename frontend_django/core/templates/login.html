@@ -2,26 +2,30 @@
 {% block title %}Вход{% endblock %}
 {% block content %}
 <section class="auth-panel">
-  <div class="card p-4 p-md-5">
+  <div class="form-card p-4 p-md-5">
     <h1 class="h3 mb-2">Вход в систему</h1>
-    <p class="text-muted mb-4">Управляй турнирами, командами и матчами в едином кабинете.</p>
+    <p class="text-muted mb-4">Управляйте турнирами, командами и матчами в едином кабинете.</p>
+
+    {% if form.errors %}
+      <div class="alert alert-danger">Проверьте корректность введённых данных.</div>
+    {% endif %}
 
     <form method="post" novalidate>
       {% csrf_token %}
       <div class="mb-3">
-        <label class="form-label" for="id_email">Email</label>
-        <input type="email" name="email" id="id_email" class="form-control" placeholder="player@arena.gg" value="{{ form.email.value|default:'' }}" required>
+        <label class="form-label" for="id_email">{{ form.email.label }}</label>
+        {{ form.email }}
         {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|striptags }}</div>{% endif %}
       </div>
       <div class="mb-4">
-        <label class="form-label" for="id_password">Пароль</label>
-        <input type="password" name="password" id="id_password" class="form-control" placeholder="••••••••" required>
+        <label class="form-label" for="id_password">{{ form.password.label }}</label>
+        {{ form.password }}
         {% if form.password.errors %}<div class="text-danger small mt-1">{{ form.password.errors|striptags }}</div>{% endif %}
       </div>
       <button class="btn btn-accent w-100" type="submit">Войти</button>
     </form>
 
-    <p class="mt-4 mb-0 text-center text-muted">Нет аккаунта? <a href="{% url 'registration' %}" class="link-info">Регистрация</a></p>
+    <p class="mt-4 mb-0 text-center text-muted">Нет аккаунта? <a href="{% url 'registration' %}">Зарегистрироваться</a></p>
   </div>
 </section>
 {% endblock %}

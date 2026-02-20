@@ -1,16 +1,44 @@
 {% extends "base.html" %}
 {% block title %}{{ tournament.name }}{% endblock %}
 {% block content %}
-<h1>{{ tournament.name }}</h1>
-<p>Дисциплина: {{ tournament.discipline }} | Формат: {{ tournament.format }} | Призовой фонд: {{ tournament.prizePool }} | Старт: {{ tournament.startDate }}</p>
-{% if is_admin %}
-  <button class="btn">Approve registration</button>
-  <button class="btn">Generate bracket</button>
-{% endif %}
-<h2>Матчи</h2>
-{% for m in matches %}
-  <div class="card">{{ m.round }}: {{ m.teamA }} {{ m.scoreA }} - {{ m.scoreB }} {{ m.teamB }} ({{ m.status }})</div>
-{% empty %}
-  <div class="card">Нет данных</div>
-{% endfor %}
+<section>
+  <div class="page-hero">
+    <div>
+      <h1 class="h3 mb-2">{{ tournament.name }}</h1>
+      <p class="text-muted mb-0">{{ tournament.discipline }} · {{ tournament.format }} · Призовой фонд: {{ tournament.prizePool }}</p>
+    </div>
+    <span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span>
+  </div>
+
+  {% if is_admin %}
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <button class="btn btn-accent" type="button">Подтвердить регистрацию</button>
+      <button class="btn btn-outline-accent" type="button">Сгенерировать сетку</button>
+    </div>
+  {% endif %}
+
+  <div class="table-panel p-3 p-md-4">
+    <h2 class="h5 mb-3">Матчи турнира</h2>
+    {% if matches %}
+      <div class="table-responsive">
+        <table class="table table-striped align-middle mb-0">
+          <thead><tr><th>Раунд</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
+          <tbody>
+            {% for m in matches %}
+              <tr>
+                <td>{{ m.round }}</td>
+                <td>{{ m.teamA }}</td>
+                <td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td>
+                <td>{{ m.teamB }}</td>
+                <td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">Матчи ещё не опубликованы.</div>
+    {% endif %}
+  </div>
+</section>
 {% endblock %}

@@ -1,41 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}Главная{% endblock %}
 
 {% block content %}
 <section>
   <div class="page-hero">
     <div>
-      <h1 class="h3 mb-2">Dashboard</h1>
-      <p class="text-muted mb-0">Оперативная сводка по активности платформы.</p>
+      <h1 class="h3 mb-2">Главная</h1>
+      <p class="text-muted mb-0">Оперативная сводка по активности платформы турниров.</p>
     </div>
     <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">Открыть турниры</a>
   </div>
 
   <div class="row g-3">
-    <div class="col-6 col-lg-3">
-      <div class="card p-3 h-100">
-        <div class="text-muted small">Игроков</div>
-        <div class="h4 mb-0">{{ stats.players }}</div>
-      </div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card p-3 h-100">
-        <div class="text-muted small">Турниров</div>
-        <div class="h4 mb-0">{{ stats.tournaments }}</div>
-      </div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card p-3 h-100">
-        <div class="text-muted small">Зрителей</div>
-        <div class="h4 mb-0">{{ stats.viewers }}</div>
-      </div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card p-3 h-100">
-        <div class="text-muted small">Событий сегодня</div>
-        <div class="h4 mb-0">{{ stats.events_today }}</div>
-      </div>
-    </div>
+    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Игроков</div><div class="h4 mb-0">{{ stats.players }}</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Турниров</div><div class="h4 mb-0">{{ stats.tournaments }}</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Зрителей</div><div class="h4 mb-0">{{ stats.viewers }}</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Событий сегодня</div><div class="h4 mb-0">{{ stats.events_today }}</div></div></div>
   </div>
 </section>
 {% endblock %}

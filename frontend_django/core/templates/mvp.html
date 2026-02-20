@@ -1,16 +1,42 @@
 {% extends "base.html" %}
 {% block title %}MVP{% endblock %}
 {% block content %}
-<h1>MVP</h1>
-<p>Открыто: {{ mvp.isOpen|default:"N/A" }}</p>
-<h3>Кандидаты</h3>
-{% for c in mvp.candidates %}
-<div class="card">{{ c.name }}
-  {% if mvp.isOpen %}
-  <form method="post">{% csrf_token %}<input type="hidden" name="player_id" value="{{ c.id }}"><button class="btn small" type="submit">Vote</button></form>
-  {% endif %}
-</div>
-{% empty %}<div class="card">Нет кандидатов</div>{% endfor %}
-<h3>Результаты</h3>
-{% for r in mvp.results %}<div class="card">{{ r.name }} — {{ r.votes }}</div>{% empty %}<div class="card">Нет результатов</div>{% endfor %}
+<section>
+  <div class="page-hero">
+    <div>
+      <h1 class="h3 mb-2">Голосование MVP</h1>
+      <p class="text-muted mb-0">Статус голосования: {% if mvp.isOpen %}Открыто{% else %}Закрыто{% endif %}.</p>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
+      <div class="section-panel p-3 h-100">
+        <h2 class="h5 mb-3">Кандидаты</h2>
+        {% for c in mvp.candidates %}
+          <div class="card p-3 mb-2">
+            <div class="d-flex justify-content-between gap-2 align-items-center">
+              <div class="fw-semibold">{{ c.name }}</div>
+              {% if mvp.isOpen %}
+                <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="player_id" value="{{ c.id }}"><button class="btn btn-sm btn-outline-accent" type="submit">Голосовать</button></form>
+              {% endif %}
+            </div>
+          </div>
+        {% empty %}
+          <div class="empty-state">Нет кандидатов для голосования.</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-panel p-3 h-100">
+        <h2 class="h5 mb-3">Результаты</h2>
+        {% for r in mvp.results %}
+          <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>{{ r.name }}</span><span class="fw-semibold">{{ r.votes }} голосов</span></div>
+        {% empty %}
+          <div class="empty-state">Результаты пока отсутствуют.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
 {% endblock %}

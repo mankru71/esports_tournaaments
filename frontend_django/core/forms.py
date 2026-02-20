@@ -2,39 +2,52 @@ from django import forms
 
 
 class LoginForm(forms.Form):
-    email = forms.EmailField(label='Email')
-    password = forms.CharField(label='Пароль', widget=forms.PasswordInput)
+    email = forms.EmailField(
+        label='Электронная почта',
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'player@arena.gg'})
+    )
+    password = forms.CharField(
+        label='Пароль',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Введите пароль'})
+    )
 
 
 class MatchResultForm(forms.Form):
-    match_id = forms.IntegerField(min_value=1, label='ID матча')
-    score_a = forms.IntegerField(min_value=0, label='Счет Team A')
-    score_b = forms.IntegerField(min_value=0, label='Счет Team B')
+    match_id = forms.IntegerField(min_value=1, label='ID матча', widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    score_a = forms.IntegerField(min_value=0, label='Счёт команды A', widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    score_b = forms.IntegerField(min_value=0, label='Счёт команды B', widget=forms.NumberInput(attrs={'class': 'form-control'}))
 
 
 class RegistrationForm(forms.Form):
-    MODE_CHOICES = [
-        ('team', 'Команда'),
-        ('solo', 'Игрок'),
+    ROLE_CHOICES = [
+        ('player', 'Игрок'),
+        ('captain', 'Капитан'),
     ]
 
-    mode = forms.ChoiceField(choices=MODE_CHOICES, label='Кто регистрируется', widget=forms.RadioSelect)
-    contact_name = forms.CharField(label='Контактное имя', max_length=80)
-    email = forms.EmailField(label='Email')
-    team_name = forms.CharField(label='Название команды', max_length=80, required=False)
-    players = forms.CharField(
-        label='Состав (никнеймы через запятую)',
-        required=False,
-        widget=forms.Textarea(attrs={'rows': 3, 'placeholder': 'Например: s1mple, ZywOo, NiKo'}),
+    email = forms.EmailField(
+        label='Электронная почта',
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'nickname@example.com'})
     )
-    logo = forms.FileField(label='Логотип (необязательно)', required=False)
+    password = forms.CharField(
+        label='Пароль',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Минимум 8 символов'})
+    )
+    password_confirm = forms.CharField(
+        label='Повторите пароль',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Повторите пароль'})
+    )
+    role = forms.ChoiceField(
+        choices=ROLE_CHOICES,
+        label='Роль',
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
 
     def clean(self):
         cleaned = super().clean()
-        mode = cleaned.get('mode')
-        if mode == 'team':
-            if not cleaned.get('team_name'):
-                self.add_error('team_name', 'Укажи название команды.')
-            if not cleaned.get('players'):
-                self.add_error('players', 'Укажи хотя бы несколько игроков.')
+        password = cleaned.get('password')
+        password_confirm = cleaned.get('password_confirm')
+        if password and len(password) < 8:
+            self.add_error('password', 'Пароль должен содержать не менее 8 символов.')
+        if password and password_confirm and password != password_confirm:
+            self.add_error('password_confirm', 'Пароли не совпадают.')
         return cleaned
