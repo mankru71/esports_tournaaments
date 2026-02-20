@@ -1,9 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Вход{% endblock %}
 {% block content %}
-<h1>Вход</h1>
-<form method="post" class="card">{% csrf_token %}
-  {{ form.as_p }}
-  <button class="btn" type="submit">Войти</button>
-</form>
+<section class="auth-panel">
+  <div class="card p-4 p-md-5">
+    <h1 class="h3 mb-2">Вход в систему</h1>
+    <p class="text-muted mb-4">Управляй турнирами, командами и матчами в едином кабинете.</p>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="id_email">Email</label>
+        <input type="email" name="email" id="id_email" class="form-control" placeholder="player@arena.gg" value="{{ form.email.value|default:'' }}" required>
+        {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|striptags }}</div>{% endif %}
+      </div>
+      <div class="mb-4">
+        <label class="form-label" for="id_password">Пароль</label>
+        <input type="password" name="password" id="id_password" class="form-control" placeholder="••••••••" required>
+        {% if form.password.errors %}<div class="text-danger small mt-1">{{ form.password.errors|striptags }}</div>{% endif %}
+      </div>
+      <button class="btn btn-accent w-100" type="submit">Войти</button>
+    </form>
+
+    <p class="mt-4 mb-0 text-center text-muted">Нет аккаунта? <a href="{% url 'registration' %}" class="link-info">Регистрация</a></p>
+  </div>
+</section>
 {% endblock %}

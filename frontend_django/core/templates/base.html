@@ -4,38 +4,65 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}Киберспортивный турнир{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'core/base.css' %}">
-  <link rel="stylesheet" href="{% static 'core/layout.css' %}">
-  <link rel="stylesheet" href="{% static 'core/components.css' %}">
+  <title>{% block title %}Esports Tournaments{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">Esports Arena Pro</div>
-    <nav class="nav">
-      <a href="{% url 'dashboard' %}">🏠 Панель</a>
-      <a href="{% url 'tournaments' %}">🏆 Турниры</a>
-      <a href="{% url 'registration' %}">📝 Регистрация</a>
-      <a href="{% url 'streams' %}">🎥 Трансляции</a>
-      <a href="{% url 'voting' %}">⭐ Голосование</a>
-      <a href="{% url 'analytics' %}">📊 Аналитика</a>
-      {% if current_user %}
-        <a href="{% url 'logout' %}">🚪 Выход ({{ current_user.role }})</a>
-      {% else %}
-        <a href="{% url 'login' %}">🔐 Вход</a>
-      {% endif %}
-    </nav>
-  </header>
+  <div class="app-shell">
+    <header>
+      <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container py-1">
+          <a class="navbar-brand" href="{% url 'dashboard' %}">
+            <span class="brand-mark">●</span> Esports Arena
+          </a>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="mainNav">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></li>
+              <li class="nav-item"><a class="nav-link" href="{% url 'tournaments' %}">Турниры</a></li>
+              <li class="nav-item"><a class="nav-link" href="{% url 'streams' %}">Стримы</a></li>
+              <li class="nav-item"><a class="nav-link" href="{% url 'analytics' %}">Аналитика</a></li>
+            </ul>
+            <div class="d-flex gap-2 align-items-center">
+              {% if current_user %}
+                <span class="badge rounded-pill text-bg-dark border border-secondary-subtle">{{ current_user.email|default:'user' }} · {{ current_user.role|default:'guest' }}</span>
+                <a class="btn btn-sm btn-outline-light" href="{% url 'logout' %}">Logout</a>
+              {% else %}
+                <a class="btn btn-sm btn-outline-light" href="{% url 'login' %}">Login</a>
+                <a class="btn btn-sm btn-accent" href="{% url 'registration' %}">Register</a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
 
-  <main class="container">
-    {% if messages %}
-      <div class="messages">
-        {% for message in messages %}
-          <div class="msg {{ message.tags }}">{{ message }}</div>
-        {% endfor %}
+    <main class="container py-4 py-lg-5">
+      {% if messages %}
+        <div class="mb-4">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags|default:'info' }} show" data-auto-dismiss="true" role="alert">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer py-3 mt-4">
+      <div class="container d-flex justify-content-between text-muted small">
+        <span>Esports Tournament System</span>
+        <span>© <span id="footer-year"></span></span>
       </div>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+  <script src="{% static 'js/app.js' %}"></script>
 </body>
 </html>
