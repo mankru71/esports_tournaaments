@@ -9,8 +9,6 @@ services:
       postgres:
         condition: service_healthy
     container_name: esports_csharp_api
-    ports:
-      - "5000:5000"  
     env_file:
       - ./.env
     environment:
@@ -30,8 +28,6 @@ services:
       context: ./frontend_django
       dockerfile: Dockerfile
     container_name: esports_django_frontend
-    ports:
-      - "8000:8000"    
     env_file:
       - ./.env
     environment:
