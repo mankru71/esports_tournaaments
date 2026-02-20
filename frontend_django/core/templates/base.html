@@ -25,21 +25,21 @@
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
               <li class="nav-item"><a class="nav-link {% if current == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Главная</a></li>
               <li class="nav-item"><a class="nav-link {% if current == 'tournaments' or current == 'tournament_detail' %}active{% endif %}" href="{% url 'tournaments' %}">Турниры</a></li>
-              <li class="nav-item"><a class="nav-link {% if current == 'registration' %}active{% endif %}" href="{% url 'registration' %}">Команды</a></li>
+              <li class="nav-item"><a class="nav-link {% if current == 'teams' %}active{% endif %}" href="{% url 'teams' %}">Команды</a></li>
               <li class="nav-item"><a class="nav-link {% if current == 'match_center' or current == 'mvp' or current == 'voting' %}active{% endif %}" href="{% url 'voting' %}">Матчи</a></li>
               <li class="nav-item"><a class="nav-link {% if current == 'streams' %}active{% endif %}" href="{% url 'streams' %}">Стримы</a></li>
               <li class="nav-item"><a class="nav-link {% if current == 'analytics' %}active{% endif %}" href="{% url 'analytics' %}">Аналитика</a></li>
             </ul>
             {% endwith %}
             <div class="d-flex gap-2 align-items-center flex-wrap mt-2 mt-lg-0">
-              <button id="themeToggle" class="btn btn-sm btn-outline-light theme-toggle" type="button" aria-label="Переключить тему">
+              <button id="themeToggle" class="btn btn-sm theme-toggle" type="button" aria-label="Переключить тему">
                 <span id="themeToggleIcon">🌙</span> <span id="themeToggleLabel">Тёмная</span>
               </button>
               {% if current_user %}
                 <span class="badge rounded-pill border border-secondary-subtle text-bg-dark">{{ current_user.email|default:'пользователь' }} · {{ current_user.role|default:'гость' }}</span>
-                <a class="btn btn-sm btn-outline-light" href="{% url 'logout' %}">Выход</a>
+                <a class="btn btn-sm nav-action-btn" href="{% url 'logout' %}">Выход</a>
               {% else %}
-                <a class="btn btn-sm btn-outline-light" href="{% url 'login' %}">Вход</a>
+                <a class="btn btn-sm nav-action-btn" href="{% url 'login' %}">Вход</a>
                 <a class="btn btn-sm btn-accent" href="{% url 'registration' %}">Регистрация</a>
               {% endif %}
             </div>
@@ -63,7 +63,7 @@
 
     <footer class="footer py-3 mt-4">
       <div class="container d-flex justify-content-between text-muted small">
-        <span>Учебный проект «Система для организации киберспортивных турниров»</span>
+        <span>Система для организации киберспортивных турниров</span>
         <span>© <span id="footer-year"></span></span>
       </div>
     </footer>

@@ -44,6 +44,7 @@ class CSharpApiClient:
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
+        logger.info("C# API request: %s %s", method.upper(), url)
         try:
             response = self.session.request(
                 method=method,
@@ -54,9 +55,10 @@ class CSharpApiClient:
                 headers=headers,
             )
         except requests.exceptions.RequestException as exc:
-            logger.error("C# API connection error: %s", exc)
+            logger.error("C# API connection error for %s %s: %s", method.upper(), url, exc)
             return ApiResult(ok=False, error={"code": "api_unavailable", "message": "API недоступно", "details": str(exc)})
 
+        logger.info("C# API response: %s %s -> %s", method.upper(), url, response.status_code)
         if 200 <= response.status_code < 300:
             if not response.content:
                 return ApiResult(ok=True, data=None)
@@ -72,11 +74,11 @@ class CSharpApiClient:
             pass
 
         if response.status_code == 401:
-            return ApiResult(ok=False, error={"code": "unauthorized", "message": "Требуется вход", "details": body})
+            return ApiResult(ok=False, error={"code": "unauthorized", "message": "Неверный email или пароль", "details": body})
         if response.status_code == 403:
             return ApiResult(ok=False, error={"code": "forbidden", "message": "Недостаточно прав", "details": body})
         if response.status_code >= 500:
-            return ApiResult(ok=False, error={"code": "server_error", "message": "API недоступно", "details": body})
+            return ApiResult(ok=False, error={"code": "server_error", "message": "Ошибка сервера API", "details": body})
 
         return ApiResult(
             ok=False,
@@ -114,6 +116,16 @@ class CSharpApiClient:
 
     def get_stats(self) -> ApiResult:
         return self._request("GET", "tournament/stats")
+
+    # Teams
+    def get_teams(self, token: str | None = None) -> ApiResult:
+        return self._request("GET", "teams", token=token)
+
+    def create_team(self, name: str, token: str) -> ApiResult:
+        return self._request("POST", "teams", data={"name": name}, token=token)
+
+    def add_team_player(self, team_id: int, nickname: str, token: str) -> ApiResult:
+        return self._request("POST", f"teams/{team_id}/players", data={"nickname": nickname}, token=token)
 
     # Matches / MVP / Streams / Analytics
     def get_matches(self, tournament_id: int, token: str | None = None) -> ApiResult:
