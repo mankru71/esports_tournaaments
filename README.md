@@ -1,42 +1,71 @@
-# Киберспортивный турнир (Django + C# API)
+# Система для организации киберспортивных турниров
 
-## API↔UI map
+Единая точка входа в проект — **nginx на порту 80**.
 
-| UI action/page | Django method | HTTP method + path | Payload / response fields | Roles |
-|---|---|---|---|---|
-| Login page | `api_client.login` | `POST /api/auth/login` | req: `email,password`; res: `token,user{email,role}` | public |
-| Load current user | `api_client.me` | `GET /api/auth/me` | res: `email,role` | authenticated |
-| Tournament list | `api_client.get_tournaments` | `GET /api/tournament` | res item: `id,name,discipline,format,status,startDate,prizePool,totalAmount` | public |
-| Tournament detail | `api_client.get_tournament` | `GET /api/tournament/{id}` | same as above + `stagesSummary` | public |
-| Match page | `api_client.get_matches` | `GET /api/matches?tournamentId={id}` | res item: `id,tournamentId,teamA,teamB,scoreA,scoreB,status,round,groupName,streamUrl` | public |
-| Update match result | `api_client.update_match_result` | `PUT /api/matches/{id}/result` | req: `scoreA,scoreB` | admin/judge |
-| MVP page | `api_client.get_mvp` | `GET /api/mvp/results?tournamentId={id}` | res: `isOpen,candidates[],results[]` | public |
-| MVP vote | `api_client.vote_mvp` | `POST /api/mvp/vote` | req: `tournamentId,playerId` | captain/admin/judge |
-| Streams page | `api_client.get_streams` | `GET /api/streams/status` | res item: `provider,url,status{online,viewers}` | public |
-| Analytics page | `api_client.get_analytics` | `GET /api/analytics` | res: `playerStats[],disciplinePopularity[]` | public |
-| Registration approve | N/A (UI button RBAC-only) | `POST /api/registrations/{id}/approve` | res: `registrationId,status` | admin |
-| Stage generation | N/A (UI button RBAC-only) | `POST /api/stages/generate/single` / `groups` | res: `stageType,generated` | admin |
-| Seed/rating demo | N/A | `GET /api/ratings/mock` | res: `playerId,rating` | admin |
+> ВАЖНО: открывайте `http://localhost/`, а не `http://localhost:8000/`.
+> Контейнеры `django-app` и `csharp-api` работают только во внутренней docker-сети и наружу не публикуются.
 
-## Smokes
+## Быстрый старт (Windows PowerShell)
 
-```bash
-curl -s http://localhost/api/health
-curl -s -X POST http://localhost/api/auth/register -H 'Content-Type: application/json' -d '{"email":"captain@example.com","password":"secret123","role":"captain"}'
-curl -s -X POST http://localhost/api/auth/login -H 'Content-Type: application/json' -d '{"email":"admin@example.com","password":"secret123"}'
-curl -s -H "Authorization: Bearer <TOKEN>" http://localhost/api/auth/me
-curl -s -X POST http://localhost/api/registrations/15/approve
-curl -s -X POST http://localhost/hubs/matches/negotiate
+```powershell
+docker compose down --remove-orphans
+docker compose up -d --build
+docker compose ps
+docker compose logs -f nginx
 ```
 
-Demo flow в браузере:
-1. Открыть `/login`, войти как `admin@example.com`.
-2. Открыть `/tournaments`, затем страницу турнира, матчи и MVP.
-3. Проверить, что RBAC-кнопки видны только нужным ролям.
-4. Открыть `/streams` и `/analytics`.
+## Smoke-check (Windows PowerShell)
 
-## Notes
+```powershell
+curl -i http://localhost/
+curl -i http://localhost/api/health
+curl -i -X POST "http://localhost/hubs/matches/negotiate?negotiateVersion=1"
+curl http://localhost/ | Select-Object -First 20
+```
 
-- Server-side вызовы Django идут через `DJANGO_API_BASE_URL` (по умолчанию `http://csharp-api:5000/api`).
-- Browser/API gateway путь: `PUBLIC_API_BASE_URL` (по умолчанию `/api`).
-- Все ошибки в Django нормализуются в формат: `{ok,data,error{code,message,details}}`.
+## Действующие ссылки
+
+### UI (Django через nginx)
+
+| Ссылка | Что это |
+|---|---|
+| `http://localhost/` | Главная (dashboard) |
+| `http://localhost/login/` | Вход |
+| `http://localhost/logout/` | Выход |
+| `http://localhost/tournaments/` | Список турниров |
+| `http://localhost/tournaments/1/` | Карточка турнира (пример) |
+| `http://localhost/tournaments/1/matches/` | Матчи турнира (пример) |
+| `http://localhost/tournaments/1/mvp/` | MVP турнира (пример) |
+| `http://localhost/analytics/` | Аналитика |
+| `http://localhost/registration/` | Регистрация |
+| `http://localhost/streams/` | Стримы |
+| `http://localhost/voting/` | Голосование |
+| `http://localhost/admin/` | Django Admin |
+
+### API (C# через nginx)
+
+| Ссылка | Что это |
+|---|---|
+| `http://localhost/api/health` | Health-check API |
+| `http://localhost/api/auth/login` | Логин |
+| `http://localhost/api/tournament` | Турниры |
+| `http://localhost/api/demo/seed` | Demo seed endpoint (алиас к mock ratings) |
+| `http://localhost/api/ratings/mock` | Mock ratings |
+
+### SignalR (C# через nginx)
+
+| Ссылка | Что это |
+|---|---|
+| `http://localhost/hubs/matches` | Hub endpoint |
+| `http://localhost/hubs/matches/negotiate?negotiateVersion=1` | Negotiate endpoint |
+
+## Если порт 80 занят
+
+Измените публикацию порта nginx в `docker-compose.yml`, например на `8080:80`, затем перезапустите:
+
+```powershell
+docker compose down --remove-orphans
+docker compose up -d --build
+```
+
+После этого используйте ссылки вида `http://localhost:8080/...`.
