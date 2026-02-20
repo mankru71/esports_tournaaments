@@ -37,8 +37,17 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-        context.Database.EnsureCreated();
-        Console.WriteLine(">>> УСПЕХ: База данных подключена, таблицы созданы!");
+        var hasMigrations = context.Database.GetMigrations().Any();
+        if (hasMigrations)
+        {
+            context.Database.Migrate();
+            Console.WriteLine(">>> УСПЕХ: Миграции применены, база готова!");
+        }
+        else
+        {
+            context.Database.EnsureCreated();
+            Console.WriteLine(">>> УСПЕХ: Миграции отсутствуют, схема создана через EnsureCreated().");
+        }
     }
     catch (Exception ex)
     {

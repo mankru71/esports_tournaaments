@@ -27,7 +27,7 @@ public class AuthController : ControllerBase
         [Required, EmailAddress]
         public string Email { get; set; } = string.Empty;
 
-        [Required, MinLength(6)]
+        [Required, MinLength(8)]
         public string Password { get; set; } = string.Empty;
     }
 
@@ -36,7 +36,7 @@ public class AuthController : ControllerBase
         [Required, EmailAddress]
         public string Email { get; set; } = string.Empty;
 
-        [Required, MinLength(6)]
+        [Required, MinLength(8)]
         public string Password { get; set; } = string.Empty;
 
         [Required]
@@ -48,7 +48,16 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("Incoming /api/auth/register for {Email}", request.Email);
 
-        var exists = await _db.Users.AnyAsync(u => u.Email == request.Email);
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedRole = request.Role.Trim().ToLowerInvariant();
+        var allowedRoles = new[] { "player", "captain", "judge", "admin" };
+
+        if (!allowedRoles.Contains(normalizedRole))
+        {
+            return BadRequest(new { message = "Некорректная роль. Доступно: player, captain, judge, admin" });
+        }
+
+        var exists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail);
         if (exists)
         {
             return Conflict(new { message = "Пользователь с таким email уже существует" });
@@ -56,15 +65,15 @@ public class AuthController : ControllerBase
 
         var user = new AppUser
         {
-            Email = request.Email.ToLowerInvariant(),
+            Email = normalizedEmail,
             PasswordHash = Hash(request.Password),
-            Role = request.Role
+            Role = normalizedRole
         };
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = "registered", email = user.Email, role = user.Role });
+        return Created("/api/auth/me", new { message = "registered", email = user.Email, role = user.Role });
     }
 
     [HttpPost("login")]
