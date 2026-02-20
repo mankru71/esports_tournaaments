@@ -52,23 +52,16 @@ using (var scope = app.Services.CreateScope())
 
             context.Database.EnsureCreated();
 
-            // Проверяем наличие ключевых таблиц (именно так их ожидает текущая модель EF).
+            // Проверяем наличие таблицы Users (именно так её ожидает текущая модель EF).
             // to_regclass вернёт NULL, если таблицы нет.
-            string? TableExists(string table)
-                => context.Database
-                    .SqlQueryRaw<string>($"SELECT to_regclass('public.\\\"{table}\\\"')::text")
-                    .AsEnumerable()
-                    .FirstOrDefault();
+            var usersTable = context.Database
+                .SqlQueryRaw<string>("SELECT to_regclass('public.\"Users\"')::text")
+                .AsEnumerable()
+                .FirstOrDefault();
 
-            var usersTable = TableExists("Users");
-            var teamsTable = TableExists("Teams");
-            var teamPlayersTable = TableExists("TeamPlayers");
-
-            if (string.IsNullOrWhiteSpace(usersTable)
-                || string.IsNullOrWhiteSpace(teamsTable)
-                || string.IsNullOrWhiteSpace(teamPlayersTable))
+            if (string.IsNullOrWhiteSpace(usersTable))
             {
-                Console.WriteLine(">>> ВНИМАНИЕ: Схема БД устарела (не хватает Users/Teams/TeamPlayers). Пересоздаём БД для демо...");
+                Console.WriteLine(">>> ВНИМАНИЕ: Таблица Users отсутствует в существующей БД. Пересоздаём БД для демо...");
                 context.Database.EnsureDeleted();
                 context.Database.EnsureCreated();
                 Console.WriteLine(">>> УСПЕХ: БД пересоздана (EnsureDeleted+EnsureCreated), auth/teams готовы.");
