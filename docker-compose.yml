@@ -32,7 +32,8 @@ services:
       - ./.env
     environment:
       - DJANGO_SETTINGS_MODULE=esports_tournament.settings
-      - C_SHARP_API_BASE_URL=http://csharp-api:5000
+      - DJANGO_API_BASE_URL=http://csharp-api:5000/api
+      - PUBLIC_API_BASE_URL=http://localhost/api
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-your-secret-key}
       - DJANGO_DEBUG=${DJANGO_DEBUG:-True}
       - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}

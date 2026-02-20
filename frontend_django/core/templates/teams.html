@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Команды{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <div>
+    <h1 class="h3 mb-1">Команды</h1>
+    <p class="text-muted mb-0">Реальные команды и составы из API.</p>
+  </div>
+</section>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="form-card p-4">
+      <h2 class="h5 mb-3">Создать команду</h2>
+      <form method="post" class="vstack gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_team">
+        {{ team_form.name.label_tag }}
+        {{ team_form.name }}
+        <button class="btn btn-accent" type="submit">Создать</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="table-panel p-3 p-md-4">
+      <h2 class="h5 mb-3">Список команд</h2>
+      {% if teams %}
+        {% for team in teams %}
+          <div class="card mb-3 p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <div class="fw-semibold">{{ team.name }}</div>
+                <small class="text-muted">Капитан: {{ team.captainEmail }}</small>
+              </div>
+            </div>
+            <div class="mb-3">
+              {% if team.players %}
+                <div class="d-flex flex-wrap gap-2">
+                  {% for player in team.players %}
+                    <span class="badge rounded-pill text-bg-dark">{{ player.nickname }}</span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="text-muted small">Игроки пока не добавлены.</div>
+              {% endif %}
+            </div>
+            <form method="post" class="row g-2 align-items-end">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="add_player">
+              <input type="hidden" name="team_id" value="{{ team.id }}">
+              <div class="col-md-8">
+                <label class="form-label">Ник игрока</label>
+                <input class="form-control" name="nickname" type="text" placeholder="electroNic" required>
+              </div>
+              <div class="col-md-4">
+                <button class="btn btn-outline-accent w-100" type="submit">Добавить игрока</button>
+              </div>
+            </form>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">Команды пока не созданы.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

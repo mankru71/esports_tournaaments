@@ -51,3 +51,20 @@ class RegistrationForm(forms.Form):
         if password and password_confirm and password != password_confirm:
             self.add_error('password_confirm', 'Пароли не совпадают.')
         return cleaned
+
+
+class TeamCreateForm(forms.Form):
+    name = forms.CharField(
+        label='Название команды',
+        max_length=120,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Team Phoenix'})
+    )
+
+
+class TeamPlayerForm(forms.Form):
+    team_id = forms.IntegerField(widget=forms.HiddenInput())
+    nickname = forms.CharField(
+        label='Ник игрока',
+        max_length=100,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 's1mple'})
+    )

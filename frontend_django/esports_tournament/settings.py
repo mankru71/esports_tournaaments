@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -7,14 +8,12 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'fallback-secret-key')
-
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
-
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # C# API конфигурация
-DJANGO_API_BASE_URL = os.getenv('DJANGO_API_BASE_URL', os.getenv('C_SHARP_API_BASE_URL', 'http://csharp-api:5000/api'))
-PUBLIC_API_BASE_URL = os.getenv('PUBLIC_API_BASE_URL', '/api')
+DJANGO_API_BASE_URL = os.getenv('DJANGO_API_BASE_URL', 'http://csharp-api:5000/api')
+PUBLIC_API_BASE_URL = os.getenv('PUBLIC_API_BASE_URL', 'http://localhost/api')
 
 C_SHARP_API = {
     'BASE_URL': DJANGO_API_BASE_URL,
@@ -22,7 +21,6 @@ C_SHARP_API = {
     'ENABLE_CACHE': os.getenv('C_SHARP_API_ENABLE_CACHE', 'True') == 'True',
 }
 
-# База данных
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -34,7 +32,6 @@ DATABASES = {
     }
 }
 
-# Кэширование с Redis
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
@@ -45,19 +42,17 @@ CACHES = {
     }
 }
 
-# Статические файлы
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'core/static'),
     os.path.join(BASE_DIR, 'static'),
 ]
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Медиа файлы
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Приложения
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -68,7 +63,6 @@ INSTALLED_APPS = [
     'core',
 ]
 
-# Middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -100,11 +94,23 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'esports_tournament.wsgi.application'
 
-# Internationalization
 LANGUAGE_CODE = 'ru-ru'
 TIME_ZONE = 'Europe/Moscow'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+    },
+    'loggers': {
+        'core.api_client': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
