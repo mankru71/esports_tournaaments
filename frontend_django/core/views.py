@@ -267,8 +267,15 @@ def registration(request):
     if request.method == "POST":
         form = RegistrationForm(request.POST, request.FILES)
         if form.is_valid():
-            messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
-            return redirect("login")
+            register_result = api_client.register(
+                form.cleaned_data["email"],
+                form.cleaned_data["password"],
+                form.cleaned_data["role"],
+            )
+            if register_result.ok:
+                messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
+                return redirect("login")
+            messages.error(request, (register_result.error or {}).get("message", "Ошибка регистрации"))
     else:
         form = RegistrationForm()
 
