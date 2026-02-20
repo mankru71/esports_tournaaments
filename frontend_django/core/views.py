@@ -11,32 +11,47 @@ from .forms import LoginForm, MatchResultForm, RegistrationForm
 ROLE_ADMIN = "admin"
 ROLE_JUDGE = "judge"
 ROLE_CAPTAIN = "captain"
+STATUS_LABELS = {
+    "planned": "Запланирован",
+    "live": "Идёт",
+    "finished": "Завершён",
+    "approved": "Подтверждён",
+}
+
+
+def _normalize_status(value):
+    key = (value or "planned").lower()
+    return key, STATUS_LABELS.get(key, value or "Запланирован")
 
 
 def _normalize_tournament(item):
+    status_key, status_label = _normalize_status(item.get("status", "planned"))
     return {
         "id": item.get("id"),
-        "name": item.get("name", "N/A"),
-        "discipline": item.get("discipline") or item.get("game") or "N/A",
-        "format": item.get("format", "N/A"),
-        "status": item.get("status", "N/A"),
-        "startDate": item.get("startDate") or item.get("start_date") or "N/A",
-        "prizePool": item.get("prizePool") or item.get("prize_pool") or item.get("totalAmount") or "N/A",
+        "name": item.get("name", "н/д"),
+        "discipline": item.get("discipline") or item.get("game") or "н/д",
+        "format": item.get("format", "н/д"),
+        "status": status_key,
+        "status_label": status_label,
+        "startDate": item.get("startDate") or item.get("start_date") or "н/д",
+        "prizePool": item.get("prizePool") or item.get("prize_pool") or item.get("totalAmount") or "н/д",
         "participants": item.get("participants") or f"{item.get('currentParticipants', 'N/A')}/{item.get('maxParticipants', 'N/A')}",
     }
 
 
 def _normalize_match(item):
+    status_key, status_label = _normalize_status(item.get("status", "planned"))
     return {
         "id": item.get("id"),
-        "teamA": item.get("teamA", "N/A"),
-        "teamB": item.get("teamB", "N/A"),
+        "teamA": item.get("teamA", "н/д"),
+        "teamB": item.get("teamB", "н/д"),
         "scoreA": item.get("scoreA", 0),
         "scoreB": item.get("scoreB", 0),
-        "status": item.get("status", "N/A"),
-        "round": item.get("round", "N/A"),
-        "groupName": item.get("groupName", "N/A"),
-        "streamUrl": item.get("streamUrl", "N/A"),
+        "status": status_key,
+        "status_label": status_label,
+        "round": item.get("round", "н/д"),
+        "groupName": item.get("groupName", "н/д"),
+        "streamUrl": item.get("streamUrl", "н/д"),
     }
 
 
@@ -141,7 +156,7 @@ def tournaments(request):
 
     tournaments_data = [_normalize_tournament(item) for item in (result.data or [])] if result.ok else []
     if not tournaments_data:
-        tournaments_data = [_normalize_tournament({"id": 1, "name": "Demo Tournament"})]
+        tournaments_data = [_normalize_tournament({"id": 1, "name": "Демо-турнир"})]
 
     return render(request, "tournaments.html", {"tournaments": tournaments_data, **_role_flags(_read_current_user(request))})
 
@@ -192,7 +207,7 @@ def match_center(request, tournament_id: int):
             if redirect_or_none:
                 return redirect_or_none
             if update_result.ok:
-                messages.success(request, "Результат обновлен")
+                messages.success(request, "Результат обновлён")
             else:
                 messages.error(request, (update_result.error or {}).get("message", "Ошибка обновления"))
 
@@ -201,7 +216,7 @@ def match_center(request, tournament_id: int):
     if not matches:
         messages.info(request, "Матчи недоступны, показан пустой список")
 
-    return render(request, "match.html", {"matches": matches, "form": result_form, **roles})
+    return render(request, "match.html", {"matches": matches, "form": result_form, "tournament_id": tournament_id, **roles})
 
 
 def voting(request):
@@ -216,7 +231,7 @@ def voting(request):
 
     if request.method == "POST":
         if has_voted:
-            messages.info(request, "Ты уже голосовал(а) в этой сессии")
+            messages.info(request, "Вы уже голосовали в этой сессии")
             return redirect("voting")
         nominee_id = int(request.POST.get("nominee_id", "0"))
         vote_result = api_client.vote(nominee_id, session_id, request.META.get("REMOTE_ADDR", ""))
@@ -239,7 +254,7 @@ def mvp(request, tournament_id: int):
         if redirect_or_none:
             return redirect_or_none
         if vote_result.ok:
-            messages.success(request, "Голос MVP принят")
+            messages.success(request, "Голос за MVP принят")
         else:
             messages.error(request, (vote_result.error or {}).get("message", "Ошибка голосования"))
 
@@ -252,8 +267,8 @@ def registration(request):
     if request.method == "POST":
         form = RegistrationForm(request.POST, request.FILES)
         if form.is_valid():
-            messages.success(request, "Заявка принята")
-            return redirect("registration")
+            messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
+            return redirect("login")
     else:
         form = RegistrationForm()
 
@@ -262,7 +277,7 @@ def registration(request):
 
 def streams(request):
     result = api_client.get_streams(token=request.session.get("api_token"))
-    streams_data = result.data if result.ok and result.data else [{"provider": "Twitch", "url": "N/A", "status": {"online": False, "viewers": 0}}]
+    streams_data = result.data if result.ok and result.data else [{"provider": "Twitch", "url": "н/д", "status": {"online": False, "viewers": 0}}]
     return render(request, "streams.html", {"streams": streams_data, **_role_flags(_read_current_user(request))})
 
 

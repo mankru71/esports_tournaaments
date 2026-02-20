@@ -1,36 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Голосование — Киберспортивный турнир{% endblock %}
+{% block title %}Голосование{% endblock %}
 
 {% block content %}
-  <h1>Голосование</h1>
-  <p class="muted">Выбери игрока недели. Голос можно отдать один раз за сессию.</p>
+<section>
+  <div class="page-hero">
+    <div>
+      <h1 class="h3 mb-2">Голосование</h1>
+      <p class="text-muted mb-0">Выберите игрока недели. Голос доступен один раз за сессию.</p>
+    </div>
+  </div>
 
-  <div class="grid mt">
+  <div class="row g-3">
     {% for n in nominees %}
-      <div class="card">
-        <div class="row">
-          <div>
-            <div class="card-title">{{ n.name }}</div>
-            <div class="meta">{{ n.team }} · {{ n.role }}</div>
+      <div class="col-md-6 col-xl-4">
+        <div class="card p-3 h-100">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <div class="card-title mb-1">{{ n.name }}</div>
+              <div class="text-muted small">{{ n.team }} · {{ n.role }}</div>
+            </div>
+            <span class="badge text-bg-secondary">Голосов: {{ n.votes }}</span>
           </div>
-          <div class="right">
-            <span class="pill">Голосов: {{ n.votes }}</span>
-          </div>
-        </div>
 
-        <div class="stats mt">
-          <div>КДА: <span class="strong">{{ n.kda }}</span></div>
-          <div>Рейтинг: <span class="strong">{{ n.rating }}</span></div>
-        </div>
+          <div class="small mb-3">KDA: <span class="fw-semibold">{{ n.kda }}</span> · Рейтинг: <span class="fw-semibold">{{ n.rating }}</span></div>
 
-        <form method="post" class="mt">
-          {% csrf_token %}
-          <input type="hidden" name="nominee_id" value="{{ n.id }}">
-          <button class="btn small" type="submit" {% if voted_id %}disabled{% endif %}>
-            {% if voted_id %}Голос уже отдан{% else %}Проголосовать{% endif %}
-          </button>
-        </form>
+          <form method="post" class="mt-auto">
+            {% csrf_token %}
+            <input type="hidden" name="nominee_id" value="{{ n.id }}">
+            <button class="btn btn-outline-accent w-100" type="submit" {% if has_voted %}disabled{% endif %}>
+              {% if has_voted %}Голос уже отдан{% else %}Проголосовать{% endif %}
+            </button>
+          </form>
+        </div>
       </div>
+    {% empty %}
+      <div class="col-12"><div class="empty-state">Кандидаты не найдены.</div></div>
     {% endfor %}
   </div>
+</section>
 {% endblock %}
