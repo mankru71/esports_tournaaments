@@ -5,6 +5,11 @@ function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', safeTheme);
   localStorage.setItem(THEME_KEY, safeTheme);
 
+  const metaTheme = document.getElementById('meta-theme-color');
+  if (metaTheme) {
+    metaTheme.setAttribute('content', safeTheme === 'dark' ? '#090c1a' : '#eff3fb');
+  }
+
   const toggleLabel = document.getElementById('themeToggleLabel');
   const toggleIcon = document.getElementById('themeToggleIcon');
   if (toggleLabel) {

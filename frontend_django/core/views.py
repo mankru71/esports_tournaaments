@@ -129,11 +129,35 @@ def login_view(request):
         if form.is_valid():
             login_result = api_client.login(form.cleaned_data["email"], form.cleaned_data["password"])
             if login_result.ok:
-                request.session["api_token"] = login_result.data.get("token")
-                request.session["current_user"] = login_result.data.get("user", {})
+                token = (login_result.data or {}).get("token")
+                user_data = (login_result.data or {}).get("user", {})
+                if not token:
+                    form.add_error(None, "API вернул некорректный ответ авторизации")
+                    return render(request, "login.html", {"form": form, **_role_flags(_read_current_user(request))})
+
+                request.session["api_token"] = token
+                me_result = api_client.me(token)
+                if me_result.ok and me_result.data:
+                    request.session["current_user"] = me_result.data
+                else:
+                    request.session["current_user"] = user_data
                 messages.success(request, "Вход выполнен")
                 return redirect("dashboard")
-            messages.error(request, (login_result.error or {}).get("message", "Ошибка входа"))
+
+            error = login_result.error or {}
+            code = error.get("code")
+            details = error.get("details", {})
+
+            if code == "unauthorized":
+                form.add_error(None, "Неверный email или пароль")
+            elif code == "validation_error" and isinstance(details, dict) and details.get("errors"):
+                for field, field_errors in details["errors"].items():
+                    key = field.lower()
+                    form.add_error(key if key in form.fields else None, ", ".join(field_errors))
+            elif code == "api_unavailable":
+                form.add_error(None, "API недоступно. Попробуйте позже.")
+            else:
+                form.add_error(None, error.get("message", "Ошибка входа"))
     else:
         form = LoginForm()
 

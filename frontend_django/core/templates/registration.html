@@ -9,8 +9,9 @@
 
     {% if form.errors %}
       <div class="alert alert-danger">
-        <div class="fw-semibold mb-1">Не удалось отправить форму.</div>
+        <div class="fw-semibold mb-1">Не удалось выполнить регистрацию:</div>
         <ul class="mb-0 ps-3">
+          {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
           {% for field in form %}
             {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
           {% endfor %}

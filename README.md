@@ -50,13 +50,14 @@ curl -i http://localhost/api/auth/me
 ## Smoke-check
 
 ```powershell
-./scripts/smoke.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\smoke.ps1
 ```
 
 В `scripts/smoke.ps1` проверяются:
 - `GET /api/health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `GET /api/auth/me` (с токеном после login)
 - `GET /api/tournament`
 - `GET /api/teams`
 
