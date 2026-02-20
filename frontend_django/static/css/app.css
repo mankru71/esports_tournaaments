@@ -46,7 +46,8 @@ main { flex: 1; }
 
 .app-navbar,
 .footer {
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  /* color-mix пока не везде стабильно; для демо оставляем предсказуемый фон */
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(8px);
 }
@@ -73,7 +74,7 @@ main { flex: 1; }
 .app-navbar .nav-link.active {
   opacity: 1;
   color: var(--accent) !important;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: rgba(76, 201, 240, 0.14);
 }
 
 .navbar-toggler { border-color: var(--border); }
@@ -111,8 +112,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 }
 
 .btn-accent:hover {
-  background: color-mix(in srgb, var(--accent) 90%, #fff);
-  border-color: color-mix(in srgb, var(--accent) 90%, #fff);
+  filter: brightness(1.06);
   color: #fff;
 }
 
@@ -123,7 +123,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 
 .btn-outline-accent:hover {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: rgba(76, 201, 240, 0.14);
   color: var(--text);
 }
 
@@ -135,7 +135,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 .btn-outline-light:hover {
   border-color: var(--accent);
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: rgba(76, 201, 240, 0.14);
 }
 
 .form-control,
@@ -156,7 +156,7 @@ textarea::placeholder { color: var(--muted); }
   background-color: var(--surface-2);
   color: var(--text);
   border-color: var(--accent);
-  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 .2rem rgba(76, 201, 240, 0.18);
 }
 
 .form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
@@ -171,7 +171,7 @@ textarea::placeholder { color: var(--muted); }
   --bs-table-bg: transparent;
   --bs-table-border-color: var(--border);
   --bs-table-striped-color: var(--text);
-  --bs-table-striped-bg: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.04);
 }
 
 .badge-status {
@@ -183,6 +183,16 @@ textarea::placeholder { color: var(--muted); }
 .status-finished,
 .status-approved { background: color-mix(in srgb, var(--muted) 20%, transparent); color: var(--text); border-color: var(--border); }
 
+/* Без color-mix (fallback для браузеров/движков где оно глючит) */
+html[data-theme="dark"] .status-planned { background: rgba(76, 201, 240, 0.16); border-color: rgba(76, 201, 240, 0.28); }
+html[data-theme="light"] .status-planned { background: rgba(15, 110, 247, 0.12); border-color: rgba(15, 110, 247, 0.24); color: var(--accent); }
+html[data-theme="dark"] .status-live { background: rgba(49, 208, 170, 0.18); border-color: rgba(49, 208, 170, 0.3); }
+html[data-theme="light"] .status-live { background: rgba(11, 152, 116, 0.14); border-color: rgba(11, 152, 116, 0.28); }
+html[data-theme="dark"] .status-finished,
+html[data-theme="dark"] .status-approved { background: rgba(166, 179, 209, 0.14); }
+html[data-theme="light"] .status-finished,
+html[data-theme="light"] .status-approved { background: rgba(95, 109, 145, 0.10); }
+
 .alert { border-radius: 12px; }
 .auth-panel { max-width: 560px; margin: 2rem auto; }
 
@@ -191,7 +201,7 @@ textarea::placeholder { color: var(--muted); }
   padding: 2rem;
   border: 1px dashed var(--border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
+  background: var(--surface-2);
 }
 
 .theme-toggle { white-space: nowrap; }
@@ -200,18 +210,18 @@ textarea::placeholder { color: var(--muted); }
 .nav-action-btn {
   border: 1px solid var(--border);
   color: var(--text);
-  background: color-mix(in srgb, var(--surface-2) 35%, transparent);
+  background: var(--surface-2);
 }
 
 .theme-toggle:hover,
 .nav-action-btn:hover {
   border-color: var(--accent);
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: rgba(76, 201, 240, 0.12);
 }
 
 .app-navbar .nav-user-badge {
-  background: color-mix(in srgb, var(--surface-2) 85%, #000 15%) !important;
+  background: var(--surface-2) !important;
   color: var(--text);
 }
 

@@ -45,8 +45,31 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
+            // Учебный проект: если миграций нет, используем EnsureCreated.
+            // Важно: EnsureCreated НЕ обновляет существующую схему. Если база уже была создана ранее
+            // (например, без таблицы Users), то новые таблицы не появятся и auth будет падать.
+            // Поэтому делаем простой self-heal: если таблицы Users нет — пересоздаём базу (demo-safe).
+
             context.Database.EnsureCreated();
-            Console.WriteLine(">>> УСПЕХ: Миграции отсутствуют, схема создана через EnsureCreated().");
+
+            // Проверяем наличие таблицы Users (именно так её ожидает текущая модель EF).
+            // to_regclass вернёт NULL, если таблицы нет.
+            var usersTable = context.Database
+                .SqlQueryRaw<string>("SELECT to_regclass('public.\"Users\"')::text")
+                .AsEnumerable()
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(usersTable))
+            {
+                Console.WriteLine(">>> ВНИМАНИЕ: Таблица Users отсутствует в существующей БД. Пересоздаём БД для демо...");
+                context.Database.EnsureDeleted();
+                context.Database.EnsureCreated();
+                Console.WriteLine(">>> УСПЕХ: БД пересоздана (EnsureDeleted+EnsureCreated), auth/teams готовы.");
+            }
+            else
+            {
+                Console.WriteLine(">>> УСПЕХ: Миграции отсутствуют, схема проверена через EnsureCreated().");
+            }
         }
     }
     catch (Exception ex)
