@@ -196,6 +196,26 @@ textarea::placeholder { color: var(--muted); }
 
 .theme-toggle { white-space: nowrap; }
 
+.theme-toggle,
+.nav-action-btn {
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-2) 35%, transparent);
+}
+
+.theme-toggle:hover,
+.nav-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.app-navbar .badge.text-bg-dark {
+  background: color-mix(in srgb, var(--surface-2) 85%, #000 15%) !important;
+  color: var(--text);
+}
+
+
 @media (max-width: 992px) {
   .page-hero { flex-direction: column; align-items: start; }
 }

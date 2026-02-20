@@ -5,8 +5,7 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
 
 from .api_client import api_client
-from .forms import LoginForm, MatchResultForm, RegistrationForm
-
+from .forms import LoginForm, MatchResultForm, RegistrationForm, TeamCreateForm, TeamPlayerForm
 
 ROLE_ADMIN = "admin"
 ROLE_JUDGE = "judge"
@@ -106,16 +105,16 @@ def _process_result_error(request, result):
 
 def dashboard(request):
     stats_result = api_client.get_stats()
-    if not stats_result.ok:
+    if not stats_result.ok and (stats_result.error or {}).get("code") == "api_unavailable":
         messages.info(request, "API недоступно, показаны демо-данные")
         stats = {"players": 12000, "tournaments": 3, "viewers": 860000, "events_today": 4, "today": date.today()}
     else:
         payload = stats_result.data or {}
         stats = {
-            "players": payload.get("totalPlayers", 12000),
-            "tournaments": payload.get("activeTournaments", 3),
-            "viewers": payload.get("totalViewers", 860000),
-            "events_today": payload.get("eventsToday", 4),
+            "players": payload.get("totalPlayers", 0),
+            "tournaments": payload.get("activeTournaments", 0),
+            "viewers": payload.get("totalViewers", 0),
+            "events_today": payload.get("eventsToday", 0),
             "today": date.today(),
         }
 
@@ -155,10 +154,60 @@ def tournaments(request):
         return redirect_or_none
 
     tournaments_data = [_normalize_tournament(item) for item in (result.data or [])] if result.ok else []
-    if not tournaments_data:
+    if not result.ok and (result.error or {}).get("code") == "api_unavailable":
+        messages.info(request, "API недоступно, показаны демо-данные")
         tournaments_data = [_normalize_tournament({"id": 1, "name": "Демо-турнир"})]
 
     return render(request, "tournaments.html", {"tournaments": tournaments_data, **_role_flags(_read_current_user(request))})
+
+
+def teams(request):
+    token = request.session.get("api_token")
+    if not token:
+        messages.info(request, "Для управления командами нужно войти в систему")
+        return redirect("login")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "create_team":
+            team_form = TeamCreateForm(request.POST)
+            if team_form.is_valid():
+                create_result = api_client.create_team(team_form.cleaned_data["name"], token)
+                redirect_or_none = _process_result_error(request, create_result)
+                if redirect_or_none:
+                    return redirect_or_none
+                if create_result.ok:
+                    messages.success(request, "Команда создана")
+                    return redirect("teams")
+                messages.error(request, (create_result.error or {}).get("message", "Не удалось создать команду"))
+        elif action == "add_player":
+            player_form = TeamPlayerForm(request.POST)
+            if player_form.is_valid():
+                add_result = api_client.add_team_player(player_form.cleaned_data["team_id"], player_form.cleaned_data["nickname"], token)
+                redirect_or_none = _process_result_error(request, add_result)
+                if redirect_or_none:
+                    return redirect_or_none
+                if add_result.ok:
+                    messages.success(request, "Игрок добавлен в команду")
+                    return redirect("teams")
+                messages.error(request, (add_result.error or {}).get("message", "Не удалось добавить игрока"))
+
+    teams_result = api_client.get_teams(token=token)
+    redirect_or_none = _process_result_error(request, teams_result)
+    if redirect_or_none:
+        return redirect_or_none
+
+    teams_data = teams_result.data if teams_result.ok else []
+    return render(
+        request,
+        "teams.html",
+        {
+            "teams": teams_data,
+            "team_form": TeamCreateForm(),
+            "player_form": TeamPlayerForm(),
+            **_role_flags(_read_current_user(request)),
+        },
+    )
 
 
 def tournament_detail(request, tournament_id: int):
@@ -275,7 +324,14 @@ def registration(request):
             if register_result.ok:
                 messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
                 return redirect("login")
-            messages.error(request, (register_result.error or {}).get("message", "Ошибка регистрации"))
+
+            details = (register_result.error or {}).get("details", {})
+            if isinstance(details, dict) and details.get("errors"):
+                for field, field_errors in details["errors"].items():
+                    key = field.lower()
+                    form.add_error(key if key in form.fields else None, ", ".join(field_errors))
+            else:
+                messages.error(request, (register_result.error or {}).get("message", "Ошибка регистрации"))
     else:
         form = RegistrationForm()
 
