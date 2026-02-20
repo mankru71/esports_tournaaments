@@ -82,7 +82,7 @@ main { flex: 1; }
 .app-navbar .nav-link.active {
   opacity: 1;
   color: var(--accent) !important;
-  background: var(--accent-soft);
+  background: rgba(76, 201, 240, 0.14);
 }
 
 .navbar-toggler { border-color: var(--border); }
@@ -131,7 +131,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 
 .btn-outline-accent:hover {
   border-color: var(--accent);
-  background: var(--accent-soft);
+  background: rgba(76, 201, 240, 0.14);
   color: var(--text);
 }
 
@@ -143,7 +143,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 .btn-outline-light:hover {
   border-color: var(--accent);
   color: var(--text);
-  background: var(--accent-soft);
+  background: rgba(76, 201, 240, 0.14);
 }
 
 .form-control,
@@ -179,25 +179,27 @@ textarea::placeholder { color: var(--muted); }
   --bs-table-bg: transparent;
   --bs-table-border-color: var(--border);
   --bs-table-striped-color: var(--text);
-  --bs-table-striped-bg: var(--table-striped-bg);
-}
-
-/* Bootstrap utility overrides под нашу тему */
-.text-bg-dark,
-.text-bg-secondary {
-  background-color: var(--surface-2) !important;
-  color: var(--text) !important;
-  border: 1px solid var(--border);
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.04);
 }
 
 .badge-status {
   font-size: .72rem;
   border: 1px solid transparent;
 }
-.status-planned { background: var(--status-planned-bg); color: var(--status-planned-text); border-color: var(--status-planned-border); }
-.status-live { background: var(--status-live-bg); color: var(--status-live-text); border-color: var(--status-live-border); }
-.status-finished { background: var(--status-finished-bg); color: var(--status-finished-text); border-color: var(--status-finished-border); }
-.status-approved { background: var(--status-approved-bg); color: var(--status-approved-text); border-color: var(--status-approved-border); }
+.status-planned { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.status-live { background: color-mix(in srgb, var(--success) 20%, transparent); color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.status-finished,
+.status-approved { background: color-mix(in srgb, var(--muted) 20%, transparent); color: var(--text); border-color: var(--border); }
+
+/* Без color-mix (fallback для браузеров/движков где оно глючит) */
+html[data-theme="dark"] .status-planned { background: rgba(76, 201, 240, 0.16); border-color: rgba(76, 201, 240, 0.28); }
+html[data-theme="light"] .status-planned { background: rgba(15, 110, 247, 0.12); border-color: rgba(15, 110, 247, 0.24); color: var(--accent); }
+html[data-theme="dark"] .status-live { background: rgba(49, 208, 170, 0.18); border-color: rgba(49, 208, 170, 0.3); }
+html[data-theme="light"] .status-live { background: rgba(11, 152, 116, 0.14); border-color: rgba(11, 152, 116, 0.28); }
+html[data-theme="dark"] .status-finished,
+html[data-theme="dark"] .status-approved { background: rgba(166, 179, 209, 0.14); }
+html[data-theme="light"] .status-finished,
+html[data-theme="light"] .status-approved { background: rgba(95, 109, 145, 0.10); }
 
 .alert { border-radius: 12px; }
 .auth-panel { max-width: 560px; margin: 2rem auto; }
@@ -223,7 +225,7 @@ textarea::placeholder { color: var(--muted); }
 .nav-action-btn:hover {
   border-color: var(--accent);
   color: var(--text);
-  background: var(--accent-soft);
+  background: rgba(76, 201, 240, 0.12);
 }
 
 .app-navbar .nav-user-badge {
