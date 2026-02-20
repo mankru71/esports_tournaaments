@@ -68,6 +68,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\smoke.ps1
 2. Проверьте, что пароль минимум 8 символов.
 3. Проверьте уникальность email (иначе API вернёт `409 Conflict`).
 4. Проверьте переменную `DJANGO_API_BASE_URL` внутри `django-app`.
+5. Если раньше база создавалась без таблицы `Users`, то `/api/auth/register` может падать с `relation "Users" does not exist`.
+   Для учебного демо проще всего сделать **hard reset** базы:
+   ```powershell
+   docker compose down -v --remove-orphans
+   docker compose up -d --build
+   ```
+   Начиная с текущей версии, backend также пытается самовосстановиться и пересоздать БД,
+   если таблица `Users` отсутствует.
 
 ## Theme toggle troubleshooting
 
@@ -76,3 +84,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\smoke.ps1
 2. Проверьте, что загружается `/static/js/app.js`.
 3. Проверьте `localStorage['theme']` в DevTools.
 4. Убедитесь, что на `<html>` меняется `data-theme` (`dark`/`light`).
+
+Если `data-theme` меняется, но визуально нет — значит стили темы не применяются.
+В этой версии убран `color-mix()` из критичных мест (navbar/buttons/forms) для совместимости,
+и добавлено обновление cache-buster версии `?v=6`.

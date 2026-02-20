@@ -5,7 +5,7 @@ using System.Text;
 namespace Controllers;
 
 [ApiController]
-[Route("api")]
+[Route("api/demo")]
 public class DemoOperationsController : ControllerBase
 {
     public class MatchDto
@@ -55,8 +55,9 @@ public class DemoOperationsController : ControllerBase
     public IActionResult Teams() => Ok(new[] { new { id = 1, name = "NaVi" }, new { id = 2, name = "G2" } });
     [HttpGet("players")]
     public IActionResult Players() => Ok(new[] { new { id = 10, nickname = "s1mple", teamId = 1 }, new { id = 11, nickname = "m0NESY", teamId = 2 } });
+        [HttpGet("/api/ratings/mock")]
     [HttpGet("ratings/mock")]
-    [HttpGet("demo/seed")]
+    [HttpGet("seed")]
     public IActionResult RatingsMock() => Ok(new[] { new { playerId = 10, rating = 1.32 }, new { playerId = 11, rating = 1.28 } });
     [HttpPost("registrations/{id}/approve")]
     public IActionResult ApproveRegistration(int id) => Ok(new { registrationId = id, status = "approved" });
