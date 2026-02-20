@@ -1,5 +1,5 @@
 :root,
-[data-theme="dark"] {
+:root[data-theme="dark"] {
   --bg: #090c1a;
   --surface: #141b30;
   --surface-2: #1b2540;
@@ -15,7 +15,7 @@
   --bg-gradient: radial-gradient(circle at top right, #16233f, var(--bg) 40%);
 }
 
-[data-theme="light"] {
+:root[data-theme="light"] {
   --bg: #eff3fb;
   --surface: #ffffff;
   --surface-2: #f4f7ff;
@@ -60,7 +60,7 @@ main { flex: 1; }
 .app-navbar .nav-link,
 .app-navbar .navbar-text,
 .app-navbar .btn-link {
-  color: var(--text);
+  color: var(--text) !important;
 }
 
 .app-navbar .nav-link {
@@ -72,13 +72,13 @@ main { flex: 1; }
 .app-navbar .nav-link:hover,
 .app-navbar .nav-link.active {
   opacity: 1;
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .navbar-toggler { border-color: var(--border); }
 .navbar-toggler-icon { filter: invert(1); }
-[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
+:root[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 
 .brand-mark { color: var(--accent); }
 
@@ -210,7 +210,7 @@ textarea::placeholder { color: var(--muted); }
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-.app-navbar .badge.text-bg-dark {
+.app-navbar .nav-user-badge {
   background: color-mix(in srgb, var(--surface-2) 85%, #000 15%) !important;
   color: var(--text);
 }

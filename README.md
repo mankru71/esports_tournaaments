@@ -1,56 +1,77 @@
 # Система для организации киберспортивных турниров
 
-Единая точка входа — **nginx на порту 80** (`http://localhost/`).
+Единая точка входа для браузера — **nginx на порту 80**: `http://localhost/`.
 
-## Почему раньше было «API недоступно»
+## Env vars
 
-Корневая проблема: в `docker-compose.yml` для Django был задан `C_SHARP_API_BASE_URL=http://csharp-api:5000` без суффикса `/api`, а `api_client.py` вызывал `auth/login`, `tournament` и т.д. как относительные пути. В итоге запросы уходили в несуществующие URL вроде `http://csharp-api:5000/auth/login` (404), UI показывал «Ошибка API» и включал фолбэки.
+Создайте `.env` в корне проекта:
 
-Исправлено:
-- server-side base URL Django: `DJANGO_API_BASE_URL=http://csharp-api:5000/api`;
-- public URL (для браузера/документации): `PUBLIC_API_BASE_URL=http://localhost/api`;
-- nginx оставлен как единая точка входа: `/ -> django-app:8000`, `/api/ -> csharp-api:5000`, `/hubs/ -> csharp-api:5000`.
+```env
+DJANGO_API_BASE_URL=http://csharp-api:5000/api
+PUBLIC_API_BASE_URL=http://localhost/api
+```
 
-## Быстрый запуск (PowerShell)
+Дополнительно (опционально):
+
+```env
+DB_NAME=esports_db
+DB_USER=esports_user
+DB_PASSWORD=esports123
+DB_HOST=postgres
+DB_PORT=5432
+```
+
+`docker-compose.yml` прокидывает эти переменные в `django-app` через `env_file` и `environment`.
+
+## Public vs Internal URLs
+
+### Публичные ссылки (открывать в браузере)
+- `http://localhost/`
+- `http://localhost/api/...`
+- `http://localhost/hubs/...`
+
+### Внутренние ссылки (только внутри docker-сети)
+- `http://csharp-api:5000/api`
+
+**Важно: `csharp-api:5000` не откроется в браузере с хоста, если порт 5000 не опубликован наружу. Это нормально.**
+
+## Быстрый запуск (Windows PowerShell)
 
 ```powershell
 docker compose down --remove-orphans
 docker compose up -d --build
 docker compose ps
+docker compose exec django-app env | findstr DJANGO_API_BASE_URL
+curl -i http://localhost/api/health
+curl -i http://localhost/
+curl -i http://localhost/api/auth/me
 ```
 
 ## Smoke-check
-
-### PowerShell
 
 ```powershell
 ./scripts/smoke.ps1
 ```
 
-### Bash
-
-```bash
-./scripts/smoke.sh
-```
-
-Проверки внутри smoke:
+В `scripts/smoke.ps1` проверяются:
 - `GET /api/health`
+- `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/tournament`
+- `GET /api/teams`
 
-## Основные ссылки
+## Registration troubleshooting
 
-- `http://localhost/` — Главная
-- `http://localhost/login/` — Вход
-- `http://localhost/registration/` — Регистрация
-- `http://localhost/tournaments/` — Турниры
-- `http://localhost/teams/` — Команды
-- `http://localhost/api/health` — Health API
+Если регистрация не проходит:
+1. Убедитесь, что API доступно через `http://localhost/api/health`.
+2. Проверьте, что пароль минимум 8 символов.
+3. Проверьте уникальность email (иначе API вернёт `409 Conflict`).
+4. Проверьте переменную `DJANGO_API_BASE_URL` внутри `django-app`.
 
-## Что теперь работает end-to-end
+## Theme toggle troubleshooting
 
-- Логин/регистрация через C# API с сохранением пользователя в БД.
-- Django сохраняет токен в session и отправляет Bearer в API.
-- Турниры/команды загружаются из реального API.
-- Демо-фолбэки показываются только при реальной недоступности API (connection error).
-- Переключение темы dark/light корректно применяется и сохраняется в `localStorage`.
+Если тема не переключается:
+1. Очистите кэш браузера (Ctrl+F5).
+2. Проверьте, что загружается `/static/js/app.js`.
+3. Проверьте `localStorage['theme']` в DevTools.
+4. Убедитесь, что на `<html>` меняется `data-theme` (`dark`/`light`).

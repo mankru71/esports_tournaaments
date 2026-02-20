@@ -270,7 +270,9 @@ def match_center(request, tournament_id: int):
 
 def voting(request):
     nominees_result = api_client.get_nominees()
-    nominees = nominees_result.data if nominees_result.ok and nominees_result.data else [{"id": 1, "name": "s1mple", "team": "NaVi", "role": "AWP", "kda": "1.20", "rating": "1.30", "votes": 0}]
+    nominees = nominees_result.data if nominees_result.ok and nominees_result.data else []
+    if not nominees_result.ok and (nominees_result.error or {}).get("code") == "api_unavailable":
+        messages.info(request, "API недоступно, список номинантов временно пуст")
 
     session_id = request.session.session_key
     has_voted = False
@@ -314,7 +316,7 @@ def mvp(request, tournament_id: int):
 
 def registration(request):
     if request.method == "POST":
-        form = RegistrationForm(request.POST, request.FILES)
+        form = RegistrationForm(request.POST)
         if form.is_valid():
             register_result = api_client.register(
                 form.cleaned_data["email"],
@@ -325,13 +327,20 @@ def registration(request):
                 messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
                 return redirect("login")
 
-            details = (register_result.error or {}).get("details", {})
+            error = register_result.error or {}
+            details = error.get("details", {})
+            code = error.get("code")
+
             if isinstance(details, dict) and details.get("errors"):
                 for field, field_errors in details["errors"].items():
                     key = field.lower()
                     form.add_error(key if key in form.fields else None, ", ".join(field_errors))
+            elif code == "conflict":
+                form.add_error("email", error.get("message", "Пользователь с таким email уже существует"))
+            elif code == "api_unavailable":
+                form.add_error(None, "API недоступно. Попробуйте позже.")
             else:
-                messages.error(request, (register_result.error or {}).get("message", "Ошибка регистрации"))
+                form.add_error(None, error.get("message", "Ошибка регистрации"))
     else:
         form = RegistrationForm()
 
@@ -340,7 +349,9 @@ def registration(request):
 
 def streams(request):
     result = api_client.get_streams(token=request.session.get("api_token"))
-    streams_data = result.data if result.ok and result.data else [{"provider": "Twitch", "url": "н/д", "status": {"online": False, "viewers": 0}}]
+    streams_data = result.data if result.ok and result.data else []
+    if not result.ok and (result.error or {}).get("code") == "api_unavailable":
+        messages.info(request, "API недоступно, стримы временно недоступны")
     return render(request, "streams.html", {"streams": streams_data, **_role_flags(_read_current_user(request))})
 
 

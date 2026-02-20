@@ -77,6 +77,10 @@ class CSharpApiClient:
             return ApiResult(ok=False, error={"code": "unauthorized", "message": "Неверный email или пароль", "details": body})
         if response.status_code == 403:
             return ApiResult(ok=False, error={"code": "forbidden", "message": "Недостаточно прав", "details": body})
+        if response.status_code == 400:
+            return ApiResult(ok=False, error={"code": "validation_error", "message": body.get("message") or body.get("title") or "Проверьте корректность данных", "details": body})
+        if response.status_code == 409:
+            return ApiResult(ok=False, error={"code": "conflict", "message": body.get("message") or "Пользователь уже существует", "details": body})
         if response.status_code >= 500:
             return ApiResult(ok=False, error={"code": "server_error", "message": "Ошибка сервера API", "details": body})
 

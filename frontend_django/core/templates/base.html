@@ -36,7 +36,7 @@
                 <span id="themeToggleIcon">🌙</span> <span id="themeToggleLabel">Тёмная</span>
               </button>
               {% if current_user %}
-                <span class="badge rounded-pill border border-secondary-subtle text-bg-dark">{{ current_user.email|default:'пользователь' }} · {{ current_user.role|default:'гость' }}</span>
+                <span class="badge rounded-pill border border-secondary-subtle nav-user-badge">{{ current_user.email|default:'пользователь' }} · {{ current_user.role|default:'гость' }}</span>
                 <a class="btn btn-sm nav-action-btn" href="{% url 'logout' %}">Выход</a>
               {% else %}
                 <a class="btn btn-sm nav-action-btn" href="{% url 'login' %}">Вход</a>
