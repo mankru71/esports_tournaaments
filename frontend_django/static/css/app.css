@@ -1,33 +1,41 @@
-html[data-theme="dark"] {
-  --bg: #090c1a;
-  --surface: #141b30;
-  --surface-2: #1b2540;
-  --text: #e9edff;
-  --muted: #a6b3d1;
-  --border: rgba(160, 177, 218, 0.25);
-  --accent: #4cc9f0;
-  --accent-2: #6e8bff;
-  --danger: #ff6c8f;
-  --success: #31d0aa;
-  --warning: #f7b955;
-  --shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
-  --bg-gradient: radial-gradient(circle at top right, #16233f, var(--bg) 40%);
-}
+/*
+  Цветовая схема управляется JS-ом (см. static/js/app.js),
+  который выставляет CSS-переменные прямо на :root.
+  Здесь лежат дефолты (тёмная тема), чтобы UI выглядел нормально,
+  даже если JS отключён.
+*/
 
-html[data-theme="light"] {
-  --bg: #eff3fb;
-  --surface: #ffffff;
-  --surface-2: #f4f7ff;
-  --text: #1b2440;
-  --muted: #5f6d91;
-  --border: rgba(95, 109, 145, 0.28);
-  --accent: #0f6ef7;
-  --accent-2: #5f32ff;
-  --danger: #d93256;
-  --success: #0b9874;
-  --warning: #b97400;
-  --shadow: 0 8px 24px rgba(22, 28, 45, 0.1);
-  --bg-gradient: linear-gradient(180deg, #f8faff 0%, var(--bg) 100%);
+:root {
+  --bg: #090c1a;
+  --surface: #101833;
+  --surface-2: #121d3d;
+  --text: #e8ecff;
+  --muted: #9aa6d1;
+  --border: rgba(255,255,255,0.10);
+  --accent: #4cc3ff;
+  --accent-2: #9b7bff;
+  --accent-soft: rgba(76,195,255,0.14);
+  --accent-soft-strong: rgba(76,195,255,0.22);
+  --danger: #ff4d6d;
+  --success: #2de38a;
+  --warning: #ffcc66;
+  --shadow: 0 12px 40px rgba(0,0,0,0.35);
+  --bg-gradient: radial-gradient(900px circle at 10% 8%, rgba(76,195,255,0.18), transparent 55%), radial-gradient(900px circle at 90% 15%, rgba(155,123,255,0.18), transparent 55%), linear-gradient(180deg, #070917 0%, var(--bg) 100%);
+
+  --table-striped-bg: rgba(255,255,255,0.04);
+
+  --status-planned-bg: rgba(154,166,209,0.14);
+  --status-planned-border: rgba(154,166,209,0.28);
+  --status-planned-text: #e8ecff;
+  --status-live-bg: rgba(76,195,255,0.16);
+  --status-live-border: rgba(76,195,255,0.45);
+  --status-live-text: #e8ecff;
+  --status-finished-bg: rgba(45,227,138,0.16);
+  --status-finished-border: rgba(45,227,138,0.42);
+  --status-finished-text: #e8ecff;
+  --status-approved-bg: rgba(155,123,255,0.16);
+  --status-approved-border: rgba(155,123,255,0.42);
+  --status-approved-text: #e8ecff;
 }
 
 html, body { min-height: 100%; }
@@ -46,7 +54,8 @@ main { flex: 1; }
 
 .app-navbar,
 .footer {
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  /* color-mix пока не везде стабильно; для демо оставляем предсказуемый фон */
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(8px);
 }
@@ -73,7 +82,7 @@ main { flex: 1; }
 .app-navbar .nav-link.active {
   opacity: 1;
   color: var(--accent) !important;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: var(--accent-soft);
 }
 
 .navbar-toggler { border-color: var(--border); }
@@ -111,8 +120,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 }
 
 .btn-accent:hover {
-  background: color-mix(in srgb, var(--accent) 90%, #fff);
-  border-color: color-mix(in srgb, var(--accent) 90%, #fff);
+  filter: brightness(1.06);
   color: #fff;
 }
 
@@ -123,7 +131,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 
 .btn-outline-accent:hover {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--accent-soft);
   color: var(--text);
 }
 
@@ -135,7 +143,7 @@ html[data-theme="light"] .navbar-toggler-icon { filter: invert(0); }
 .btn-outline-light:hover {
   border-color: var(--accent);
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--accent-soft);
 }
 
 .form-control,
@@ -156,7 +164,7 @@ textarea::placeholder { color: var(--muted); }
   background-color: var(--surface-2);
   color: var(--text);
   border-color: var(--accent);
-  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 .2rem rgba(76, 201, 240, 0.18);
 }
 
 .form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
@@ -171,17 +179,25 @@ textarea::placeholder { color: var(--muted); }
   --bs-table-bg: transparent;
   --bs-table-border-color: var(--border);
   --bs-table-striped-color: var(--text);
-  --bs-table-striped-bg: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  --bs-table-striped-bg: var(--table-striped-bg);
+}
+
+/* Bootstrap utility overrides под нашу тему */
+.text-bg-dark,
+.text-bg-secondary {
+  background-color: var(--surface-2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border);
 }
 
 .badge-status {
   font-size: .72rem;
   border: 1px solid transparent;
 }
-.status-planned { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.status-live { background: color-mix(in srgb, var(--success) 20%, transparent); color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
-.status-finished,
-.status-approved { background: color-mix(in srgb, var(--muted) 20%, transparent); color: var(--text); border-color: var(--border); }
+.status-planned { background: var(--status-planned-bg); color: var(--status-planned-text); border-color: var(--status-planned-border); }
+.status-live { background: var(--status-live-bg); color: var(--status-live-text); border-color: var(--status-live-border); }
+.status-finished { background: var(--status-finished-bg); color: var(--status-finished-text); border-color: var(--status-finished-border); }
+.status-approved { background: var(--status-approved-bg); color: var(--status-approved-text); border-color: var(--status-approved-border); }
 
 .alert { border-radius: 12px; }
 .auth-panel { max-width: 560px; margin: 2rem auto; }
@@ -191,7 +207,7 @@ textarea::placeholder { color: var(--muted); }
   padding: 2rem;
   border: 1px dashed var(--border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
+  background: var(--surface-2);
 }
 
 .theme-toggle { white-space: nowrap; }
@@ -200,18 +216,18 @@ textarea::placeholder { color: var(--muted); }
 .nav-action-btn {
   border: 1px solid var(--border);
   color: var(--text);
-  background: color-mix(in srgb, var(--surface-2) 35%, transparent);
+  background: var(--surface-2);
 }
 
 .theme-toggle:hover,
 .nav-action-btn:hover {
   border-color: var(--accent);
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--accent-soft);
 }
 
 .app-navbar .nav-user-badge {
-  background: color-mix(in srgb, var(--surface-2) 85%, #000 15%) !important;
+  background: var(--surface-2) !important;
   color: var(--text);
 }
 

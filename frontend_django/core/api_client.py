@@ -73,8 +73,17 @@ class CSharpApiClient:
         except ValueError:
             pass
 
+        # 401 почти везде означает «нужна авторизация».
+        # Для /auth/login текст ошибки обрабатывается отдельно во view.
         if response.status_code == 401:
-            return ApiResult(ok=False, error={"code": "unauthorized", "message": "Неверный email или пароль", "details": body})
+            return ApiResult(
+                ok=False,
+                error={
+                    "code": "unauthorized",
+                    "message": (body or {}).get("message") or "Требуется вход",
+                    "details": body,
+                },
+            )
         if response.status_code == 403:
             return ApiResult(ok=False, error={"code": "forbidden", "message": "Недостаточно прав", "details": body})
         if response.status_code == 400:
