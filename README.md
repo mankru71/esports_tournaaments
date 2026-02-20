@@ -59,6 +59,12 @@ curl http://localhost/ | Select-Object -First 20
 | `http://localhost/hubs/matches` | Hub endpoint |
 | `http://localhost/hubs/matches/negotiate?negotiateVersion=1` | Negotiate endpoint |
 
+
+## UI заметки
+
+- Единый тёмный интерфейс подключается через `http://localhost/static/css/app.css` (Bootstrap 5 + кастомная тема).
+- Общий layout и навигация доступны на всех страницах UI через `http://localhost/`.
+
 ## Если порт 80 занят
 
 Измените публикацию порта nginx в `docker-compose.yml`, например на `8080:80`, затем перезапустите:
