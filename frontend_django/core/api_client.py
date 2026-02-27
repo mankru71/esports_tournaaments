@@ -114,8 +114,8 @@ class CSharpApiClient:
     def login(self, email: str, password: str) -> ApiResult:
         return self._request("POST", "auth/login", data={"email": email, "password": password})
 
-    def register(self, email: str, password: str, role: str = "captain") -> ApiResult:
-        return self._request("POST", "auth/register", data={"email": email, "password": password, "role": role})
+    def register(self, email: str, password: str, nickname: str, role: str = "captain") -> ApiResult:
+        return self._request("POST", "auth/register", data={"email": email, "password": password, "nickname": nickname, "role": role})
 
     def me(self, token: str) -> ApiResult:
         return self._request("GET", "auth/me", token=token)
@@ -139,6 +139,12 @@ class CSharpApiClient:
 
     def add_team_player(self, team_id: int, nickname: str, token: str) -> ApiResult:
         return self._request("POST", f"teams/{team_id}/players", data={"nickname": nickname}, token=token)
+
+    def delete_team_player(self, team_id: int, player_id: int, token: str) -> ApiResult:
+        return self._request("DELETE", f"teams/{team_id}/players/{player_id}", token=token)
+
+    def delete_team(self, team_id: int, token: str) -> ApiResult:
+        return self._request("DELETE", f"teams/{team_id}", token=token)
 
     # Matches / MVP / Streams / Analytics
     def get_matches(self, tournament_id: int, token: str | None = None) -> ApiResult:
@@ -179,3 +185,18 @@ class CSharpApiClient:
 
 
 api_client = CSharpApiClient()
+
+
+    # Tournament applications
+    def apply_to_tournament(self, tournament_id: int, team_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"tournament/{tournament_id}/applications", data={"teamId": team_id}, token=token)
+
+    def my_tournament_applications(self, tournament_id: int, token: str) -> ApiResult:
+        return self._request("GET", f"tournament/{tournament_id}/applications/my", token=token)
+
+    # External esports data (Liquipedia)
+    def esports_player(self, nickname: str, game: str = "counterstrike") -> ApiResult:
+        return self._request("GET", "esports/player", params={"nickname": nickname, "game": game})
+
+    def esports_tournament_streams(self, query: str, game: str = "counterstrike") -> ApiResult:
+        return self._request("GET", "esports/tournament/streams", params={"query": query, "game": game})

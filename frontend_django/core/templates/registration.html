@@ -22,6 +22,12 @@
     <form method="post" novalidate>
       {% csrf_token %}
       <div class="mb-3">
+        <label class="form-label" for="id_nickname">{{ form.nickname.label }}</label>
+        {{ form.nickname }}
+        {% if form.nickname.errors %}<div class="text-danger small mt-1">{{ form.nickname.errors|striptags }}</div>{% endif %}
+      </div>
+
+      <div class="mb-3">
         <label class="form-label" for="id_email">{{ form.email.label }}</label>
         {{ form.email }}
         {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|striptags }}</div>{% endif %}

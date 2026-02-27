@@ -17,6 +17,45 @@
     </div>
   {% endif %}
 
+  {% if is_captain %}
+    <div class="section-panel p-3 p-md-4 mb-3">
+      <h2 class="h6 mb-2">Заявка на участие</h2>
+
+      {% if my_apps %}
+        <div class="text-muted small mb-2">Ваши заявки по этому турниру:</div>
+        <ul class="mb-0 ps-3">
+          {% for a in my_apps %}
+            <li>
+              <span class="fw-semibold">{{ a.teamName|default:"Команда" }}</span> —
+              <span class="badge badge-status status-{{ a.status }}">{{ a.status }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        {% if my_teams %}
+          <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="apply_to_tournament" />
+            <div style="min-width: 220px;">
+              <label class="form-label small mb-1">Команда</label>
+              <select class="form-select" name="team_id" required>
+                <option value="" selected disabled>Выберите команду</option>
+                {% for t in my_teams %}
+                  <option value="{{ t.id }}">{{ t.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-accent" type="submit">Подать заявку</button>
+          </form>
+          <div class="form-text mt-2">Заявка попадёт в статус <span class="fw-semibold">pending</span>.</div>
+        {% else %}
+          <div class="text-muted">У вас нет команд капитана — создайте команду на вкладке «Команды».</div>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
+
+
   <div class="table-panel p-3 p-md-4">
     <h2 class="h5 mb-3">Матчи турнира</h2>
     {% if matches %}

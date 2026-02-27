@@ -44,12 +44,25 @@ class RegistrationForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        nickname = (cleaned.get('nickname') or '').strip()
+        cleaned['nickname'] = nickname
+
         password = cleaned.get('password')
         password_confirm = cleaned.get('password_confirm')
         if password and len(password) < 8:
             self.add_error('password', 'Пароль должен содержать не менее 8 символов.')
         if password and password_confirm and password != password_confirm:
             self.add_error('password_confirm', 'Пароли не совпадают.')
+
+        if nickname:
+            import re
+            if len(nickname) < 2 or len(nickname) > 32:
+                self.add_error('nickname', 'Ник должен быть длиной 2–32 символа.')
+            elif not re.match(r'^[A-Za-z0-9._-]+$', nickname):
+                self.add_error('nickname', 'Ник может содержать только латинские буквы, цифры и символы . _ -')
+        else:
+            self.add_error('nickname', 'Укажите ник.')
+
         return cleaned
 
 

@@ -216,6 +216,41 @@ def teams(request):
                     return redirect("teams")
                 messages.error(request, (add_result.error or {}).get("message", "Не удалось добавить игрока"))
 
+        elif action == "delete_player":
+            try:
+                team_id = int(request.POST.get("team_id") or 0)
+                player_id = int(request.POST.get("player_id") or 0)
+            except ValueError:
+                messages.error(request, "Некорректные данные удаления игрока")
+                return redirect("teams")
+
+            delete_result = api_client.delete_team_player(team_id, player_id, token)
+            redirect_or_none = _process_result_error(request, delete_result)
+            if redirect_or_none:
+                return redirect_or_none
+            if delete_result.ok:
+                messages.success(request, "Игрок удалён")
+            else:
+                messages.error(request, (delete_result.error or {}).get("message", "Не удалось удалить игрока"))
+            return redirect("teams")
+
+        elif action == "delete_team":
+            try:
+                team_id = int(request.POST.get("team_id") or 0)
+            except ValueError:
+                messages.error(request, "Некорректные данные удаления команды")
+                return redirect("teams")
+
+            delete_result = api_client.delete_team(team_id, token)
+            redirect_or_none = _process_result_error(request, delete_result)
+            if redirect_or_none:
+                return redirect_or_none
+            if delete_result.ok:
+                messages.success(request, "Команда удалена")
+            else:
+                messages.error(request, (delete_result.error or {}).get("message", "Не удалось удалить команду"))
+            return redirect("teams")
+
     teams_result = api_client.get_teams(token=token)
     redirect_or_none = _process_result_error(request, teams_result)
     if redirect_or_none:
@@ -345,6 +380,7 @@ def registration(request):
             register_result = api_client.register(
                 form.cleaned_data["email"],
                 form.cleaned_data["password"],
+                form.cleaned_data["nickname"],
                 form.cleaned_data["role"],
             )
             if register_result.ok:
@@ -371,12 +407,54 @@ def registration(request):
     return render(request, "registration.html", {"form": form, **_role_flags(_read_current_user(request))})
 
 
+
 def streams(request):
-    result = api_client.get_streams(token=request.session.get("api_token"))
-    streams_data = result.data if result.ok and result.data else []
-    if not result.ok and (result.error or {}).get("code") == "api_unavailable":
-        messages.info(request, "API недоступно, стримы временно недоступны")
-    return render(request, "streams.html", {"streams": streams_data, **_role_flags(_read_current_user(request))})
+    roles = _role_flags(_read_current_user(request))
+
+    tournament_payload = None
+    player_payload = None
+    tournament_query = ""
+    player_query = ""
+    selected_game = "counterstrike"
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        selected_game = (request.POST.get("game") or "counterstrike").strip() or "counterstrike"
+
+        if action == "find_tournament_streams":
+            tournament_query = (request.POST.get("tournament_query") or "").strip()
+            if tournament_query:
+                result = api_client.esports_tournament_streams(tournament_query, game=selected_game)
+                if result.ok:
+                    tournament_payload = result.data
+                else:
+                    messages.error(request, (result.error or {}).get("message", "Не удалось получить стримы"))
+            else:
+                messages.error(request, "Введите название турнира или запрос")
+
+        elif action == "find_player":
+            player_query = (request.POST.get("player_query") or "").strip()
+            if player_query:
+                result = api_client.esports_player(player_query, game=selected_game)
+                if result.ok:
+                    player_payload = result.data
+                else:
+                    messages.error(request, (result.error or {}).get("message", "Игрок не найден"))
+            else:
+                messages.error(request, "Введите ник игрока")
+
+    # Twitch embed требует parent без порта (пример: localhost)
+    host = (request.get_host() or "localhost").split(":")[0]
+    context = {
+        "tournament_payload": tournament_payload,
+        "player_payload": player_payload,
+        "tournament_query": tournament_query,
+        "player_query": player_query,
+        "selected_game": selected_game,
+        "twitch_parent": host,
+    }
+    context.update(roles)
+    return render(request, "streams.html", context)
 
 
 def analytics(request):

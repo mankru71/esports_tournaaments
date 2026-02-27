@@ -13,10 +13,19 @@ namespace Data
         public DbSet<AppUser> Users { get; set; }
         public DbSet<Team> Teams { get; set; }
         public DbSet<TeamPlayer> TeamPlayers { get; set; }
+        public DbSet<TournamentApplication> TournamentApplications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<AppUser>().HasIndex(u => u.Email).IsUnique();
+
+            modelBuilder.Entity<AppUser>().HasIndex(u => u.Nickname).IsUnique();
+
+            // В одной команде не должно быть двух игроков с одинаковым ником.
+            // (DB-level защита + в контроллере есть дополнительная проверка на trim/регистр.)
+            modelBuilder.Entity<TeamPlayer>()
+                .HasIndex(tp => new { tp.TeamId, tp.Nickname })
+                .IsUnique();
 
             modelBuilder.Entity<Team>()
                 .HasOne(t => t.CaptainUser)
@@ -29,6 +38,28 @@ namespace Data
                 .WithMany(t => t.Players)
                 .HasForeignKey(tp => tp.TeamId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TournamentApplication>()
+                .HasIndex(a => new { a.TournamentId, a.TeamId })
+                .IsUnique();
+
+            modelBuilder.Entity<TournamentApplication>()
+                .HasOne(a => a.Team)
+                .WithMany()
+                .HasForeignKey(a => a.TeamId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TournamentApplication>()
+                .HasOne(a => a.Tournament)
+                .WithMany()
+                .HasForeignKey(a => a.TournamentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TournamentApplication>()
+                .HasOne(a => a.ApplicantUser)
+                .WithMany()
+                .HasForeignKey(a => a.ApplicantUserId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Tournament>().HasData(
                 new Tournament

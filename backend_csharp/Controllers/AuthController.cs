@@ -36,6 +36,9 @@ public class AuthController : ControllerBase
         [Required, EmailAddress]
         public string Email { get; set; } = string.Empty;
 
+        [Required, MinLength(2), MaxLength(32)]
+        public string Nickname { get; set; } = string.Empty;
+
         [Required, MinLength(8)]
         public string Password { get; set; } = string.Empty;
 
@@ -49,8 +52,21 @@ public class AuthController : ControllerBase
         _logger.LogInformation("Incoming /api/auth/register for {Email}", request.Email);
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedNickname = (request.Nickname ?? string.Empty).Trim();
         var normalizedRole = request.Role.Trim().ToLowerInvariant();
         var allowedRoles = new[] { "player", "captain", "judge", "admin" };
+
+        if (normalizedNickname.Length < 2 || normalizedNickname.Length > 32)
+        {
+            return BadRequest(new { message = "Некорректный ник. Длина: 2..32" });
+        }
+
+        // Простой whitelist: буквы/цифры/._- (без пробелов)
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalizedNickname, "^[A-Za-z0-9._-]+$"))
+        {
+            return BadRequest(new { message = "Ник может содержать только латинские буквы, цифры и символы . _ -" });
+        }
+
 
         if (!allowedRoles.Contains(normalizedRole))
         {
@@ -63,9 +79,16 @@ public class AuthController : ControllerBase
             return Conflict(new { message = "Пользователь с таким email уже существует" });
         }
 
+        var nicknameExists = await _db.Users.AnyAsync(u => u.Nickname == normalizedNickname);
+        if (nicknameExists)
+        {
+            return Conflict(new { message = "Пользователь с таким ником уже существует" });
+        }
+
         var user = new AppUser
         {
             Email = normalizedEmail,
+            Nickname = normalizedNickname,
             PasswordHash = Hash(request.Password),
             Role = normalizedRole
         };
@@ -73,7 +96,7 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return Created("/api/auth/me", new { message = "registered", email = user.Email, role = user.Role });
+        return Created("/api/auth/me", new { message = "registered", email = user.Email, nickname = user.Nickname, role = user.Role });
     }
 
     [HttpPost("login")]
@@ -87,11 +110,11 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Неверный email или пароль" });
         }
 
-        var token = BuildDemoToken(user.Id, user.Email, user.Role);
+        var token = BuildDemoToken(user.Id, user.Email, user.Nickname, user.Role);
         return Ok(new
         {
             token,
-            user = new { email = user.Email, role = user.Role }
+            user = new { email = user.Email, nickname = user.Nickname, role = user.Role }
         });
     }
 
@@ -118,7 +141,7 @@ public class AuthController : ControllerBase
             return Unauthorized(new ProblemDetails { Title = "Unauthorized", Detail = "User not found", Status = 401 });
         }
 
-        return Ok(new { email = user.Email, role = user.Role });
+        return Ok(new { email = user.Email, nickname = user.Nickname, role = user.Role });
     }
 
     private static string Hash(string plain)
@@ -127,10 +150,10 @@ public class AuthController : ControllerBase
         return Convert.ToHexString(bytes);
     }
 
-    private static string BuildDemoToken(int userId, string email, string role)
+    private static string BuildDemoToken(int userId, string email, string nickname, string role)
     {
         var header = Base64UrlEncode("{\"alg\":\"none\",\"typ\":\"JWT\"}");
-        var payloadObj = new { sub = userId, email, role, exp = DateTimeOffset.UtcNow.AddHours(8).ToUnixTimeSeconds() };
+        var payloadObj = new { sub = userId, email, nickname, role, exp = DateTimeOffset.UtcNow.AddHours(8).ToUnixTimeSeconds() };
         var payload = Base64UrlEncode(JsonSerializer.Serialize(payloadObj));
         return $"{header}.{payload}.demo";
     }

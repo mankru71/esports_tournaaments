@@ -24,6 +24,18 @@ builder.Services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
+builder.Services.AddMemoryCache();
+
+builder.Services.AddHttpClient("liquipedia", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("EsportsTournamentsPractice/1.0 (contact: demo@local)");
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+});
+
+builder.Services.AddScoped<LiquipediaService>();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
@@ -59,9 +71,14 @@ using (var scope = app.Services.CreateScope())
                 .AsEnumerable()
                 .FirstOrDefault();
 
-            if (string.IsNullOrWhiteSpace(usersTable))
+            var appsTable = context.Database
+                .SqlQueryRaw<string>("SELECT to_regclass('public.\"TournamentApplications\"')::text")
+                .AsEnumerable()
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(usersTable) || string.IsNullOrWhiteSpace(appsTable))
             {
-                Console.WriteLine(">>> ВНИМАНИЕ: Таблица Users отсутствует в существующей БД. Пересоздаём БД для демо...");
+                Console.WriteLine(">>> ВНИМАНИЕ: В существующей БД отсутствуют необходимые таблицы (Users/TournamentApplications). Пересоздаём БД для демо...");
                 context.Database.EnsureDeleted();
                 context.Database.EnsureCreated();
                 Console.WriteLine(">>> УСПЕХ: БД пересоздана (EnsureDeleted+EnsureCreated), auth/teams готовы.");

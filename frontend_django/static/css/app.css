@@ -36,8 +36,34 @@
   --status-approved-bg: rgba(155,123,255,0.16);
   --status-approved-border: rgba(155,123,255,0.42);
   --status-approved-text: #e8ecff;
+
+  --status-pending-bg: rgba(255,204,102,0.14);
+  --status-pending-border: rgba(255,204,102,0.28);
+  --status-pending-text: #e8ecff;
+  --status-rejected-bg: rgba(255,77,109,0.14);
+  --status-rejected-border: rgba(255,77,109,0.28);
+  --status-rejected-text: #e8ecff;
 }
 
+
+
+/* Светлая тема (переменные переопределяются через data-theme="light") */
+html[data-theme="light"] {
+  --bg: #f7f8ff;
+  --surface: #ffffff;
+  --surface-2: #f1f4ff;
+  --text: #121526;
+  --muted: #4b556b;
+  --border: rgba(17, 24, 39, 0.10);
+  --accent: #147dff;
+  --accent-2: #7c5cff;
+  --accent-soft: rgba(20,125,255,0.10);
+  --accent-soft-strong: rgba(20,125,255,0.16);
+  --danger: #e11d48;
+  --success: #16a34a;
+  --warning: #d97706;
+  --shadow: 0 12px 40px rgba(16, 24, 51, 0.12);
+}
 html, body { min-height: 100%; }
 body {
   font-family: "Inter", "Segoe UI", sans-serif;
@@ -179,7 +205,7 @@ textarea::placeholder { color: var(--muted); }
   --bs-table-bg: transparent;
   --bs-table-border-color: var(--border);
   --bs-table-striped-color: var(--text);
-  --bs-table-striped-bg: rgba(255, 255, 255, 0.04);
+  --bs-table-striped-bg: var(--table-striped-bg);
 }
 
 .badge-status {
@@ -190,6 +216,8 @@ textarea::placeholder { color: var(--muted); }
 .status-live { background: var(--status-live-bg); color: var(--status-live-text); border-color: var(--status-live-border); }
 .status-finished { background: var(--status-finished-bg); color: var(--status-finished-text); border-color: var(--status-finished-border); }
 .status-approved { background: var(--status-approved-bg); color: var(--status-approved-text); border-color: var(--status-approved-border); }
+.status-pending { background: var(--status-pending-bg); color: var(--status-pending-text); border-color: var(--status-pending-border); }
+.status-rejected { background: var(--status-rejected-bg); color: var(--status-rejected-text); border-color: var(--status-rejected-border); }
 
 /* Без color-mix (fallback для браузеров/движков где оно глючит) */
 html[data-theme="dark"] .status-planned { background: rgba(76, 201, 240, 0.16); border-color: rgba(76, 201, 240, 0.28); }
