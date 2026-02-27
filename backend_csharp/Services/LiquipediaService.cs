@@ -35,7 +35,7 @@ public class LiquipediaService
         var foundTitle = await SearchFirstTitleAsync(game, nickname, ct);
         if (string.IsNullOrWhiteSpace(foundTitle))
         {
-            var empty = (null, new Dictionary<string, string>());
+            (string? title, Dictionary<string, string> info) empty = (null, new Dictionary<string, string>());
             _cache.Set(cacheKey, empty, TimeSpan.FromMinutes(5));
             return empty;
         }
@@ -68,7 +68,7 @@ public class LiquipediaService
         var title = await SearchFirstTitleAsync(game, queryOrTitle, ct);
         if (string.IsNullOrWhiteSpace(title))
         {
-            var empty = (null, new List<Dictionary<string, string>>());
+            (string? title, List<Dictionary<string, string>> streams) empty = (null, new List<Dictionary<string, string>>());
             _cache.Set(cacheKey, empty, TimeSpan.FromMinutes(2));
             return empty;
         }

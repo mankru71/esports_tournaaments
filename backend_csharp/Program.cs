@@ -118,12 +118,13 @@ static void EnsureDbSchema(AppDbContext context)
     {
         // Учебный self-heal для постепенного развития схемы без миграций.
         // Добавляем колонки для внешних турниров, если их ещё нет.
-        context.Database.ExecuteSqlRaw(@"
-            ALTER TABLE IF EXISTS \"Tournaments\" ADD COLUMN IF NOT EXISTS \"IsExternal\" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE IF EXISTS \"Tournaments\" ADD COLUMN IF NOT EXISTS \"Provider\" text NULL;
-            ALTER TABLE IF EXISTS \"Tournaments\" ADD COLUMN IF NOT EXISTS \"ProviderTournamentId\" text NULL;
-            CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tournaments_Provider_ProviderTournamentId\" ON \"Tournaments\" (\"Provider\", \"ProviderTournamentId\");
-        ");
+	        // NB: Это verbatim-строка (@"...") — внутри кавычки экранируются удвоением (""), а не обратным слэшем.
+	        context.Database.ExecuteSqlRaw(@"
+	            ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""IsExternal"" boolean NOT NULL DEFAULT FALSE;
+	            ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""Provider"" text NULL;
+	            ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""ProviderTournamentId"" text NULL;
+	            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Tournaments_Provider_ProviderTournamentId"" ON ""Tournaments"" (""Provider"", ""ProviderTournamentId"");
+	        ");
     }
     catch (Exception ex)
     {

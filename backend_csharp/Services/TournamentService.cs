@@ -18,7 +18,7 @@ namespace Services
         public IEnumerable<Tournament> GetAllTournaments() => _context.Tournaments.ToList();
 
         // 2. Получение одного турнира по ID (нужно для TournamentController)
-        public Tournament GetTournamentById(int id)
+        public Tournament? GetTournamentById(int id)
         {
             return _context.Tournaments.FirstOrDefault(t => t.Id == id);
         }
