@@ -19,8 +19,6 @@ namespace Data
         {
             modelBuilder.Entity<AppUser>().HasIndex(u => u.Email).IsUnique();
 
-            modelBuilder.Entity<AppUser>().HasIndex(u => u.Nickname).IsUnique();
-
             // В одной команде не должно быть двух игроков с одинаковым ником.
             // (DB-level защита + в контроллере есть дополнительная проверка на trim/регистр.)
             modelBuilder.Entity<TeamPlayer>()
