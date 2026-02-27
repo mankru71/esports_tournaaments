@@ -33,30 +33,53 @@
                 <div class="fw-semibold">{{ team.name }}</div>
                 <small class="text-muted">Капитан: {{ team.captainEmail }}</small>
               </div>
+              {% if current_user and current_user.email == team.captainEmail %}
+                <form method="post" class="m-0">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete_team">
+                  <input type="hidden" name="team_id" value="{{ team.id }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Удалить команду целиком?');">Удалить команду</button>
+                </form>
+              {% endif %}
             </div>
             <div class="mb-3">
               {% if team.players %}
                 <div class="d-flex flex-wrap gap-2">
                   {% for player in team.players %}
-                    <span class="badge rounded-pill text-bg-dark">{{ player.nickname }}</span>
+                    <div class="d-inline-flex align-items-center gap-2">
+                      <span class="badge rounded-pill text-bg-dark">{{ player.nickname }}</span>
+                      {% if current_user and current_user.email == team.captainEmail %}
+                        <form method="post" class="m-0">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="delete_player">
+                          <input type="hidden" name="team_id" value="{{ team.id }}">
+                          <input type="hidden" name="player_id" value="{{ player.id }}">
+                          <button class="btn btn-sm btn-outline-danger py-0" type="submit" aria-label="Удалить игрока" title="Удалить игрока">×</button>
+                        </form>
+                      {% endif %}
+                    </div>
                   {% endfor %}
                 </div>
               {% else %}
                 <div class="text-muted small">Игроки пока не добавлены.</div>
               {% endif %}
             </div>
-            <form method="post" class="row g-2 align-items-end">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="add_player">
-              <input type="hidden" name="team_id" value="{{ team.id }}">
-              <div class="col-md-8">
-                <label class="form-label">Ник игрока</label>
-                <input class="form-control" name="nickname" type="text" placeholder="electroNic" required>
-              </div>
-              <div class="col-md-4">
-                <button class="btn btn-outline-accent w-100" type="submit">Добавить игрока</button>
-              </div>
-            </form>
+            {% if current_user and current_user.email == team.captainEmail %}
+              <form method="post" class="row g-2 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_player">
+                <input type="hidden" name="team_id" value="{{ team.id }}">
+                <div class="col-md-8">
+                  <label class="form-label">Ник игрока</label>
+                  <input class="form-control" name="nickname" type="text" placeholder="electroNic" required>
+                </div>
+                <div class="col-md-4">
+                  <button class="btn btn-outline-accent w-100" type="submit">Добавить игрока</button>
+                </div>
+              </form>
+            {% else %}
+              <div class="text-muted small">Добавлять/удалять игроков может только капитан команды.</div>
+            {% endif %}
           </div>
         {% endfor %}
       {% else %}

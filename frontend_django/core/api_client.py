@@ -140,6 +140,12 @@ class CSharpApiClient:
     def add_team_player(self, team_id: int, nickname: str, token: str) -> ApiResult:
         return self._request("POST", f"teams/{team_id}/players", data={"nickname": nickname}, token=token)
 
+    def delete_team_player(self, team_id: int, player_id: int, token: str) -> ApiResult:
+        return self._request("DELETE", f"teams/{team_id}/players/{player_id}", token=token)
+
+    def delete_team(self, team_id: int, token: str) -> ApiResult:
+        return self._request("DELETE", f"teams/{team_id}", token=token)
+
     # Matches / MVP / Streams / Analytics
     def get_matches(self, tournament_id: int, token: str | None = None) -> ApiResult:
         return self._request("GET", "matches", params={"tournamentId": tournament_id}, token=token)

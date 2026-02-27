@@ -81,16 +81,79 @@ public class TeamsController : ControllerBase
             return StatusCode(403, new { message = "Недостаточно прав" });
         }
 
-        var player = new TeamPlayer
+        var nickname = (request.Nickname ?? string.Empty).Trim();
+        if (nickname.Length < 2)
         {
-            TeamId = teamId,
-            Nickname = request.Nickname,
-        };
+            return BadRequest(new { message = "Ник должен содержать минимум 2 символа" });
+        }
+
+        // Запрещаем дубли по нику внутри одной команды (с учётом регистра + пробелов).
+        var exists = await _db.TeamPlayers
+            .AnyAsync(p => p.TeamId == teamId && p.Nickname.ToLower() == nickname.ToLower());
+
+        if (exists)
+        {
+            return Conflict(new { message = "В команде уже есть участник с таким ником" });
+        }
+
+        var player = new TeamPlayer { TeamId = teamId, Nickname = nickname };
 
         _db.TeamPlayers.Add(player);
-        await _db.SaveChangesAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // На всякий случай (если сработал уникальный индекс)
+            return Conflict(new { message = "В команде уже есть участник с таким ником" });
+        }
 
         return Ok(new { id = player.Id, teamId = player.TeamId, nickname = player.Nickname });
+    }
+
+    [HttpDelete("{teamId:int}/players/{playerId:int}")]
+    public async Task<IActionResult> DeletePlayer(int teamId, int playerId)
+    {
+        var userId = GetUserIdFromBearerToken();
+        if (userId is null) return Unauthorized(new { message = "Требуется вход" });
+
+        var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == teamId);
+        if (team is null) return NotFound(new { message = "Команда не найдена" });
+
+        if (team.CaptainUserId != userId.Value)
+        {
+            return StatusCode(403, new { message = "Недостаточно прав" });
+        }
+
+        var player = await _db.TeamPlayers.FirstOrDefaultAsync(p => p.Id == playerId && p.TeamId == teamId);
+        if (player is null) return NotFound(new { message = "Игрок не найден" });
+
+        _db.TeamPlayers.Remove(player);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("{teamId:int}")]
+    public async Task<IActionResult> DeleteTeam(int teamId)
+    {
+        var userId = GetUserIdFromBearerToken();
+        if (userId is null) return Unauthorized(new { message = "Требуется вход" });
+
+        var team = await _db.Teams
+            .Include(t => t.Players)
+            .FirstOrDefaultAsync(t => t.Id == teamId);
+
+        if (team is null) return NotFound(new { message = "Команда не найдена" });
+
+        if (team.CaptainUserId != userId.Value)
+        {
+            return StatusCode(403, new { message = "Недостаточно прав" });
+        }
+
+        _db.Teams.Remove(team);
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 
     private int? GetUserIdFromBearerToken()

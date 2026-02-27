@@ -216,6 +216,41 @@ def teams(request):
                     return redirect("teams")
                 messages.error(request, (add_result.error or {}).get("message", "Не удалось добавить игрока"))
 
+        elif action == "delete_player":
+            try:
+                team_id = int(request.POST.get("team_id") or 0)
+                player_id = int(request.POST.get("player_id") or 0)
+            except ValueError:
+                messages.error(request, "Некорректные данные удаления игрока")
+                return redirect("teams")
+
+            delete_result = api_client.delete_team_player(team_id, player_id, token)
+            redirect_or_none = _process_result_error(request, delete_result)
+            if redirect_or_none:
+                return redirect_or_none
+            if delete_result.ok:
+                messages.success(request, "Игрок удалён")
+            else:
+                messages.error(request, (delete_result.error or {}).get("message", "Не удалось удалить игрока"))
+            return redirect("teams")
+
+        elif action == "delete_team":
+            try:
+                team_id = int(request.POST.get("team_id") or 0)
+            except ValueError:
+                messages.error(request, "Некорректные данные удаления команды")
+                return redirect("teams")
+
+            delete_result = api_client.delete_team(team_id, token)
+            redirect_or_none = _process_result_error(request, delete_result)
+            if redirect_or_none:
+                return redirect_or_none
+            if delete_result.ok:
+                messages.success(request, "Команда удалена")
+            else:
+                messages.error(request, (delete_result.error or {}).get("message", "Не удалось удалить команду"))
+            return redirect("teams")
+
     teams_result = api_client.get_teams(token=token)
     redirect_or_none = _process_result_error(request, teams_result)
     if redirect_or_none:

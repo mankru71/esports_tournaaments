@@ -102,8 +102,17 @@
   function applyTheme(theme) {
     const normalized = theme === "light" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", normalized);
+    // Bootstrap 5.3 color modes
+    document.documentElement.setAttribute("data-bs-theme", normalized);
     setCssVars(PALETTES[normalized]);
     safeSetTheme(normalized);
+
+    // Нативные элементы (скроллбар/формы в некоторых браузерах)
+    try {
+      document.documentElement.style.colorScheme = normalized === "dark" ? "dark" : "light";
+    } catch {
+      // ignore
+    }
 
     // meta theme-color (чтобы мобилка/браузерная панель выглядела адекватно)
     const meta = document.getElementById("meta-theme-color");
