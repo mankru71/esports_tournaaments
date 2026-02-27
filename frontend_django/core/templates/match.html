@@ -30,7 +30,13 @@
     {% endif %}
   </div>
 
-  {% if is_admin or is_judge %}
+  {% if matches_readonly %}
+  <div class="alert alert-info">Матчи из PandaScore доступны только для просмотра (read-only).</div>
+  {% endif %}
+
+  
+
+  {% if (is_admin or is_judge) and not matches_readonly %}
   <div class="form-card p-4">
     <h2 class="h5 mb-3">Обновить результат матча</h2>
     <form method="post" class="row g-3">

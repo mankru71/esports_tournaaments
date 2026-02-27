@@ -26,16 +26,19 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
 builder.Services.AddMemoryCache();
 
-builder.Services.AddHttpClient("liquipedia", client =>
+builder.Services.AddHttpClient("pandascore", client =>
 {
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("EsportsTournamentsPractice/1.0 (contact: demo@local)");
+    client.BaseAddress = new Uri("https://api.pandascore.co");
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("EsportsTournamentsPractice/1.0 (+edu project)");
 })
 .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
 });
 
-builder.Services.AddScoped<LiquipediaService>();
+builder.Services.AddScoped<PandaScoreService>();
+builder.Services.AddScoped<ExternalTournamentSyncService>();
+
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
@@ -86,6 +89,9 @@ using (var scope = app.Services.CreateScope())
             else
             {
                 Console.WriteLine(">>> УСПЕХ: Миграции отсутствуют, схема проверена через EnsureCreated().");
+
+            EnsureDbSchema(context);
+
             }
         }
     }
@@ -104,5 +110,26 @@ if (app.Environment.IsDevelopment())
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<MatchesHub>("/hubs/matches");
+
+
+static void EnsureDbSchema(AppDbContext context)
+{
+    try
+    {
+        // Учебный self-heal для постепенного развития схемы без миграций.
+        // Добавляем колонки для внешних турниров, если их ещё нет.
+        context.Database.ExecuteSqlRaw(@"
+            ALTER TABLE IF EXISTS \"Tournaments\" ADD COLUMN IF NOT EXISTS \"IsExternal\" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE IF EXISTS \"Tournaments\" ADD COLUMN IF NOT EXISTS \"Provider\" text NULL;
+            ALTER TABLE IF EXISTS \"Tournaments\" ADD COLUMN IF NOT EXISTS \"ProviderTournamentId\" text NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tournaments_Provider_ProviderTournamentId\" ON \"Tournaments\" (\"Provider\", \"ProviderTournamentId\");
+        ");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($">>> WARNING: schema self-heal failed: {ex.Message}");
+    }
+}
+
 
 app.Run();

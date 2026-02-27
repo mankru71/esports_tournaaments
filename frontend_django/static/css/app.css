@@ -259,7 +259,9 @@ html[data-theme="light"] .status-approved { background: rgba(95, 109, 145, 0.10)
 .app-navbar .nav-user-badge {
   background: var(--surface-2) !important;
   color: var(--text);
+  text-decoration: none;
 }
+.nav-user-badge:hover { color: var(--text); opacity: 0.95; }
 
 .text-bg-dark,
 .text-bg-secondary {

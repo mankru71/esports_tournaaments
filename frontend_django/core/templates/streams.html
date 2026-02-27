@@ -5,7 +5,7 @@
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Стримы</h1>
-      <p class="text-muted mb-0">Поиск стримов и игроков через Liquipedia + встраивание Twitch.</p>
+      <p class="text-muted mb-0">Поиск стримов/игроков через PandaScore API + встраивание Twitch.</p>
     </div>
   </div>
 
@@ -17,15 +17,7 @@
         <form method="post" class="row g-2 align-items-end">
           {% csrf_token %}
           <input type="hidden" name="action" value="find_tournament_streams" />
-          <div class="col-md-4">
-            <label class="form-label small mb-1">Дисциплина</label>
-            <select class="form-select" name="game">
-              <option value="counterstrike" {% if selected_game == "counterstrike" %}selected{% endif %}>CS</option>
-              <option value="dota2" {% if selected_game == "dota2" %}selected{% endif %}>Dota 2</option>
-              <option value="leagueoflegends" {% if selected_game == "leagueoflegends" %}selected{% endif %}>LoL</option>
-            </select>
-          </div>
-          <div class="col-md-8">
+          <div class="col-12">
             <label class="form-label small mb-1">Турнир (поиск)</label>
             <input class="form-control" type="text" name="tournament_query" value="{{ tournament_query }}" placeholder="например: IEM Katowice" />
           </div>
@@ -38,23 +30,26 @@
           <hr class="my-4"/>
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
             <div>
-              <div class="h6 mb-0">{{ tournament_payload.title }}</div>
-              <div class="text-muted small">Источник: {{ tournament_payload.source }} · <a href="{{ tournament_payload.pageUrl }}" target="_blank" rel="noreferrer">Открыть на Liquipedia</a></div>
+              <div class="h6 mb-0">{{ tournament_payload.tournament.name }}</div>
+              <div class="text-muted small">Источник: {{ tournament_payload.source }}</div>
             </div>
           </div>
 
-          {% if tournament_payload.streams %}
+          {% if tournament_payload.streams_prepared %}
             <div class="row g-3 mt-1">
-              {% for s in tournament_payload.streams %}
+              {% for s in tournament_payload.streams_prepared %}
                 <div class="col-12">
                   <div class="card p-3">
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                       <div class="fw-semibold">
                         {% if s.provider == "twitch" %}
                           Twitch · {{ s.channel }}
+                        {% elif s.provider == "youtube" %}
+                          YouTube
                         {% else %}
-                          {{ s.provider|default:"Стрим" }}
+                          Stream
                         {% endif %}
+                        {% if s.matchName %}<span class="text-muted small ms-2">{{ s.matchName }}</span>{% endif %}
                       </div>
                       {% if s.url %}
                         <a class="btn btn-sm btn-outline-accent" href="{{ s.url }}" target="_blank" rel="noreferrer">Открыть</a>
@@ -79,10 +74,10 @@
               {% endfor %}
             </div>
           {% else %}
-            <div class="empty-state mt-3">Для этого турнира не удалось найти ссылки на стримы в инфобоксе.</div>
+            <div class="empty-state mt-3">По этому запросу не удалось найти стримы.</div>
           {% endif %}
         {% else %}
-          <div class="text-muted small mt-3">Подсказка: поиск работает по заголовкам Liquipedia (иногда помогает добавить год или организатора).</div>
+          <div class="text-muted small mt-3">Подсказка: попробуй название турнира/лиги или часть названия.</div>
         {% endif %}
       </div>
     </div>
@@ -95,14 +90,6 @@
           {% csrf_token %}
           <input type="hidden" name="action" value="find_player" />
           <div class="col-12">
-            <label class="form-label small mb-1">Дисциплина</label>
-            <select class="form-select" name="game">
-              <option value="counterstrike" {% if selected_game == "counterstrike" %}selected{% endif %}>CS</option>
-              <option value="dota2" {% if selected_game == "dota2" %}selected{% endif %}>Dota 2</option>
-              <option value="leagueoflegends" {% if selected_game == "leagueoflegends" %}selected{% endif %}>LoL</option>
-            </select>
-          </div>
-          <div class="col-12">
             <label class="form-label small mb-1">Ник</label>
             <input class="form-control" type="text" name="player_query" value="{{ player_query }}" placeholder="например: s1mple" />
           </div>
@@ -113,27 +100,32 @@
 
         {% if player_payload %}
           <hr class="my-4"/>
-          <div class="card p-3">
-            <div class="d-flex align-items-start justify-content-between gap-2">
-              <div>
-                <div class="h6 mb-1">{{ player_payload.title }}</div>
-                <div class="text-muted small">Источник: {{ player_payload.source }} · <a href="{{ player_payload.pageUrl }}" target="_blank" rel="noreferrer">Открыть на Liquipedia</a></div>
-              </div>
-            </div>
 
-            {% if player_payload.info %}
-              <div class="mt-3">
-                <div class="small"><span class="text-muted">Страна:</span> {{ player_payload.info.country|default:player_payload.info.nationality|default:"н/д" }}</div>
-                <div class="small"><span class="text-muted">Команда:</span> {{ player_payload.info.team|default:player_payload.info.team1|default:"н/д" }}</div>
-                <div class="small"><span class="text-muted">Роль:</span> {{ player_payload.info.role|default:player_payload.info.roles|default:"н/д" }}</div>
-                <div class="small"><span class="text-muted">Имя:</span> {{ player_payload.info.name|default:player_payload.info.fullname|default:"н/д" }}</div>
-              </div>
-            {% else %}
-              <div class="text-muted small mt-3">Инфобокс найден, но поля не распознаны.</div>
-            {% endif %}
-          </div>
+          {% if player_payload.results %}
+            <div class="d-flex flex-column gap-2">
+              {% for p in player_payload.results %}
+                <div class="card p-3">
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                      <div class="fw-semibold">{{ p.name|default:"(без имени)" }}</div>
+                      <div class="text-muted small">
+                        {% if p.currentTeam %}{{ p.currentTeam }} · {% endif %}
+                        {% if p.role %}роль: {{ p.role }} · {% endif %}
+                        {% if p.nationality %}{{ p.nationality }}{% endif %}
+                      </div>
+                    </div>
+                    {% if p.imageUrl %}
+                      <img src="{{ p.imageUrl }}" alt="player" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">Игрок не найден.</div>
+          {% endif %}
         {% else %}
-          <div class="text-muted small mt-3">Поиск берёт данные с Liquipedia по введённому нику.</div>
+          <div class="text-muted small mt-3">Поиск берёт данные из PandaScore.</div>
         {% endif %}
       </div>
     </div>

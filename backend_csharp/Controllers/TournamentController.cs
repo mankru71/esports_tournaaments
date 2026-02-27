@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Services;
 
 namespace Controllers
 {
@@ -6,16 +7,22 @@ namespace Controllers
     [Route("api/[controller]")]
     public class TournamentController : ControllerBase
     {
-        private readonly Services.TournamentService _tournamentService;
+        private readonly TournamentService _tournamentService;
+        private readonly ExternalTournamentSyncService _sync;
 
-        public TournamentController(Services.TournamentService tournamentService)
+        public TournamentController(TournamentService tournamentService, ExternalTournamentSyncService sync)
         {
             _tournamentService = tournamentService;
+            _sync = sync;
         }
 
         [HttpGet]
-        public IActionResult Get()
+        public async Task<IActionResult> Get(CancellationToken ct)
         {
+            // Pull a small set of upcoming tournaments from PandaScore and cache them in DB.
+            // If token is not configured, we keep local tournaments only.
+            await _sync.SyncUpcomingAsync(ct);
+
             var tournaments = _tournamentService.GetAllTournaments().Select(ToDto);
             return Ok(tournaments);
         }
@@ -47,7 +54,10 @@ namespace Controllers
             totalAmount = t.PrizePool,
             stagesSummary = "R1 -> Final",
             currentParticipants = t.CurrentParticipants,
-            maxParticipants = t.MaxParticipants
+            maxParticipants = t.MaxParticipants,
+            isExternal = t.IsExternal,
+            provider = t.Provider,
+            providerTournamentId = t.ProviderTournamentId
         };
     }
 }

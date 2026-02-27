@@ -45,7 +45,6 @@ services:
       - DB_PORT=${DB_PORT:-5432}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
-      - ./frontend_django:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     depends_on:

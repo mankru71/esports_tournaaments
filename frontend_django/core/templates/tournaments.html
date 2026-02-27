@@ -7,7 +7,7 @@
       <h1 class="h3 mb-2">Турниры</h1>
       <p class="text-muted mb-0">Следите за статусами, форматом и матчами в единой таблице.</p>
     </div>
-    <a class="btn btn-outline-accent" href="{% url 'registration' %}">Подать заявку</a>
+    <a class="btn btn-outline-accent" href="{% url 'registration' %}">Регистрация</a>
   </div>
 
   <div class="table-panel p-3 p-md-4">
@@ -21,7 +21,7 @@
         <tbody>
         {% for t in tournaments %}
           <tr>
-            <td class="fw-semibold">{{ t.name }}</td>
+            <td class="fw-semibold">{{ t.name }}{% if t.isExternal %} <span class="badge text-bg-secondary ms-2">API</span>{% endif %}</td>
             <td>{{ t.discipline }}</td>
             <td>{{ t.format }}</td>
             <td>{{ t.prizePool }}</td>

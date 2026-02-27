@@ -24,6 +24,12 @@ class RegistrationForm(forms.Form):
         ('captain', 'Капитан'),
     ]
 
+    nickname = forms.CharField(
+        label='Ник',
+        max_length=32,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 's1mple', 'autocomplete': 'nickname'})
+    )
+
     email = forms.EmailField(
         label='Электронная почта',
         widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'nickname@example.com'})

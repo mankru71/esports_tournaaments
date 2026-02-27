@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Services;
+using System.Linq;
 
 namespace Controllers;
 
@@ -7,29 +8,63 @@ namespace Controllers;
 [Route("api/streams")]
 public class StreamsController : ControllerBase
 {
-    private readonly LiquipediaService _liquipedia;
+    private readonly PandaScoreService _pandascore;
 
-    public StreamsController(LiquipediaService liquipedia)
+    public StreamsController(PandaScoreService pandascore)
     {
-        _liquipedia = liquipedia;
+        _pandascore = pandascore;
     }
 
     [HttpGet("status")]
-    public async Task<IActionResult> Status([FromQuery] string? q = null, [FromQuery] string? game = null, CancellationToken ct = default)
+    public async Task<IActionResult> Status([FromQuery] string? q = null, CancellationToken ct = default)
     {
-        // Учебный endpoint: возвращает стримы из Liquipedia по запросу (по умолчанию "Major").
-        var query = string.IsNullOrWhiteSpace(q) ? "Major" : q!;
-        var (title, streams) = await _liquipedia.GetTournamentStreamsAsync(game ?? "counterstrike", query, ct);
+        if (!_pandascore.Enabled)
+            return StatusCode(503, new { message = "PandaScore token is not configured (PANDASCORE_TOKEN)" });
 
-        var payload = streams.Select(s => new
-        {
-            provider = s.TryGetValue("provider", out var p) ? p : "",
-            url = s.TryGetValue("url", out var u) ? u : "",
-            channel = s.TryGetValue("channel", out var c) ? c : "",
-            status = new { online = false, viewers = 0 },
-            meta = new { source = "liquipedia", title }
-        });
+        var query = string.IsNullOrWhiteSpace(q) ? "Major" : q!.Trim();
+        var tournaments = await _pandascore.SearchTournamentsAsync(query, 5, ct);
+        var t = tournaments.FirstOrDefault();
+
+        if (t == null || string.IsNullOrWhiteSpace(t.Id))
+            return Ok(Array.Empty<object>());
+
+        var matches = await _pandascore.GetMatchesForTournamentAsync(t.Id, 50, ct);
+
+        var payload = matches
+            .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))
+            .Select(m => new
+            {
+                provider = DetectProvider(m.StreamUrl!),
+                url = m.StreamUrl!,
+                channel = ExtractChannel(m.StreamUrl!),
+                status = new { online = false, viewers = 0 },
+                meta = new { source = "pandascore", tournament = t.Name, match = m.Name }
+            })
+            .DistinctBy(x => x.url)
+            .ToList();
 
         return Ok(payload);
+    }
+
+    private static string DetectProvider(string url)
+    {
+        var u = url.ToLowerInvariant();
+        if (u.Contains("twitch.tv")) return "Twitch";
+        if (u.Contains("youtube.com") || u.Contains("youtu.be")) return "YouTube";
+        return "Stream";
+    }
+
+    private static string ExtractChannel(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var parts = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length > 0 ? parts[0] : "";
+        }
+        catch
+        {
+            return "";
+        }
     }
 }

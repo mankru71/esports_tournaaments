@@ -23,6 +23,18 @@ DB_PORT=5432
 
 `docker-compose.yml` прокидывает эти переменные в `django-app` через `env_file` и `environment`.
 
+
+## External esports data (PandaScore)
+
+Проект подтягивает публичные турниры/матчи/игроков/стримы из **PandaScore API** (open API с бесплатным тарифом).
+Чтобы это работало, добавьте в `.env`:
+
+```env
+PANDASCORE_TOKEN=YOUR_TOKEN_HERE
+```
+
+Если токен не задан — сайт продолжит работать, но будет показывать только локальные (демо) турниры/матчи.
+
 ## Public vs Internal URLs
 
 ### Публичные ссылки (открывать в браузере)
