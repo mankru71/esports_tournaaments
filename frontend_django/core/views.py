@@ -473,6 +473,18 @@ def registration(request):
                 form.cleaned_data["role"],
             )
             if register_result.ok:
+                # авто-вход после регистрации
+                login_result = api_client.login(form.cleaned_data["email"], form.cleaned_data["password"])
+                if login_result.ok:
+                    token = (login_result.data or {}).get("token")
+                    if token:
+                        request.session["api_token"] = token
+                        me_result = api_client.me(token)
+                        if me_result.ok and me_result.data:
+                            request.session["current_user"] = me_result.data
+                    messages.success(request, "Регистрация успешна. Вы вошли в систему.")
+                    return redirect("tournaments")
+
                 messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
                 return redirect("login")
 
@@ -516,35 +528,18 @@ def profile(request):
         result = api_client.esports_player(nickname, game=selected_game)
         if result.ok:
             esports_payload = result.data or {}
-            info = (esports_payload or {}).get("info") or {}
-            labels = {
-                "id": "ID",
-                "name": "Имя",
-                "fullname": "Полное имя",
-                "romanized_name": "Имя (romanized)",
-                "country": "Страна",
-                "nationality": "Гражданство",
-                "team": "Команда",
-                "team1": "Команда",
-                "role": "Роль",
-                "roles": "Роли",
-                "status": "Статус",
-                "years_active": "Годы активности",
-                "approx_earnings": "Примерный заработок",
-            }
-            order = ["id", "name", "fullname", "romanized_name", "country", "nationality", "team", "role", "roles", "status", "years_active", "approx_earnings"]
-            used = set()
-            for k in order:
-                v = info.get(k)
-                if v:
-                    esports_fields.append({"key": labels.get(k, k), "value": v})
-                    used.add(k)
-            # остальное
-            for k, v in info.items():
-                if k in used:
-                    continue
-                if v:
-                    esports_fields.append({"key": labels.get(k, k), "value": v})
+            results = (esports_payload or {}).get("results") or []
+            if results:
+                p = results[0]
+                esports_fields = [
+                    {"key": "Имя", "value": p.get("name")},
+                    {"key": "Команда", "value": p.get("currentTeam")},
+                    {"key": "Роль", "value": p.get("role")},
+                    {"key": "Страна", "value": p.get("nationality")},
+                ]
+                esports_fields = [x for x in esports_fields if x.get("value")]
+            else:
+                esports_error = "Игрок не найден в PandaScore."
         else:
             esports_error = (result.error or {}).get("message", "Не удалось получить данные игрока")
     else:

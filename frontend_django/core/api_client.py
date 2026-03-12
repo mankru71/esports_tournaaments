@@ -97,7 +97,14 @@ class CSharpApiClient:
         if response.status_code == 409:
             return ApiResult(ok=False, error={"code": "conflict", "message": body.get("message") or "Конфликт данных", "details": body})
         if response.status_code >= 500:
-            return ApiResult(ok=False, error={"code": "server_error", "message": "Ошибка сервера API", "details": body})
+            return ApiResult(
+                ok=False,
+                error={
+                    "code": "server_error",
+                    "message": (body or {}).get("message") or (body or {}).get("title") or "Ошибка сервера API",
+                    "details": body,
+                },
+            )
 
         return ApiResult(
             ok=False,

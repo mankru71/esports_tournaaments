@@ -20,15 +20,16 @@ class MatchResultForm(forms.Form):
 
 class RegistrationForm(forms.Form):
     ROLE_CHOICES = [
-        ('player', 'Игрок'),
-        ('captain', 'Капитан'),
-    ]
+    ("captain", "Капитан"),
+    ("player", "Игрок"),
+]
 
-    nickname = forms.CharField(
-        label='Ник',
-        max_length=32,
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 's1mple', 'autocomplete': 'nickname'})
-    )
+    role = forms.ChoiceField(
+        choices=ROLE_CHOICES,
+        initial="captain",
+        label="Роль",
+        widget=forms.Select(attrs={"class": "form-select"}),
+)
 
     email = forms.EmailField(
         label='Электронная почта',

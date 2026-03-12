@@ -10,6 +10,7 @@ services:
     env_file:
       - ./.env
     environment:
+      - PandaScore__Token=${PANDASCORE_TOKEN}
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ASPNETCORE_URLS=http://+:5000
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${DB_NAME:-esports_db};Username=${DB_USER:-esports_user};Password=${DB_PASSWORD:-esports123}
