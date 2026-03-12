@@ -5,7 +5,7 @@
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Матчи турнира</h1>
-      <p class="text-muted mb-0">Просмотр сетки и оперативное обновление результатов.</p>
+      <p class="text-muted mb-0">Просмотр сетки и обновление результатов в реальном времени.</p>
     </div>
     <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">К списку турниров</a>
   </div>
@@ -17,9 +17,13 @@
           <thead><tr><th>ID</th><th>Раунд</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
           <tbody>
             {% for m in matches %}
-            <tr>
-              <td>#{{ m.id }}</td><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td>
-              <td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td>
+            <tr data-match-id="{{ m.id }}">
+              <td>#{{ m.id }}</td>
+              <td>{{ m.round }}</td>
+              <td class="team-a">{{ m.teamA }}</td>
+              <td class="text-center fw-semibold score">{{ m.scoreA }} : {{ m.scoreB }}</td>
+              <td class="team-b">{{ m.teamB }}</td>
+              <td><span class="badge badge-status status-{{ m.status }} status">{{ m.status_label }}</span></td>
             </tr>
             {% endfor %}
           </tbody>
@@ -31,12 +35,10 @@
   </div>
 
   {% if matches_readonly %}
-  <div class="alert alert-info">Матчи из PandaScore доступны только для просмотра (read-only).</div>
+  <div class="alert alert-info">Этот список матчей доступен только для просмотра. Внешние матчи и автоматически сгенерированная сетка не редактируются вручную.</div>
   {% endif %}
 
-  
-
-  {% if (is_admin or is_judge) and not matches_readonly %}
+  {% if is_admin or is_judge %}{% if not matches_readonly %}
   <div class="form-card p-4">
     <h2 class="h5 mb-3">Обновить результат матча</h2>
     <form method="post" class="row g-3">
@@ -47,6 +49,29 @@
       <div class="col-12"><button class="btn btn-accent" type="submit">Сохранить результат</button></div>
     </form>
   </div>
-  {% endif %}
+  {% endif %}{% endif %}
 </section>
+
+<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+<script>
+  (function () {
+    if (!window.signalR) return;
+    const connection = new signalR.HubConnectionBuilder().withUrl('/hubs/matches').withAutomaticReconnect().build();
+    connection.start().then(function () {
+      connection.invoke('JoinTournament', '{{ tournament_id }}');
+    }).catch(function () {});
+
+    connection.on('matchUpdated', function (payload) {
+      const row = document.querySelector('[data-match-id="' + payload.id + '"]');
+      if (!row) return;
+      const score = row.querySelector('.score');
+      const status = row.querySelector('.status');
+      if (score) score.textContent = payload.scoreA + ' : ' + payload.scoreB;
+      if (status) {
+        status.textContent = payload.status;
+        status.className = 'badge badge-status status-' + payload.status + ' status';
+      }
+    });
+  })();
+</script>
 {% endblock %}

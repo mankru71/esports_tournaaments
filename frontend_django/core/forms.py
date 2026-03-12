@@ -13,24 +13,25 @@ class LoginForm(forms.Form):
 
 
 class MatchResultForm(forms.Form):
-    match_id = forms.IntegerField(min_value=1, label='ID матча', widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    match_id = forms.CharField(label='ID матча', widget=forms.TextInput(attrs={'class': 'form-control'}))
     score_a = forms.IntegerField(min_value=0, label='Счёт команды A', widget=forms.NumberInput(attrs={'class': 'form-control'}))
     score_b = forms.IntegerField(min_value=0, label='Счёт команды B', widget=forms.NumberInput(attrs={'class': 'form-control'}))
 
 
 class RegistrationForm(forms.Form):
     ROLE_CHOICES = [
-    ("captain", "Капитан"),
-    ("player", "Игрок"),
-]
+        ('captain', 'Капитан'),
+        ('player', 'Игрок'),
+        ('judge', 'Судья'),
+        ('admin', 'Администратор'),
+        ('viewer', 'Зритель'),
+    ]
 
-    role = forms.ChoiceField(
-        choices=ROLE_CHOICES,
-        initial="captain",
-        label="Роль",
-        widget=forms.Select(attrs={"class": "form-select"}),
-)
-
+    nickname = forms.CharField(
+        label='Ник',
+        max_length=32,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 's1mple', 'autocomplete': 'nickname'})
+    )
     email = forms.EmailField(
         label='Электронная почта',
         widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'nickname@example.com'})
@@ -45,6 +46,7 @@ class RegistrationForm(forms.Form):
     )
     role = forms.ChoiceField(
         choices=ROLE_CHOICES,
+        initial='captain',
         label='Роль',
         widget=forms.Select(attrs={'class': 'form-select'})
     )
@@ -87,4 +89,18 @@ class TeamPlayerForm(forms.Form):
         label='Ник игрока',
         max_length=100,
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 's1mple'})
+    )
+    rating = forms.DecimalField(
+        label='Рейтинг',
+        required=False,
+        min_value=0,
+        decimal_places=2,
+        max_digits=8,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '2450'})
+    )
+    game = forms.CharField(
+        label='Дисциплина',
+        required=False,
+        max_length=50,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'counterstrike'})
     )

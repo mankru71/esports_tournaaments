@@ -19,15 +19,13 @@ class ApiResult:
 
 
 class CSharpApiClient:
-    """Клиент для взаимодействия с C# API с единым форматом ошибок."""
-
     def __init__(self):
         self.base_url = settings.DJANGO_API_BASE_URL.rstrip("/")
         self.timeout = settings.C_SHARP_API.get("TIMEOUT", 30)
         self.session = requests.Session()
 
     def _build_url(self, endpoint: str) -> str:
-        return f"{self.base_url}/{endpoint.lstrip('/')}"  # noqa: E231
+        return f"{self.base_url}/{endpoint.lstrip('/')}"
 
     def _decode_exp(self, token: str) -> int | None:
         try:
@@ -44,7 +42,6 @@ class CSharpApiClient:
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
-        logger.info("C# API request: %s %s", method.upper(), url)
         try:
             response = self.session.request(
                 method=method,
@@ -58,8 +55,6 @@ class CSharpApiClient:
             logger.error("C# API connection error for %s %s: %s", method.upper(), url, exc)
             return ApiResult(ok=False, error={"code": "api_unavailable", "message": "API недоступно", "details": str(exc)})
 
-        logger.info("C# API response: %s %s -> %s", method.upper(), url, response.status_code)
-
         if 200 <= response.status_code < 300:
             if not response.content:
                 return ApiResult(ok=True, data=None)
@@ -68,52 +63,28 @@ class CSharpApiClient:
             except ValueError:
                 return ApiResult(ok=True, data={"raw": response.text})
 
-        body: dict[str, Any] = {}
+        body = {}
         try:
             body = response.json()
         except ValueError:
-            body = {}
+            body = {"message": response.text} if response.text else {}
+
+        message = (body or {}).get("message") or (body or {}).get("detail") or (body or {}).get("title") or "Ошибка API"
 
         if response.status_code == 401:
-            return ApiResult(
-                ok=False,
-                error={
-                    "code": "unauthorized",
-                    "message": (body or {}).get("message") or "Требуется вход",
-                    "details": body,
-                },
-            )
+            return ApiResult(ok=False, error={"code": "unauthorized", "message": message or "Требуется вход", "details": body})
         if response.status_code == 403:
-            return ApiResult(ok=False, error={"code": "forbidden", "message": "Недостаточно прав", "details": body})
+            return ApiResult(ok=False, error={"code": "forbidden", "message": message or "Недостаточно прав", "details": body})
         if response.status_code == 400:
-            return ApiResult(
-                ok=False,
-                error={
-                    "code": "validation_error",
-                    "message": body.get("message") or body.get("title") or "Проверьте корректность данных",
-                    "details": body,
-                },
-            )
+            return ApiResult(ok=False, error={"code": "validation_error", "message": message or "Проверьте корректность данных", "details": body})
+        if response.status_code == 404:
+            return ApiResult(ok=False, error={"code": "not_found", "message": message or "Ресурс не найден", "details": body})
         if response.status_code == 409:
-            return ApiResult(ok=False, error={"code": "conflict", "message": body.get("message") or "Конфликт данных", "details": body})
+            return ApiResult(ok=False, error={"code": "conflict", "message": message or "Конфликт данных", "details": body})
         if response.status_code >= 500:
-            return ApiResult(
-                ok=False,
-                error={
-                    "code": "server_error",
-                    "message": (body or {}).get("message") or (body or {}).get("title") or "Ошибка сервера API",
-                    "details": body,
-                },
-            )
+            return ApiResult(ok=False, error={"code": "server_error", "message": message or "Ошибка сервера API", "details": body})
 
-        return ApiResult(
-            ok=False,
-            error={
-                "code": f"http_{response.status_code}",
-                "message": body.get("message") or body.get("title") or "Ошибка API",
-                "details": body,
-            },
-        )
+        return ApiResult(ok=False, error={"code": f"http_{response.status_code}", "message": message, "details": body})
 
     def token_expired(self, token: str | None) -> bool:
         if not token:
@@ -123,21 +94,15 @@ class CSharpApiClient:
             return False
         return exp <= int(time.time())
 
-    # Auth
     def login(self, email: str, password: str) -> ApiResult:
         return self._request("POST", "auth/login", data={"email": email, "password": password})
 
     def register(self, email: str, password: str, nickname: str, role: str = "captain") -> ApiResult:
-        return self._request(
-            "POST",
-            "auth/register",
-            data={"email": email, "password": password, "nickname": nickname, "role": role},
-        )
+        return self._request("POST", "auth/register", data={"email": email, "password": password, "nickname": nickname, "role": role})
 
     def me(self, token: str) -> ApiResult:
         return self._request("GET", "auth/me", token=token)
 
-    # Tournaments
     def get_tournaments(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "tournament", token=token)
 
@@ -147,15 +112,22 @@ class CSharpApiClient:
     def get_stats(self) -> ApiResult:
         return self._request("GET", "tournament/stats")
 
-    # Teams
     def get_teams(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "teams", token=token)
 
     def create_team(self, name: str, token: str) -> ApiResult:
         return self._request("POST", "teams", data={"name": name}, token=token)
 
-    def add_team_player(self, team_id: int, nickname: str, token: str) -> ApiResult:
-        return self._request("POST", f"teams/{team_id}/players", data={"nickname": nickname}, token=token)
+    def add_team_player(self, team_id: int, nickname: str, token: str, rating: str | None = None, game: str | None = None) -> ApiResult:
+        payload = {"nickname": nickname}
+        if rating not in (None, ""):
+            payload["rating"] = rating
+        if game:
+            payload["game"] = game
+        return self._request("POST", f"teams/{team_id}/players", data=payload, token=token)
+
+    def confirm_team_player_rating(self, team_id: int, player_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"teams/{team_id}/players/{player_id}/confirm-rating", token=token)
 
     def delete_team_player(self, team_id: int, player_id: int, token: str) -> ApiResult:
         return self._request("DELETE", f"teams/{team_id}/players/{player_id}", token=token)
@@ -163,18 +135,25 @@ class CSharpApiClient:
     def delete_team(self, team_id: int, token: str) -> ApiResult:
         return self._request("DELETE", f"teams/{team_id}", token=token)
 
-    # Tournament applications
     def apply_to_tournament(self, tournament_id: int, team_id: int, token: str) -> ApiResult:
         return self._request("POST", f"tournament/{tournament_id}/applications", data={"teamId": team_id}, token=token)
 
     def my_tournament_applications(self, tournament_id: int, token: str) -> ApiResult:
         return self._request("GET", f"tournament/{tournament_id}/applications/my", token=token)
 
-    # Matches / MVP / Streams / Analytics
+    def list_tournament_applications(self, tournament_id: int, token: str) -> ApiResult:
+        return self._request("GET", f"tournament/{tournament_id}/applications", token=token)
+
+    def approve_tournament_application(self, tournament_id: int, application_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"tournament/{tournament_id}/applications/{application_id}/approve", token=token)
+
+    def reject_tournament_application(self, tournament_id: int, application_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"tournament/{tournament_id}/applications/{application_id}/reject", token=token)
+
     def get_matches(self, tournament_id: int, token: str | None = None) -> ApiResult:
         return self._request("GET", "matches", params={"tournamentId": tournament_id}, token=token)
 
-    def update_match_result(self, match_id: int, score_a: int, score_b: int, token: str) -> ApiResult:
+    def update_match_result(self, match_id: str | int, score_a: int, score_b: int, token: str) -> ApiResult:
         return self._request("PUT", f"matches/{match_id}/result", data={"scoreA": score_a, "scoreB": score_b}, token=token)
 
     def get_mvp(self, tournament_id: int, token: str | None = None) -> ApiResult:
@@ -189,30 +168,41 @@ class CSharpApiClient:
     def get_analytics(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "analytics", token=token)
 
-    # legacy voting
+    def get_analytics_csv(self, token: str | None = None) -> ApiResult:
+        return self._request("GET", "analytics/export/csv", token=token)
+
+    def get_tournament_bracket(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", f"tournament/{tournament_id}/bracket", token=token)
+
+    def save_tournament_planning(self, tournament_id: int, token: str, format_value: str, stage_type: str) -> ApiResult:
+        return self._request("POST", f"tournament/{tournament_id}/planning", data={"format": format_value, "stageType": stage_type}, token=token)
+
+    def get_prize_pool(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", f"tournament/{tournament_id}/prize-pool", token=token)
+
+    def set_prize_payouts(self, tournament_id: int, token: str, payouts: list[dict]) -> ApiResult:
+        return self._request("POST", f"tournament/{tournament_id}/prize-pool/payouts", data={"payouts": payouts}, token=token)
+
     def get_nominees(self) -> ApiResult:
         return self._request("GET", "voting/nominees")
 
     def vote(self, nominee_id: int, session_id: str | None, ip_address: str) -> ApiResult:
-        return self._request(
-            "POST",
-            "voting/vote",
-            data={"nomineeId": nominee_id, "voterSession": session_id or "", "voterIp": ip_address},
-        )
+        return self._request("POST", "voting/vote", data={"nomineeId": nominee_id, "voterSession": session_id or "", "voterIp": ip_address})
 
     def has_voted(self, session_id: str) -> ApiResult:
         return self._request("GET", f"voting/hasvoted/{session_id}")
 
     def health_check(self) -> bool:
-        result = self._request("GET", "health")
-        return result.ok
+        return self._request("GET", "health").ok
 
-    # External esports data (Liquipedia)
     def esports_player(self, nickname: str, game: str = "counterstrike") -> ApiResult:
         return self._request("GET", "esports/player", params={"nickname": nickname, "game": game})
 
     def esports_tournament_streams(self, query: str, game: str = "counterstrike") -> ApiResult:
         return self._request("GET", "esports/tournament/streams", params={"query": query, "game": game})
+
+    def esports_diagnostics(self) -> ApiResult:
+        return self._request("GET", "esports/diagnostics")
 
 
 api_client = CSharpApiClient()

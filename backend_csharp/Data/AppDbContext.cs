@@ -18,11 +18,8 @@ namespace Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<AppUser>().HasIndex(u => u.Email).IsUnique();
-
             modelBuilder.Entity<AppUser>().HasIndex(u => u.Nickname).IsUnique();
 
-            // В одной команде не должно быть двух игроков с одинаковым ником.
-            // (DB-level защита + в контроллере есть дополнительная проверка на trim/регистр.)
             modelBuilder.Entity<TeamPlayer>()
                 .HasIndex(tp => new { tp.TeamId, tp.Nickname })
                 .IsUnique();
@@ -61,8 +58,6 @@ namespace Data
                 .HasForeignKey(a => a.ApplicantUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-
-            // External tournaments: unique key to prevent duplicates when syncing
             modelBuilder.Entity<Tournament>()
                 .HasIndex(t => new { t.Provider, t.ProviderTournamentId })
                 .IsUnique();
@@ -71,13 +66,30 @@ namespace Data
                 new Tournament
                 {
                     Id = 1,
-                    Name = "Чемпионат Major по CS:GO",
-                    Game = "CS:GO",
+                    Name = "Чемпионат Major по CS2",
+                    Game = "CS2",
                     PrizePool = 1000000,
-                    MaxParticipants = 32,
-                    CurrentParticipants = 24,
+                    MaxParticipants = 16,
+                    CurrentParticipants = 8,
                     StartDate = "2026-10-24",
-                    Status = "planned"
+                    Status = "planned",
+                    Format = "single_elimination",
+                    StageType = "single",
+                    PrizeDistributionJson = "[{\"place\":\"1 место\",\"percent\":50},{\"place\":\"2 место\",\"percent\":30},{\"place\":\"3 место\",\"percent\":20}]"
+                },
+                new Tournament
+                {
+                    Id = 2,
+                    Name = "Dota 2 University Cup",
+                    Game = "Dota 2",
+                    PrizePool = 300000,
+                    MaxParticipants = 8,
+                    CurrentParticipants = 4,
+                    StartDate = "2026-11-04",
+                    Status = "planned",
+                    Format = "group_stage",
+                    StageType = "groups",
+                    PrizeDistributionJson = "[{\"place\":\"1 место\",\"percent\":60},{\"place\":\"2 место\",\"percent\":25},{\"place\":\"3 место\",\"percent\":15}]"
                 }
             );
         }

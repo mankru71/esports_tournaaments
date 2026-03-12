@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Профиль{% endblock %}
-
 {% block content %}
 <section class="mb-4">
   <div class="d-flex flex-column flex-lg-row gap-4">
@@ -13,18 +12,10 @@
           </div>
           <a class="btn btn-sm btn-outline-accent" href="{% url 'streams' %}">Поиск игроков/стримов</a>
         </div>
-
         <hr class="my-3">
-
         <div class="row g-3">
-          <div class="col-md-6">
-            <div class="small text-muted">Email</div>
-            <div class="fw-semibold">{{ current_user.email }}</div>
-          </div>
-          <div class="col-md-6">
-            <div class="small text-muted">Роль</div>
-            <div class="fw-semibold text-capitalize">{{ current_user.role }}</div>
-          </div>
+          <div class="col-md-6"><div class="small text-muted">Email</div><div class="fw-semibold">{{ current_user.email }}</div></div>
+          <div class="col-md-6"><div class="small text-muted">Роль</div><div class="fw-semibold text-capitalize">{{ current_user.role }}</div></div>
         </div>
       </div>
 
@@ -32,11 +23,9 @@
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
           <div>
             <h2 class="h5 mb-1">Данные игрока (PandaScore)</h2>
-            <div class="text-muted small">Ник автоматически берётся из твоего аккаунта.</div>
+            <div class="text-muted small">Ник автоматически берётся из аккаунта.</div>
           </div>
-          {% if esports_payload %}
-            <span class="badge text-bg-secondary">Источник: {{ esports_payload.source }}</span>
-          {% endif %}
+          {% if esports_payload %}<span class="badge text-bg-secondary">Источник: {{ esports_payload.source }}</span>{% endif %}
         </div>
 
         {% if esports_results %}
@@ -52,36 +41,19 @@
                       {% if p.role %}роль: {{ p.role }} · {% endif %}
                       {% if p.nationality %}{{ p.nationality }}{% endif %}
                     </div>
-                    <div class="text-muted small">
-                      {% if p.firstName or p.lastName %}{{ p.firstName }} {{ p.lastName }}{% endif %}
-                    </div>
+                    <div class="text-muted small">{% if p.firstName or p.lastName %}{{ p.firstName }} {{ p.lastName }}{% endif %}</div>
+                    {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">Справка по endpoint PandaScore</a>{% endif %}
                   </div>
-                  {% if p.imageUrl %}
-                    <img src="{{ p.imageUrl }}" alt="player" style="width:48px;height:48px;border-radius:14px;object-fit:cover;">
-                  {% endif %}
+                  {% if p.imageUrl %}<img src="{{ p.imageUrl }}" alt="player" style="width:48px;height:48px;border-radius:14px;object-fit:cover;">{% endif %}
                 </div>
               </div>
             {% endfor %}
           </div>
         {% else %}
-          <div class="alert alert-info mb-0">
-            {% if esports_error %}{{ esports_error }}{% else %}Не удалось загрузить данные.{% endif %}
-            <div class="mt-2">
-              <div class="text-muted small">Если ник в игре отличается от ника в PandaScore — попробуй поиск на вкладке «Стримы».</div>
-            </div>
-          </div>
+          <div class="alert alert-info mb-0">{% if esports_error %}{{ esports_error }}{% else %}Не удалось загрузить данные.{% endif %}</div>
         {% endif %}
       </div>
     </div>
-
-    <aside class="flex-shrink-0" style="max-width: 360px;">
-      <div class="form-card p-4">
-        <div class="fw-semibold mb-2">Подсказка</div>
-        <div class="text-muted small">
-          PandaScore ищет игроков по имени/нику. Иногда лучше вводить часть ника или вариант без спецсимволов.
-        </div>
-      </div>
-    </aside>
   </div>
 </section>
 {% endblock %}

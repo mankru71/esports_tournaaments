@@ -1,4 +1,5 @@
 using Data;
+using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Models;
@@ -54,36 +55,22 @@ public class AuthController : ControllerBase
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var normalizedNickname = (request.Nickname ?? string.Empty).Trim();
         var normalizedRole = request.Role.Trim().ToLowerInvariant();
-        var allowedRoles = new[] { "player", "captain", "judge", "admin" };
+        var allowedRoles = new[] { "player", "captain", "judge", "admin", "viewer" };
 
         if (normalizedNickname.Length < 2 || normalizedNickname.Length > 32)
-        {
             return BadRequest(new { message = "Некорректный ник. Длина: 2..32" });
-        }
 
-        // Простой whitelist: буквы/цифры/._- (без пробелов)
         if (!System.Text.RegularExpressions.Regex.IsMatch(normalizedNickname, "^[A-Za-z0-9._-]+$"))
-        {
             return BadRequest(new { message = "Ник может содержать только латинские буквы, цифры и символы . _ -" });
-        }
-
 
         if (!allowedRoles.Contains(normalizedRole))
-        {
-            return BadRequest(new { message = "Некорректная роль. Доступно: player, captain, judge, admin" });
-        }
+            return BadRequest(new { message = "Некорректная роль. Доступно: player, captain, judge, admin, viewer" });
 
-        var exists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail);
-        if (exists)
-        {
+        if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail))
             return Conflict(new { message = "Пользователь с таким email уже существует" });
-        }
 
-        var nicknameExists = await _db.Users.AnyAsync(u => u.Nickname == normalizedNickname);
-        if (nicknameExists)
-        {
+        if (await _db.Users.AnyAsync(u => u.Nickname == normalizedNickname))
             return Conflict(new { message = "Пользователь с таким ником уже существует" });
-        }
 
         var user = new AppUser
         {
@@ -104,11 +91,10 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("Incoming /api/auth/login for {Email}", request.Email);
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email.ToLower());
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
         if (user is null || user.PasswordHash != Hash(request.Password))
-        {
             return Unauthorized(new { message = "Неверный email или пароль" });
-        }
 
         var token = BuildDemoToken(user.Id, user.Email, user.Nickname, user.Role);
         return Ok(new
@@ -122,24 +108,14 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Me()
     {
         _logger.LogInformation("Incoming /api/auth/me");
-        var auth = Request.Headers.Authorization.ToString();
-        if (string.IsNullOrWhiteSpace(auth) || !auth.StartsWith("Bearer "))
-        {
-            return Unauthorized(new ProblemDetails { Title = "Unauthorized", Detail = "Missing bearer token", Status = 401 });
-        }
 
-        var token = auth.Replace("Bearer ", "");
-        var claims = ParsePayload(token);
+        var claims = AuthTokenHelper.ParseClaims(AuthTokenHelper.GetBearerToken(Request));
         if (!claims.TryGetValue("sub", out var userIdRaw) || !int.TryParse(userIdRaw, out var userId))
-        {
             return Unauthorized(new ProblemDetails { Title = "Unauthorized", Detail = "Invalid token", Status = 401 });
-        }
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
         if (user is null)
-        {
             return Unauthorized(new ProblemDetails { Title = "Unauthorized", Detail = "User not found", Status = 401 });
-        }
 
         return Ok(new { email = user.Email, nickname = user.Nickname, role = user.Role });
     }
@@ -153,19 +129,16 @@ public class AuthController : ControllerBase
     private static string BuildDemoToken(int userId, string email, string nickname, string role)
     {
         var header = Base64UrlEncode("{\"alg\":\"none\",\"typ\":\"JWT\"}");
-        var payloadObj = new { sub = userId, email, nickname, role, exp = DateTimeOffset.UtcNow.AddHours(8).ToUnixTimeSeconds() };
+        var payloadObj = new
+        {
+            sub = userId,
+            email,
+            nickname,
+            role,
+            exp = DateTimeOffset.UtcNow.AddHours(8).ToUnixTimeSeconds()
+        };
         var payload = Base64UrlEncode(JsonSerializer.Serialize(payloadObj));
         return $"{header}.{payload}.demo";
-    }
-
-    private static Dictionary<string, string> ParsePayload(string token)
-    {
-        var parts = token.Split('.');
-        if (parts.Length < 2) return new();
-        var padded = parts[1] + new string('=', (4 - parts[1].Length % 4) % 4);
-        var json = Encoding.UTF8.GetString(Convert.FromBase64String(padded.Replace('-', '+').Replace('_', '/')));
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.ToString());
     }
 
     private static string Base64UrlEncode(string plain)

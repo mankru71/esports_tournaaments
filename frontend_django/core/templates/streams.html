@@ -4,144 +4,94 @@
 <section>
   <div class="page-hero">
     <div>
-      <h1 class="h3 mb-2">Стримы</h1>
-      <p class="text-muted mb-0">Поиск стримов/игроков через PandaScore API + встраивание Twitch.</p>
+      <h1 class="h3 mb-2">Стримы и игроки</h1>
+      <p class="text-muted mb-0">Данные берутся из PandaScore. Если токен или тариф не подходят, ниже появится нормальная причина ошибки.</p>
     </div>
   </div>
 
-  <div class="row g-3">
+  <div class="row g-4">
     <div class="col-lg-7">
-      <div class="section-panel p-3 p-md-4 h-100">
+      <div class="form-card p-4 mb-4">
         <h2 class="h5 mb-3">Найти стримы турнира</h2>
-
-        <form method="post" class="row g-2 align-items-end">
+        <form method="post" class="row g-2">
           {% csrf_token %}
-          <input type="hidden" name="action" value="find_tournament_streams" />
-          <div class="col-12">
-            <label class="form-label small mb-1">Турнир (поиск)</label>
-            <input class="form-control" type="text" name="tournament_query" value="{{ tournament_query }}" placeholder="например: IEM Katowice" />
-          </div>
-          <div class="col-12">
-            <button class="btn btn-accent" type="submit">Найти</button>
-          </div>
+          <input type="hidden" name="action" value="find_tournament_streams">
+          <div class="col-md-9"><input class="form-control" name="tournament_query" value="{{ tournament_query }}" placeholder="IEM Katowice"></div>
+          <div class="col-md-3"><button class="btn btn-accent w-100" type="submit">Найти</button></div>
         </form>
 
         {% if tournament_payload %}
-          <hr class="my-4"/>
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div>
-              <div class="h6 mb-0">{{ tournament_payload.tournament.name }}</div>
-              <div class="text-muted small">Источник: {{ tournament_payload.source }}</div>
-            </div>
-          </div>
+          <div class="mt-4">
+            <div class="fw-semibold">{{ tournament_payload.tournament.name }}</div>
+            <div class="text-muted small mb-3">{{ tournament_payload.tournament.videogame }} · {{ tournament_payload.tournament.league }} · {{ tournament_payload.tournament.beginAt }}</div>
 
-          {% if tournament_payload.streams_prepared %}
-            <div class="row g-3 mt-1">
-              {% for s in tournament_payload.streams_prepared %}
-                <div class="col-12">
+            {% if tournament_payload.streams_prepared %}
+              <div class="d-flex flex-column gap-3">
+                {% for stream in tournament_payload.streams_prepared %}
                   <div class="card p-3">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                      <div class="fw-semibold">
-                        {% if s.provider == "twitch" %}
-                          Twitch · {{ s.channel }}
-                        {% elif s.provider == "youtube" %}
-                          YouTube
-                        {% else %}
-                          Stream
-                        {% endif %}
-                        {% if s.matchName %}<span class="text-muted small ms-2">{{ s.matchName }}</span>{% endif %}
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                      <div>
+                        <div class="fw-semibold text-capitalize">{{ stream.provider }}</div>
+                        <div class="text-muted small">{{ stream.matchName }}</div>
                       </div>
-                      {% if s.url %}
-                        <a class="btn btn-sm btn-outline-accent" href="{{ s.url }}" target="_blank" rel="noreferrer">Открыть</a>
-                      {% endif %}
+                      <a href="{{ stream.url }}" target="_blank" rel="noopener">Открыть источник</a>
                     </div>
-
-                    {% if s.provider == "twitch" and s.channel %}
-                      <div class="ratio ratio-16x9">
-                        <iframe
-                          class="twitch-embed"
-                          src="https://player.twitch.tv/?channel={{ s.channel }}&parent={{ twitch_parent }}&muted=true"
-                          allowfullscreen="true"
-                          scrolling="no"
-                          frameborder="0">
-                        </iframe>
-                      </div>
+                    {% if stream.provider == 'twitch' and stream.channel %}
+                      <iframe class="twitch-embed" src="https://player.twitch.tv/?channel={{ stream.channel }}&parent={{ twitch_parent }}&theme=dark" width="100%" height="360" allowfullscreen></iframe>
+                    {% elif stream.provider == 'youtube' %}
+                      <iframe width="100%" height="360" src="{{ stream.embed_url }}" allowfullscreen></iframe>
                     {% else %}
-                      <div class="text-muted small">Встраивание доступно для Twitch. Для остальных провайдеров — откройте ссылку.</div>
+                      <div class="small text-muted">Для этого провайдера доступна только ссылка на источник.</div>
                     {% endif %}
                   </div>
-                </div>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="empty-state mt-3">По этому запросу не удалось найти стримы.</div>
-          {% endif %}
-        {% else %}
-          <div class="text-muted small mt-3">Подсказка: попробуй название турнира/лиги или часть названия.</div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="alert alert-warning mt-3 mb-0">У найденного турнира нет стримов в выдаче PandaScore, но матчи были получены.</div>
+            {% endif %}
+          </div>
         {% endif %}
       </div>
     </div>
 
     <div class="col-lg-5">
-      <div class="section-panel p-3 p-md-4 h-100">
+      <div class="form-card p-4 mb-4">
         <h2 class="h5 mb-3">Найти игрока</h2>
-
-        <form method="post" class="row g-2 align-items-end">
+        <form method="post" class="row g-2">
           {% csrf_token %}
-          <input type="hidden" name="action" value="find_player" />
-          <div class="col-12">
-            <label class="form-label small mb-1">Ник</label>
-            <input class="form-control" type="text" name="player_query" value="{{ player_query }}" placeholder="например: s1mple" />
-          </div>
-          <div class="col-12">
-            <button class="btn btn-outline-accent" type="submit">Найти</button>
-          </div>
+          <input type="hidden" name="action" value="find_player">
+          <div class="col-md-8"><input class="form-control" name="player_query" value="{{ player_query }}" placeholder="s1mple"></div>
+          <div class="col-md-4"><button class="btn btn-outline-accent w-100" type="submit">Найти</button></div>
         </form>
 
         {% if player_payload %}
-          <hr class="my-4"/>
-
-          {% if player_payload.results %}
-            <div class="d-flex flex-column gap-2">
-              {% for p in player_payload.results %}
-                <div class="card p-3">
-                  <div class="d-flex justify-content-between align-items-start gap-2">
-                    <div>
-                      <div class="fw-semibold">{{ p.name|default:"(без имени)" }}</div>
-                      <div class="text-muted small">
-                        {% if p.currentTeam %}{{ p.currentTeam }} · {% endif %}
-                        {% if p.role %}роль: {{ p.role }} · {% endif %}
-                        {% if p.nationality %}{{ p.nationality }}{% endif %}
+          <div class="mt-4">
+            {% if player_payload.results %}
+              <div class="d-flex flex-column gap-2">
+                {% for p in player_payload.results %}
+                  <div class="card p-3">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                      <div>
+                        <div class="fw-semibold">{{ p.name|default:"(без имени)" }}</div>
+                        <div class="text-muted small">{% if p.currentTeam %}{{ p.currentTeam }} · {% endif %}{% if p.role %}роль: {{ p.role }} · {% endif %}{% if p.nationality %}{{ p.nationality }}{% endif %}</div>
+                        {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">PandaScore reference</a>{% endif %}
                       </div>
+                      {% if p.imageUrl %}<img src="{{ p.imageUrl }}" alt="player" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">{% endif %}
                     </div>
-                    {% if p.imageUrl %}
-                      <img src="{{ p.imageUrl }}" alt="player" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">
-                    {% endif %}
                   </div>
-                </div>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="empty-state">Игрок не найден.</div>
-          {% endif %}
-        {% else %}
-          <div class="text-muted small mt-3">Поиск берёт данные из PandaScore.</div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state">Игрок не найден.</div>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {% if diagnostics and not diagnostics.success %}
+          <div class="alert alert-warning mt-4 mb-0">{{ diagnostics.message }}</div>
         {% endif %}
       </div>
     </div>
   </div>
 </section>
-
-<script>
-  (function () {
-    try {
-      var theme = (localStorage.getItem('theme') === 'light') ? 'light' : 'dark';
-      document.querySelectorAll('iframe.twitch-embed').forEach(function (frame) {
-        var url = new URL(frame.getAttribute('src'));
-        url.searchParams.set('theme', theme);
-        frame.setAttribute('src', url.toString());
-      });
-    } catch (e) {}
-  })();
-</script>
 {% endblock %}

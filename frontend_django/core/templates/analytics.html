@@ -5,22 +5,34 @@
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Аналитика</h1>
-      <p class="text-muted mb-0">Ключевые метрики по игрокам и дисциплинам.</p>
+      <p class="text-muted mb-0">Статистика игроков, популярность дисциплин и призовые фонды.</p>
     </div>
+    <a class="btn btn-outline-accent" href="/api/analytics/export/csv" target="_blank" rel="noopener">CSV</a>
   </div>
 
-  <div class="row g-3">
-    <div class="col-lg-6">
+  <div class="row g-3 mb-3">
+    <div class="col-lg-4">
+      <div class="section-panel p-3 h-100">
+        <h2 class="h5 mb-3">Сводка</h2>
+        <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>Команд</span><span class="fw-semibold">{{ analytics.summary.totalTeams|default:'0' }}</span></div>
+        <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>Игроков в выборке</span><span class="fw-semibold">{{ analytics.summary.totalPlayers|default:'0' }}</span></div>
+        <div class="card p-3 d-flex flex-row justify-content-between"><span>Подтверждённых рейтингов</span><span class="fw-semibold">{{ analytics.summary.confirmedRatings|default:'0' }}</span></div>
+      </div>
+    </div>
+    <div class="col-lg-4">
       <div class="section-panel p-3 h-100">
         <h2 class="h5 mb-3">Статистика игроков</h2>
         {% for p in analytics.playerStats %}
-          <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>{{ p.player }}</span><span class="fw-semibold">{{ p.kills|default:"н/д" }} убийств</span></div>
+          <div class="card p-3 mb-2">
+            <div class="d-flex flex-row justify-content-between"><span>{{ p.player }}</span><span class="fw-semibold">{{ p.rating|default:'—' }}</span></div>
+            <div class="small text-muted">{{ p.team }} · {{ p.ratingStatus }}</div>
+          </div>
         {% empty %}
           <div class="empty-state">Данные о игроках отсутствуют.</div>
         {% endfor %}
       </div>
     </div>
-    <div class="col-lg-6">
+    <div class="col-lg-4">
       <div class="section-panel p-3 h-100">
         <h2 class="h5 mb-3">Популярность дисциплин</h2>
         {% for d in analytics.disciplinePopularity %}
@@ -30,6 +42,21 @@
         {% endfor %}
       </div>
     </div>
+  </div>
+
+  <div class="section-panel p-3">
+    <h2 class="h5 mb-3">Призовые фонды</h2>
+    {% for p in analytics.prizePools %}
+      <div class="card p-3 mb-2 d-flex flex-row justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">{{ p.tournament }}</div>
+          <div class="small text-muted">Статус: {{ p.status }}</div>
+        </div>
+        <div class="fw-semibold">{{ p.prizePool }}</div>
+      </div>
+    {% empty %}
+      <div class="empty-state">Данные о призовых фондах отсутствуют.</div>
+    {% endfor %}
   </div>
 </section>
 {% endblock %}

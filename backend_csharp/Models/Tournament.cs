@@ -4,7 +4,6 @@ namespace Models
     {
         public int Id { get; set; }
 
-        // Display
         public string Name { get; set; } = string.Empty;
         public string Game { get; set; } = string.Empty;
         public decimal PrizePool { get; set; }
@@ -12,8 +11,10 @@ namespace Models
         public int CurrentParticipants { get; set; }
         public string StartDate { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
+        public string Format { get; set; } = "single_elimination";
+        public string StageType { get; set; } = "single";
+        public string PrizeDistributionJson { get; set; } = "[{\"place\":\"1 место\",\"percent\":50},{\"place\":\"2 место\",\"percent\":30},{\"place\":\"3 место\",\"percent\":20}]";
 
-        // External provider (optional). If set, tournament data is sourced from an open API (PandaScore).
         public bool IsExternal { get; set; } = false;
         public string? Provider { get; set; }
         public string? ProviderTournamentId { get; set; }

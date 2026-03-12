@@ -4,7 +4,7 @@
 <section class="page-hero">
   <div>
     <h1 class="h3 mb-1">Команды</h1>
-    <p class="text-muted mb-0">Реальные команды и составы из API.</p>
+    <p class="text-muted mb-0">Свои команды и игроки сохраняются локально. Для игроков можно указывать рейтинг и подтверждать его через судью/админа.</p>
   </div>
 </section>
 
@@ -28,7 +28,7 @@
       {% if teams %}
         {% for team in teams %}
           <div class="card mb-3 p-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
               <div>
                 <div class="fw-semibold">{{ team.name }}</div>
                 <small class="text-muted">Капитан: {{ team.captainEmail }}</small>
@@ -42,21 +42,41 @@
                 </form>
               {% endif %}
             </div>
+
             <div class="mb-3">
               {% if team.players %}
-                <div class="d-flex flex-wrap gap-2">
+                <div class="d-flex flex-column gap-2">
                   {% for player in team.players %}
-                    <div class="d-inline-flex align-items-center gap-2">
-                      <span class="badge rounded-pill text-bg-dark">{{ player.nickname }}</span>
-                      {% if current_user and current_user.email == team.captainEmail %}
-                        <form method="post" class="m-0">
-                          {% csrf_token %}
-                          <input type="hidden" name="action" value="delete_player">
-                          <input type="hidden" name="team_id" value="{{ team.id }}">
-                          <input type="hidden" name="player_id" value="{{ player.id }}">
-                          <button class="btn btn-sm btn-outline-danger py-0" type="submit" aria-label="Удалить игрока" title="Удалить игрока">×</button>
-                        </form>
-                      {% endif %}
+                    <div class="d-flex align-items-center justify-content-between gap-2 border rounded-3 px-3 py-2">
+                      <div>
+                        <div class="fw-semibold">{{ player.nickname }}</div>
+                        <div class="small text-muted">
+                          Рейтинг: {{ player.rating|default:'не указан' }} · Источник: {{ player.ratingSource|default:'manual' }} · Статус: {{ player.ratingStatus|default:'pending' }}
+                          {% if player.externalProfileUrl %} · <a href="{{ player.externalProfileUrl }}" target="_blank" rel="noopener">профиль PandaScore</a>{% endif %}
+                        </div>
+                      </div>
+                      <div class="d-flex gap-2 flex-wrap">
+                        {% if is_admin or is_judge %}
+                          {% if player.rating and player.ratingStatus != 'confirmed' %}
+                            <form method="post" class="m-0">
+                              {% csrf_token %}
+                              <input type="hidden" name="action" value="confirm_rating">
+                              <input type="hidden" name="team_id" value="{{ team.id }}">
+                              <input type="hidden" name="player_id" value="{{ player.id }}">
+                              <button class="btn btn-sm btn-outline-success" type="submit">Подтвердить рейтинг</button>
+                            </form>
+                          {% endif %}
+                        {% endif %}
+                        {% if current_user and current_user.email == team.captainEmail %}
+                          <form method="post" class="m-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_player">
+                            <input type="hidden" name="team_id" value="{{ team.id }}">
+                            <input type="hidden" name="player_id" value="{{ player.id }}">
+                            <button class="btn btn-sm btn-outline-danger py-0" type="submit">×</button>
+                          </form>
+                        {% endif %}
+                      </div>
                     </div>
                   {% endfor %}
                 </div>
@@ -64,17 +84,26 @@
                 <div class="text-muted small">Игроки пока не добавлены.</div>
               {% endif %}
             </div>
+
             {% if current_user and current_user.email == team.captainEmail %}
               <form method="post" class="row g-2 align-items-end">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="add_player">
                 <input type="hidden" name="team_id" value="{{ team.id }}">
-                <div class="col-md-8">
+                <div class="col-md-5">
                   <label class="form-label">Ник игрока</label>
                   <input class="form-control" name="nickname" type="text" placeholder="electroNic" required>
                 </div>
-                <div class="col-md-4">
-                  <button class="btn btn-outline-accent w-100" type="submit">Добавить игрока</button>
+                <div class="col-md-3">
+                  <label class="form-label">Рейтинг</label>
+                  <input class="form-control" name="rating" type="number" step="0.01" placeholder="2450">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Игра</label>
+                  <input class="form-control" name="game" type="text" placeholder="counterstrike" value="counterstrike">
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-outline-accent w-100" type="submit">Добавить</button>
                 </div>
               </form>
             {% else %}

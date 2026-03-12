@@ -1,7 +1,5 @@
 using Data;
 using Models;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Services
 {
@@ -14,49 +12,44 @@ namespace Services
             _context = context;
         }
 
-        // 1. Получение всех турниров
-        public IEnumerable<Tournament> GetAllTournaments() => _context.Tournaments.ToList();
+        public IEnumerable<Tournament> GetAllTournaments() => _context.Tournaments.OrderBy(t => t.StartDate).ToList();
 
-        // 2. Получение одного турнира по ID (нужно для TournamentController)
         public Tournament? GetTournamentById(int id)
         {
             return _context.Tournaments.FirstOrDefault(t => t.Id == id);
         }
 
-        // 3. Получение списка номинантов (нужно для VotingController)
         public IEnumerable<Nominee> GetNominees()
         {
             return _context.Nominees.ToList();
         }
 
-        // 4. Проверка: голосовал ли уже пользователь (нужно для деконструкции в VotingController)
         public (bool hasVoted, int? nomineeId) HasVoted(string voterSession)
         {
             var vote = _context.Votes.FirstOrDefault(v => v.VoterSession == voterSession);
             return (vote != null, vote?.NomineeId);
         }
 
-        // 5. Метод для голосования
         public (bool success, string message) Vote(int nomineeId, string voterSession, string voterIp)
         {
-            if (string.IsNullOrEmpty(voterSession)) 
+            if (string.IsNullOrEmpty(voterSession))
                 return (false, "Сессия не определена.");
 
             var (alreadyVoted, _) = HasVoted(voterSession);
-            if (alreadyVoted) 
+            if (alreadyVoted)
                 return (false, "Вы уже голосовали.");
 
             var nominee = _context.Nominees.Find(nomineeId);
-            if (nominee == null) 
+            if (nominee == null)
                 return (false, "Номинант не найден.");
 
-            _context.Votes.Add(new Vote 
-            { 
-                NomineeId = nomineeId, 
-                VoterSession = voterSession, 
-                VoterIp = voterIp ?? "" 
+            _context.Votes.Add(new Vote
+            {
+                NomineeId = nomineeId,
+                VoterSession = voterSession,
+                VoterIp = voterIp ?? string.Empty
             });
-            
+
             nominee.Votes += 1;
             _context.SaveChanges();
 
@@ -65,11 +58,22 @@ namespace Services
 
         public object GetStats()
         {
+            var totalPlayers = _context.TeamPlayers.Count();
+            var activeTournaments = _context.Tournaments.Count();
+            var popularGame = _context.Tournaments
+                .AsEnumerable()
+                .GroupBy(t => string.IsNullOrWhiteSpace(t.Game) ? "Не указано" : t.Game)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault() ?? "Не указано";
+
             return new
             {
-                totalPlayers = 12000,
-                activeTournaments = _context.Tournaments.Count(),
-                totalViewers = 850000
+                totalPlayers,
+                activeTournaments,
+                totalViewers = 850000,
+                eventsToday = _context.Tournaments.Count(t => t.Status == "live"),
+                mostPopularDiscipline = popularGame
             };
         }
     }

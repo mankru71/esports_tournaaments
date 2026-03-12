@@ -3,25 +3,28 @@ services:
     build:
       context: ./backend_csharp
       dockerfile: Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
     container_name: esports_csharp_api
     env_file:
       - ./.env
     environment:
-      - PandaScore__Token=${PANDASCORE_TOKEN}
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ASPNETCORE_URLS=http://+:5000
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${DB_NAME:-esports_db};Username=${DB_USER:-esports_user};Password=${DB_PASSWORD:-esports123}
+      - PandaScore__Token=${PANDASCORE_TOKEN}
+      - PANDASCORE_TOKEN=${PANDASCORE_TOKEN}
+      - PANDASCORE_BASE_URL=${PANDASCORE_BASE_URL:-https://api.pandascore.co}
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - esports-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   django-app:
     build:
@@ -61,6 +64,12 @@ services:
              python manage.py migrate &&
              python manage.py collectstatic --noinput &&
              python manage.py runserver 0.0.0.0:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   postgres:
     image: postgres:15-alpine
@@ -83,7 +92,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -103,11 +113,14 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - static_volume:/static
       - media_volume:/media
     depends_on:
-      - django-app
+      django-app:
+        condition: service_healthy
+      csharp-api:
+        condition: service_healthy
     networks:
       - esports-network
     restart: unless-stopped
@@ -117,7 +130,6 @@ networks:
     driver: bridge
 
 volumes:
-  csharp_data:
   postgres_data:
   redis_data:
   static_volume:

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Services;
+using System.Text.Json;
 
 namespace Controllers
 {
@@ -19,10 +20,7 @@ namespace Controllers
         [HttpGet]
         public async Task<IActionResult> Get(CancellationToken ct)
         {
-            // Pull a small set of upcoming tournaments from PandaScore and cache them in DB.
-            // If token is not configured, we keep local tournaments only.
             await _sync.SyncUpcomingAsync(ct);
-
             var tournaments = _tournamentService.GetAllTournaments().Select(ToDto);
             return Ok(tournaments);
         }
@@ -42,22 +40,49 @@ namespace Controllers
             return Ok(ToDto(tournament));
         }
 
-        private static object ToDto(Models.Tournament t) => new
+        private static object ToDto(Models.Tournament t)
         {
-            id = t.Id,
-            name = t.Name,
-            discipline = t.Game,
-            format = "single_elimination",
-            status = t.Status,
-            startDate = t.StartDate,
-            prizePool = t.PrizePool,
-            totalAmount = t.PrizePool,
-            stagesSummary = "R1 -> Final",
-            currentParticipants = t.CurrentParticipants,
-            maxParticipants = t.MaxParticipants,
-            isExternal = t.IsExternal,
-            provider = t.Provider,
-            providerTournamentId = t.ProviderTournamentId
-        };
+            var payouts = ParsePrizeDistribution(t.PrizeDistributionJson, t.PrizePool);
+            return new
+            {
+                id = t.Id,
+                name = t.Name,
+                discipline = t.Game,
+                format = t.Format,
+                stageType = t.StageType,
+                status = t.Status,
+                startDate = t.StartDate,
+                prizePool = t.PrizePool,
+                totalAmount = t.PrizePool,
+                currentParticipants = t.CurrentParticipants,
+                maxParticipants = t.MaxParticipants,
+                isExternal = t.IsExternal,
+                provider = t.Provider,
+                providerTournamentId = t.ProviderTournamentId,
+                prizePayouts = payouts,
+                stagesSummary = t.StageType == "groups" ? "Group stage → Playoffs" : "Single elimination"
+            };
+        }
+
+        private static List<object> ParsePrizeDistribution(string? json, decimal prizePool)
+        {
+            var result = new List<object>();
+            if (string.IsNullOrWhiteSpace(json)) return result;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) return result;
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    var place = item.TryGetProperty("place", out var placeEl) ? placeEl.GetString() ?? "Место" : "Место";
+                    var percent = item.TryGetProperty("percent", out var percentEl) && decimal.TryParse(percentEl.ToString(), out var p) ? p : 0m;
+                    result.Add(new { place, percent, amount = Math.Round(prizePool * percent / 100m, 2) });
+                }
+            }
+            catch
+            {
+            }
+            return result;
+        }
     }
 }

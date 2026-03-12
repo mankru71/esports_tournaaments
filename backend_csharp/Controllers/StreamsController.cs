@@ -22,13 +22,13 @@ public class StreamsController : ControllerBase
             return StatusCode(503, new { message = "PandaScore token is not configured (PANDASCORE_TOKEN)" });
 
         var query = string.IsNullOrWhiteSpace(q) ? "Major" : q!.Trim();
-        var tournaments = await _pandascore.SearchTournamentsAsync(query, 5, ct);
+        var tournaments = await _pandascore.SearchTournamentsAsync(query, 5, ct: ct);
         var t = tournaments.FirstOrDefault();
 
         if (t == null || string.IsNullOrWhiteSpace(t.Id))
             return Ok(Array.Empty<object>());
 
-        var matches = await _pandascore.GetMatchesForTournamentAsync(t.Id, 50, ct);
+        var matches = await _pandascore.GetMatchesForTournamentAsync(t.Id, 50, ct: ct);
 
         var payload = matches
             .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))
