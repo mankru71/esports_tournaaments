@@ -90,11 +90,6 @@ public class PandaScoreService
         };
     }
 
-    private static string BuildPlayerProfileUrl(string? game, string playerId)
-    {
-        var segment = NormalizeGameSegment(game) ?? "players";
-        return $"https://developers.pandascore.co/reference/get_{segment}_players-player-id";
-    }
 
     public async Task<PandaScoreProbeResult> ProbeAsync(CancellationToken ct = default)
     {
@@ -496,6 +491,31 @@ public record PandaPlayer(
     string? ProfileUrl
 )
 {
+    private static string? NormalizeProfileGameSegment(string? game)
+    {
+        var value = (game ?? string.Empty).Trim().ToLowerInvariant();
+        return value switch
+        {
+            "counterstrike" or "cs2" or "cs:go" or "csgo" => "csgo",
+            "dota" or "dota2" => "dota2",
+            "leagueoflegends" or "league_of_legends" or "lol" => "lol",
+            "valorant" => "valorant",
+            "rocketleague" or "rocket_league" or "rl" => "rl",
+            _ => null
+        };
+    }
+
+    private static string BuildProfileUrl(string? game, string playerId)
+    {
+        if (string.IsNullOrWhiteSpace(playerId))
+            return "https://www.pandascore.co/";
+
+        var segment = NormalizeProfileGameSegment(game);
+        return string.IsNullOrWhiteSpace(segment)
+            ? $"https://www.pandascore.co/players/{playerId}"
+            : $"https://www.pandascore.co/{segment}/players/{playerId}";
+    }
+
     public static PandaPlayer FromJson(JsonElement p, string? game)
     {
         string id = p.TryGetProperty("id", out var idEl) ? idEl.ToString() : string.Empty;
@@ -510,6 +530,6 @@ public record PandaPlayer(
         if (p.TryGetProperty("current_team", out var ctEl) && ctEl.ValueKind == JsonValueKind.Object && ctEl.TryGetProperty("name", out var tn))
             teamName = tn.GetString();
 
-        return new PandaPlayer(id, name, firstName, lastName, role, nat, image, teamName, BuildPlayerProfileUrl(game, id));
+        return new PandaPlayer(id, name, firstName, lastName, role, nat, image, teamName, BuildProfileUrl(game, id));
     }
 }
