@@ -23,48 +23,36 @@ public class StreamsController : ControllerBase
 
         var query = string.IsNullOrWhiteSpace(q) ? "Major" : q!.Trim();
         var tournaments = await _pandascore.SearchTournamentsAsync(query, 5, ct: ct);
-        var t = tournaments.FirstOrDefault();
-
-        if (t == null || string.IsNullOrWhiteSpace(t.Id))
+        var tournament = tournaments.FirstOrDefault();
+        if (tournament == null || string.IsNullOrWhiteSpace(tournament.Id))
             return Ok(Array.Empty<object>());
 
-        var matches = await _pandascore.GetMatchesForTournamentAsync(t.Id, 50, ct: ct);
+        var matches = await _pandascore.GetMatchesForTournamentAsync(tournament.Id, 50, tournament.VideogameSlug, ct);
+        var statuses = await _pandascore.BuildStreamStatusesAsync(matches, ct);
+        var statusByUrl = statuses.ToDictionary(x => x.Url, StringComparer.OrdinalIgnoreCase);
 
         var payload = matches
             .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))
-            .Select(m => new
+            .Select(m =>
             {
-                provider = DetectProvider(m.StreamUrl!),
-                url = m.StreamUrl!,
-                channel = ExtractChannel(m.StreamUrl!),
-                status = new { online = false, viewers = 0 },
-                meta = new { source = "pandascore", tournament = t.Name, match = m.Name }
+                var url = m.StreamUrl!;
+                statusByUrl.TryGetValue(url, out var status);
+                return new
+                {
+                    provider = PandaScoreService.DetectProvider(url),
+                    url,
+                    channel = PandaScoreService.ExtractChannelOrVideo(url),
+                    status = new
+                    {
+                        online = status?.IsLive ?? false,
+                        viewers = status?.ViewerCount
+                    },
+                    meta = new { source = "pandascore", tournament = tournament.Name, match = m.Name }
+                };
             })
             .DistinctBy(x => x.url)
             .ToList();
 
         return Ok(payload);
-    }
-
-    private static string DetectProvider(string url)
-    {
-        var u = url.ToLowerInvariant();
-        if (u.Contains("twitch.tv")) return "Twitch";
-        if (u.Contains("youtube.com") || u.Contains("youtu.be")) return "YouTube";
-        return "Stream";
-    }
-
-    private static string ExtractChannel(string url)
-    {
-        try
-        {
-            var uri = new Uri(url);
-            var parts = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-            return parts.Length > 0 ? parts[0] : "";
-        }
-        catch
-        {
-            return "";
-        }
     }
 }

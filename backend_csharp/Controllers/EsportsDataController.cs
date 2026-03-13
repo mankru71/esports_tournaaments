@@ -94,15 +94,25 @@ public class EsportsDataController : ControllerBase
         if (selectedTournament == null)
             return NotFound(new { message = "Не удалось получить матчи турнира" });
 
+        var streamStatuses = await _pandascore.BuildStreamStatusesAsync(selectedMatches, ct);
+        var streamStatusByUrl = streamStatuses.ToDictionary(x => x.Url, StringComparer.OrdinalIgnoreCase);
+
         var streams = selectedMatches
             .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))
-            .Select(m => new
+            .Select(m =>
             {
-                matchId = m.Id,
-                matchName = m.Name,
-                url = m.StreamUrl,
-                provider = DetectProvider(m.StreamUrl),
-                channel = ExtractChannel(m.StreamUrl)
+                var url = m.StreamUrl!;
+                streamStatusByUrl.TryGetValue(url, out var status);
+                return new
+                {
+                    matchId = m.Id,
+                    matchName = m.Name,
+                    url,
+                    provider = PandaScoreService.DetectProvider(url),
+                    channel = PandaScoreService.ExtractChannelOrVideo(url),
+                    viewerCount = status?.ViewerCount,
+                    isLive = status?.IsLive ?? false
+                };
             })
             .DistinctBy(x => x.url)
             .ToList();
@@ -137,28 +147,4 @@ public class EsportsDataController : ControllerBase
         });
     }
 
-    private static string DetectProvider(string? url)
-    {
-        var u = (url ?? string.Empty).ToLowerInvariant();
-        if (u.Contains("twitch.tv")) return "twitch";
-        if (u.Contains("youtube.com") || u.Contains("youtu.be")) return "youtube";
-        return "stream";
-    }
-
-    private static string ExtractChannel(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
-        try
-        {
-            var uri = new Uri(url);
-            var parts = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (uri.Host.Contains("youtu"))
-                return parts.LastOrDefault() ?? string.Empty;
-            return parts.FirstOrDefault() ?? string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
 }

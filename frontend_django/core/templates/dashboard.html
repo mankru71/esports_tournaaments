@@ -2,20 +2,81 @@
 {% block title %}Главная{% endblock %}
 
 {% block content %}
-<section>
-  <div class="page-hero">
+<section class="dashboard-shell">
+  <div class="page-hero page-hero-tight mb-4">
     <div>
-      <h1 class="h3 mb-2">Главная</h1>
-      <p class="text-muted mb-0">Оперативная сводка по активности платформы турниров.</p>
+      <div class="eyebrow">LIVE OVERVIEW</div>
+      <h1 class="display-title mb-2">Актуальная сводка по киберспортивным событиям</h1>
+      <p class="text-muted mb-0">Главная страница показывает реальные live-турниры и матчи из PandaScore. Зрители считаются по Twitch/YouTube, если заданы ключи API.</p>
     </div>
-    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">Открыть турниры</a>
+    <a class="btn btn-accent" href="{% url 'tournaments' %}">Смотреть турниры</a>
   </div>
 
-  <div class="row g-3">
-    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Игроков</div><div class="h4 mb-0">{{ stats.players }}</div></div></div>
-    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Турниров</div><div class="h4 mb-0">{{ stats.tournaments }}</div></div></div>
-    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Зрителей</div><div class="h4 mb-0">{{ stats.viewers }}</div></div></div>
-    <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Событий сегодня</div><div class="h4 mb-0">{{ stats.events_today }}</div></div></div>
+  <div class="stats-grid mb-4">
+    <article class="stat-card">
+      <div class="stat-label">Игроков в системе</div>
+      <div class="stat-value">{{ stats.players }}</div>
+      <div class="stat-note">локальные команды и составы</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-label">Турниров онлайн</div>
+      <div class="stat-value">{{ stats.tournaments }}</div>
+      <div class="stat-note">реальные live-турниры</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-label">Зрителей онлайн</div>
+      <div class="stat-value">{% if stats.viewers %}{{ stats.viewers }}{% else %}0{% endif %}</div>
+      <div class="stat-note">{% if stats.viewers_estimated %}нужны ключи Twitch/YouTube API{% else %}агрегировано по активным стримам{% endif %}</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-label">Матчей сейчас</div>
+      <div class="stat-value">{{ stats.events_today }}</div>
+      <div class="stat-note">live-события прямо сейчас</div>
+    </article>
+  </div>
+
+  <div class="row g-4 align-items-stretch">
+    <div class="col-lg-8">
+      <div class="section-panel p-4 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
+          <div>
+            <h2 class="h5 mb-1">Сейчас в эфире</h2>
+            <p class="text-muted small mb-0">Самые заметные турниры, которые PandaScore помечает как running/live.</p>
+          </div>
+          <span class="soft-pill">Популярная дисциплина: {{ stats.most_popular }}</span>
+        </div>
+
+        {% if stats.live_tournaments %}
+          <div class="live-list">
+            {% for t in stats.live_tournaments %}
+              <article class="live-item">
+                <div>
+                  <div class="live-item-title">{{ t.name }}</div>
+                  <div class="text-muted small">{{ t.game|default:"дисциплина не указана" }}{% if t.league %} · {{ t.league }}{% endif %}</div>
+                </div>
+                <div class="text-end">
+                  <span class="badge-status status-live">{{ t.status|default:"live" }}</span>
+                  {% if t.prizePool %}<div class="text-muted small mt-2">Призовой: {{ t.prizePool }}</div>{% endif %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">Live-турниры сейчас не найдены или PandaScore недоступен.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="section-panel p-4 h-100">
+        <h2 class="h5 mb-3">Что уже реализовано</h2>
+        <div class="feature-list">
+          <div class="feature-item"><span>01</span><div><strong>Турниры и сетка</strong><p>single elimination и group stage для локальных турниров.</p></div></div>
+          <div class="feature-item"><span>02</span><div><strong>Live-матчи</strong><p>результаты обновляются в интерфейсе и через SignalR.</p></div></div>
+          <div class="feature-item"><span>03</span><div><strong>MVP и аналитика</strong><p>голосование, статистика составов и призовых фондов.</p></div></div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 {% endblock %}
