@@ -157,9 +157,6 @@ def dashboard(request):
         "events_today": payload.get("eventsToday", 0),
         "today": date.today(),
         "most_popular": payload.get("mostPopularDiscipline", "н/д"),
-        "live_streams": payload.get("liveStreams", 0),
-        "viewers_estimated": payload.get("viewersEstimated", True),
-        "live_tournaments": payload.get("liveTournaments", []) or [],
     }
     if not stats_result.ok:
         messages.info(request, (stats_result.error or {}).get("message", "API недоступно"))
@@ -565,8 +562,6 @@ def streams(request):
                             "channel": stream.get("channel") or (_extract_twitch_channel(url) if provider == "twitch" else ""),
                             "embed_url": _build_youtube_embed(url) if provider == "youtube" else url,
                             "matchName": stream.get("matchName") or "",
-                            "viewerCount": stream.get("viewerCount"),
-                            "isLive": stream.get("isLive"),
                         })
                     payload["streams_prepared"] = streams_prepared
                     tournament_payload = payload

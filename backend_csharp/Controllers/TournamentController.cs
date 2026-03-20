@@ -26,9 +26,9 @@ namespace Controllers
         }
 
         [HttpGet("stats")]
-        public async Task<IActionResult> GetStats(CancellationToken ct)
+        public IActionResult GetStats()
         {
-            return Ok(await _tournamentService.GetStatsAsync(ct));
+            return Ok(_tournamentService.GetStats());
         }
 
         [HttpGet("{id}")]

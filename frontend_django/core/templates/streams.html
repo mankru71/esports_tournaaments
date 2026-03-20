@@ -33,7 +33,6 @@
                       <div>
                         <div class="fw-semibold text-capitalize">{{ stream.provider }}</div>
                         <div class="text-muted small">{{ stream.matchName }}</div>
-                        {% if stream.viewerCount %}<div class="text-muted small">Зрителей сейчас: {{ stream.viewerCount }}</div>{% elif stream.isLive %}<div class="text-muted small">Стрим активен</div>{% endif %}
                       </div>
                       <a href="{{ stream.url }}" target="_blank" rel="noopener">Открыть источник</a>
                     </div>

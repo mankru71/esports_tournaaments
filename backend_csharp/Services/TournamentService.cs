@@ -1,5 +1,4 @@
 using Data;
-using Microsoft.EntityFrameworkCore;
 using Models;
 
 namespace Services
@@ -7,12 +6,10 @@ namespace Services
     public class TournamentService
     {
         private readonly AppDbContext _context;
-        private readonly PandaScoreService _pandascore;
 
-        public TournamentService(AppDbContext context, PandaScoreService pandascore)
+        public TournamentService(AppDbContext context)
         {
             _context = context;
-            _pandascore = pandascore;
         }
 
         public IEnumerable<Tournament> GetAllTournaments() => _context.Tournaments.OrderBy(t => t.StartDate).ToList();
@@ -59,30 +56,24 @@ namespace Services
             return (true, "Голос принят!");
         }
 
-        public async Task<object> GetStatsAsync(CancellationToken ct = default)
+        public object GetStats()
         {
-            var totalPlayers = await _context.TeamPlayers.CountAsync(ct);
-            var localTournaments = await _context.Tournaments.CountAsync(ct);
-            var localPopularGame = await _context.Tournaments
-                .AsNoTracking()
+            var totalPlayers = _context.TeamPlayers.Count();
+            var activeTournaments = _context.Tournaments.Count();
+            var popularGame = _context.Tournaments
+                .AsEnumerable()
                 .GroupBy(t => string.IsNullOrWhiteSpace(t.Game) ? "Не указано" : t.Game)
                 .OrderByDescending(g => g.Count())
                 .Select(g => g.Key)
-                .FirstOrDefaultAsync(ct) ?? "Не указано";
-
-            var live = await _pandascore.GetLiveDashboardSnapshotAsync(ct);
-            var mostPopular = live.ActiveTournaments > 0 ? live.MostPopularDiscipline : localPopularGame;
+                .FirstOrDefault() ?? "Не указано";
 
             return new
             {
                 totalPlayers,
-                activeTournaments = live.ActiveTournaments > 0 ? live.ActiveTournaments : localTournaments,
-                totalViewers = live.TotalViewers,
-                eventsToday = live.EventsToday,
-                mostPopularDiscipline = mostPopular,
-                liveStreams = live.LiveStreams,
-                viewersEstimated = live.ViewersEstimated,
-                liveTournaments = live.LiveTournaments
+                activeTournaments,
+                totalViewers = 850000,
+                eventsToday = _context.Tournaments.Count(t => t.Status == "live"),
+                mostPopularDiscipline = popularGame
             };
         }
     }
