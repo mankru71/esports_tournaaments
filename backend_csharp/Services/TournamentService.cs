@@ -19,6 +19,13 @@ namespace Services
             return _context.Tournaments.FirstOrDefault(t => t.Id == id);
         }
 
+        public Tournament CreateTournament(Tournament tournament)
+        {
+            _context.Tournaments.Add(tournament);
+            _context.SaveChanges();
+            return tournament;
+        }
+
         public IEnumerable<Nominee> GetNominees()
         {
             return _context.Nominees.ToList();

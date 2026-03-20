@@ -104,3 +104,38 @@ class TeamPlayerForm(forms.Form):
         max_length=50,
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'counterstrike'})
     )
+
+
+class ProfileEditForm(forms.Form):
+    nickname = forms.CharField(
+        label='Ник',
+        max_length=32,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 's1mple'})
+    )
+    bio = forms.CharField(
+        label='О себе',
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Капитан команды, предпочитаю CS2 и LAN-турниры.'})
+    )
+
+
+class RatingVerifyForm(forms.Form):
+    provider = forms.ChoiceField(
+        label='Провайдер рейтинга',
+        choices=(('faceit', 'Faceit (mock)'), ('steam', 'Steam (mock)')),
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    profile_url = forms.URLField(
+        label='Ссылка на профиль',
+        widget=forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://www.faceit.com/... или https://steamcommunity.com/...'})
+    )
+
+
+class TournamentCreateForm(forms.Form):
+    name = forms.CharField(label='Название турнира', max_length=120, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    game = forms.CharField(label='Дисциплина', max_length=60, initial='counterstrike', widget=forms.TextInput(attrs={'class': 'form-control'}))
+    prize_pool = forms.DecimalField(label='Призовой фонд', min_value=0, decimal_places=2, max_digits=12, initial=10000, widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    max_participants = forms.IntegerField(label='Макс. участников', min_value=2, max_value=64, initial=8, widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    start_date = forms.DateField(label='Дата старта', widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}))
+    format = forms.ChoiceField(label='Формат', choices=(('single_elimination', 'Single elimination'), ('group_stage', 'Group stage')), widget=forms.Select(attrs={'class': 'form-select'}))
+    stage_type = forms.ChoiceField(label='Тип этапа', choices=(('single', 'Single bracket'), ('groups', 'Groups')), widget=forms.Select(attrs={'class': 'form-select'}))

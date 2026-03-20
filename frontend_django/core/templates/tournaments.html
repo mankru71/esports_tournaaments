@@ -5,53 +5,85 @@
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Турниры</h1>
-      <p class="text-muted mb-0">Локальные турниры можно пополнять своими командами, а внешние турниры и матчи подтягиваются из PandaScore.</p>
+      <p class="text-muted mb-0">Список локальных и внешних турниров. Для локальных турниров доступны заявки, сетка и управление матчами.</p>
     </div>
-    {% if current_user %}
-      <a class="btn btn-outline-accent" href="{% url 'teams' %}">Мои команды</a>
-    {% else %}
-      <div class="d-flex gap-2">
-        <a class="btn btn-outline-accent" href="{% url 'login' %}">Войти</a>
-        <a class="btn btn-accent" href="{% url 'registration' %}">Создать аккаунт</a>
-      </div>
-    {% endif %}
   </div>
 
-  <div class="table-panel p-3 p-md-4">
-    <div class="table-responsive">
-      <table class="table table-striped align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Название</th><th>Дисциплина</th><th>Формат</th><th>Призовой фонд</th><th>Участники</th><th>Старт</th><th>Статус</th><th class="text-end">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for t in tournaments %}
-          <tr>
-            <td class="fw-semibold">
-              {{ t.name }}
-              {% if t.isExternal %}<span class="badge text-bg-secondary ms-2">API</span>{% else %}<span class="badge text-bg-success ms-2">Локальный</span>{% endif %}
-            </td>
-            <td>{{ t.discipline }}</td>
-            <td>{{ t.format }}</td>
-            <td>{{ t.prizePool }}</td>
-            <td>{{ t.currentParticipants }}/{{ t.maxParticipants|default:'—' }}</td>
-            <td>{{ t.startDate }}</td>
-            <td><span class="badge badge-status status-{{ t.status }}">{{ t.status_label }}</span></td>
-            <td>
-              <div class="d-flex justify-content-end flex-wrap gap-2">
-                <a class="btn btn-sm btn-outline-light" href="{% url 'tournament_detail' t.id %}">Открыть</a>
-                <a class="btn btn-sm btn-outline-light" href="{% url 'match_center' t.id %}">Матчи</a>
-                <a class="btn btn-sm btn-outline-light" href="{% url 'mvp' t.id %}">MVP</a>
-              </div>
-            </td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="8" class="py-4"><div class="empty-state">Турниров пока нет.</div></td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
+  {% if is_admin %}
+    <div class="section-panel p-3 p-md-4 mb-3">
+      <h2 class="h5 mb-3">Создать турнир</h2>
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_tournament">
+        <div class="col-md-6">
+          <label class="form-label">{{ create_tournament_form.name.label }}</label>
+          {{ create_tournament_form.name }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">{{ create_tournament_form.game.label }}</label>
+          {{ create_tournament_form.game }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">{{ create_tournament_form.prize_pool.label }}</label>
+          {{ create_tournament_form.prize_pool }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">{{ create_tournament_form.max_participants.label }}</label>
+          {{ create_tournament_form.max_participants }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">{{ create_tournament_form.start_date.label }}</label>
+          {{ create_tournament_form.start_date }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">{{ create_tournament_form.format.label }}</label>
+          {{ create_tournament_form.format }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">{{ create_tournament_form.stage_type.label }}</label>
+          {{ create_tournament_form.stage_type }}
+        </div>
+        <div class="col-12"><button class="btn btn-accent" type="submit">Создать турнир</button></div>
+      </form>
     </div>
+  {% endif %}
+
+  <div class="table-panel p-3 p-md-4">
+    {% if tournaments %}
+      <div class="table-responsive">
+        <table class="table table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Турнир</th>
+              <th>Дисциплина</th>
+              <th>Формат</th>
+              <th>Участники</th>
+              <th>Статус</th>
+              <th>Источник</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tournament in tournaments %}
+              <tr>
+                <td>
+                  <div class="fw-semibold">{{ tournament.name }}</div>
+                  <div class="text-muted small">Старт: {{ tournament.startDate }}</div>
+                </td>
+                <td>{{ tournament.discipline }}</td>
+                <td>{{ tournament.format }}</td>
+                <td>{{ tournament.currentParticipants }}/{{ tournament.maxParticipants }}</td>
+                <td><span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span></td>
+                <td>{% if tournament.isExternal %}<span class="badge text-bg-secondary">{{ tournament.provider|default:"external" }}</span>{% else %}<span class="badge text-bg-warning text-dark">local</span>{% endif %}</td>
+                <td><a class="btn btn-sm btn-outline-accent" href="{% url 'tournament_detail' tournament.id %}">Открыть</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">Турниров пока нет.</div>
+    {% endif %}
   </div>
 </section>
 {% endblock %}

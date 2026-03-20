@@ -47,6 +47,24 @@ public class AuthController : ControllerBase
         public string Role { get; set; } = "captain";
     }
 
+    public class UpdateProfileRequest
+    {
+        [Required, MinLength(2), MaxLength(32)]
+        public string Nickname { get; set; } = string.Empty;
+
+        [MaxLength(500)]
+        public string? Bio { get; set; }
+    }
+
+    public class VerifyRatingRequest
+    {
+        [Required]
+        public string Provider { get; set; } = "faceit";
+
+        [Required]
+        public string ProfileUrl { get; set; } = string.Empty;
+    }
+
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -100,7 +118,7 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             token,
-            user = new { email = user.Email, nickname = user.Nickname, role = user.Role }
+            user = ToUserDto(user)
         });
     }
 
@@ -117,8 +135,87 @@ public class AuthController : ControllerBase
         if (user is null)
             return Unauthorized(new ProblemDetails { Title = "Unauthorized", Detail = "User not found", Status = 401 });
 
-        return Ok(new { email = user.Email, nickname = user.Nickname, role = user.Role });
+        return Ok(ToUserDto(user));
     }
+
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var userId = AuthTokenHelper.GetUserId(Request);
+        if (userId is null)
+            return Unauthorized(new { message = "Требуется вход" });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+        if (user is null)
+            return Unauthorized(new { message = "Пользователь не найден" });
+
+        var nickname = (request.Nickname ?? string.Empty).Trim();
+        if (nickname.Length < 2 || nickname.Length > 32)
+            return BadRequest(new { message = "Ник должен быть длиной 2–32 символа" });
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(nickname, "^[A-Za-z0-9._-]+$"))
+            return BadRequest(new { message = "Ник может содержать только латинские буквы, цифры и символы . _ -" });
+
+        var nicknameTaken = await _db.Users.AnyAsync(u => u.Id != user.Id && u.Nickname == nickname);
+        if (nicknameTaken)
+            return Conflict(new { message = "Пользователь с таким ником уже существует" });
+
+        user.Nickname = nickname;
+        user.Bio = string.IsNullOrWhiteSpace(request.Bio) ? null : request.Bio.Trim();
+        await _db.SaveChangesAsync();
+
+        return Ok(ToUserDto(user));
+    }
+
+    [HttpPost("profile/verify-rating")]
+    public async Task<IActionResult> VerifyRating([FromBody] VerifyRatingRequest request)
+    {
+        var userId = AuthTokenHelper.GetUserId(Request);
+        if (userId is null)
+            return Unauthorized(new { message = "Требуется вход" });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+        if (user is null)
+            return Unauthorized(new { message = "Пользователь не найден" });
+
+        var provider = (request.Provider ?? string.Empty).Trim().ToLowerInvariant();
+        if (provider != "faceit" && provider != "steam")
+            return BadRequest(new { message = "Поддерживаются только faceit или steam" });
+
+        if (!Uri.TryCreate(request.ProfileUrl, UriKind.Absolute, out var uri))
+            return BadRequest(new { message = "Укажите корректную ссылку на профиль" });
+
+        var nicknameFactor = Math.Max(1, user.Nickname.Length);
+        var rating = provider == "faceit" ? 1500 + nicknameFactor * 37 : 1200 + nicknameFactor * 29;
+
+        user.RatingProvider = provider;
+        user.RatingProfileUrl = uri.ToString();
+        user.Rating = rating;
+        user.RatingVerified = true;
+        user.RatingVerifiedAtUtc = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Рейтинг подтверждён (mock)",
+            profile = ToUserDto(user)
+        });
+    }
+
+    private static object ToUserDto(AppUser user) => new
+    {
+        id = user.Id,
+        email = user.Email,
+        nickname = user.Nickname,
+        role = user.Role,
+        bio = user.Bio,
+        rating = user.Rating,
+        ratingProvider = user.RatingProvider,
+        ratingVerified = user.RatingVerified,
+        ratingVerifiedAtUtc = user.RatingVerifiedAtUtc,
+        ratingProfileUrl = user.RatingProfileUrl
+    };
 
     private static string Hash(string plain)
     {

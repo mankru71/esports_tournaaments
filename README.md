@@ -1,102 +1,65 @@
 # Система для организации киберспортивных турниров
 
-Единая точка входа для браузера — **nginx на порту 80**: `http://localhost/`.
+Учебный full-stack проект: ASP.NET Core API + Django templates UI + nginx + Postgres + Redis + Docker Compose.
 
-## Env vars
+## Публичные ссылки
+- UI: http://localhost/
+- API: http://localhost/api/
+- Health: http://localhost/api/health
+- SignalR hub: http://localhost/hubs/matches
 
-Создайте `.env` в корне проекта:
+## Внутренние адреса контейнеров
+- csharp-api:5000 — внутренний backend URL
+- django-app:8000 — внутренний Django UI URL
+- postgres:5432 — PostgreSQL
+- redis:6379 — Redis
 
-```env
-DJANGO_API_BASE_URL=http://csharp-api:5000/api
-PUBLIC_API_BASE_URL=http://localhost/api
-```
+## Переменные окружения
+Основные значения задаются в `.env`.
 
-Дополнительно (опционально):
+- `PANDASCORE_TOKEN` — токен PandaScore для внешних турниров/игроков/стримов
+- `TWITCH_CLIENT_ID` — optional
+- `TWITCH_ACCESS_TOKEN` — optional
+- `YOUTUBE_API_KEY` — optional
 
-```env
-DB_NAME=esports_db
-DB_USER=esports_user
-DB_PASSWORD=esports123
-DB_HOST=postgres
-DB_PORT=5432
-```
-
-`docker-compose.yml` прокидывает эти переменные в `django-app` через `env_file` и `environment`.
-
-
-## External esports data (PandaScore)
-
-Проект подтягивает публичные турниры/матчи/игроков/стримы из **PandaScore API** (open API с бесплатным тарифом).
-Чтобы это работало, добавьте в `.env`:
-
-```env
-PANDASCORE_TOKEN=YOUR_TOKEN_HERE
-```
-
-Если токен не задан — сайт продолжит работать, но будет показывать только локальные (демо) турниры/матчи.
-
-## Public vs Internal URLs
-
-### Публичные ссылки (открывать в браузере)
-- `http://localhost/`
-- `http://localhost/api/...`
-- `http://localhost/hubs/...`
-
-### Внутренние ссылки (только внутри docker-сети)
-- `http://csharp-api:5000/api`
-
-**Важно: `csharp-api:5000` не откроется в браузере с хоста, если порт 5000 не опубликован наружу. Это нормально.**
-
-## Быстрый запуск (Windows PowerShell)
-
+## Запуск (Windows PowerShell)
 ```powershell
-docker compose down --remove-orphans
 docker compose up -d --build
-docker compose ps
-docker compose exec django-app env | findstr DJANGO_API_BASE_URL
-curl -i http://localhost/api/health
-curl -i http://localhost/
-curl -i http://localhost/api/auth/me
 ```
 
-## Smoke-check
-
+Если нужно полностью сбросить БД/тома:
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\smoke.ps1
+docker compose down -v --remove-orphans
+docker compose up -d --build
 ```
 
-В `scripts/smoke.ps1` проверяются:
-- `GET /api/health`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me` (с токеном после login)
-- `GET /api/tournament`
-- `GET /api/teams`
+## Demo
+Windows:
+```powershell
+./scripts/demo-up.ps1
+./scripts/demo-reset.ps1
+./scripts/smoke.ps1
+```
 
-## Registration troubleshooting
+Linux/macOS:
+```bash
+./scripts/demo-up.sh
+./scripts/demo-reset.sh
+./scripts/smoke.sh
+```
 
-Если регистрация не проходит:
-1. Убедитесь, что API доступно через `http://localhost/api/health`.
-2. Проверьте, что пароль минимум 8 символов.
-3. Проверьте уникальность email (иначе API вернёт `409 Conflict`).
-4. Проверьте переменную `DJANGO_API_BASE_URL` внутри `django-app`.
-5. Если раньше база создавалась без таблицы `Users`, то `/api/auth/register` может падать с `relation "Users" does not exist`.
-   Для учебного демо проще всего сделать **hard reset** базы:
-   ```powershell
-   docker compose down -v --remove-orphans
-   docker compose up -d --build
-   ```
-   Начиная с текущей версии, backend также пытается самовосстановиться и пересоздать БД,
-   если таблица `Users` отсутствует.
+## Сценарий защиты 5–10 минут
+1. Открыть `http://localhost/`.
+2. Зарегистрировать пользователя и войти.
+3. Открыть профиль, изменить ник/описание, подтвердить рейтинг через mock Faceit/Steam.
+4. Создать команду, добавить игроков, при необходимости подтвердить рейтинг игрока судьёй/админом.
+5. Под админом открыть `/tournaments`, создать локальный турнир.
+6. Под капитаном подать заявку на локальный турнир.
+7. Под судьёй/админом на странице турнира принять заявку, сохранить параметры сетки.
+8. Открыть вкладки турнира: Обзор, Матчи, Стримы, MVP, Аналитика, Призовые.
+9. Проверить `/api/health` и экспорт аналитики CSV через API.
 
-## Theme toggle troubleshooting
-
-Если тема не переключается:
-1. Очистите кэш браузера (Ctrl+F5).
-2. Проверьте, что загружается `/static/js/app.js`.
-3. Проверьте `localStorage['theme']` в DevTools.
-4. Убедитесь, что на `<html>` меняется `data-theme` (`dark`/`light`).
-
-Если `data-theme` меняется, но визуально нет — значит стили темы не применяются.
-В этой версии убран `color-mix()` из критичных мест (navbar/buttons/forms) для совместимости,
-и добавлено обновление cache-buster версии `?v=6`.
+## Troubleshooting
+- Если nginx уходит в restarting, проверь `nginx/nginx.conf`.
+- Если БД в странном состоянии, используй `docker compose down -v --remove-orphans`.
+- Если PandaScore не настроен, внешние турниры/стримы могут быть недоступны, но локальный сценарий защиты должен работать.

@@ -10,182 +10,138 @@
     <span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span>
   </div>
 
-  {% if is_captain and not tournament.isExternal %}
-    <div class="section-panel p-3 p-md-4 mb-3">
-      <h2 class="h6 mb-2">Заявка на участие</h2>
-      {% if my_apps %}
-        <div class="text-muted small mb-2">Ваши заявки по этому турниру:</div>
-        <ul class="mb-0 ps-3">
-          {% for a in my_apps %}
-            <li>{{ a.teamName|default:"Команда" }} — <span class="badge badge-status status-{{ a.status }}">{{ a.status }}</span></li>
-          {% endfor %}
-        </ul>
-      {% elif my_teams %}
-        <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="apply_to_tournament" />
-          <div style="min-width: 220px;">
-            <label class="form-label small mb-1">Команда</label>
-            <select class="form-select" name="team_id" required>
-              <option value="" selected disabled>Выберите команду</option>
-              {% for t in my_teams %}
-                <option value="{{ t.id }}">{{ t.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <button class="btn btn-accent" type="submit">Подать заявку</button>
-        </form>
-      {% else %}
-        <div class="text-muted">У вас нет команд капитана — создайте команду на вкладке «Команды».</div>
-      {% endif %}
-    </div>
-  {% elif tournament.isExternal %}
-    <div class="alert alert-info mb-3">Это внешний турнир из PandaScore. Для него доступен просмотр матчей и стримов, но локальные заявки отключены.</div>
-  {% endif %}
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item"><a class="nav-link {% if active_tab == 'overview' %}active{% endif %}" href="?tab=overview">Обзор</a></li>
+    <li class="nav-item"><a class="nav-link {% if active_tab == 'matches' %}active{% endif %}" href="?tab=matches">Матчи</a></li>
+    <li class="nav-item"><a class="nav-link {% if active_tab == 'streams' %}active{% endif %}" href="?tab=streams">Стримы</a></li>
+    <li class="nav-item"><a class="nav-link {% if active_tab == 'mvp' %}active{% endif %}" href="?tab=mvp">MVP</a></li>
+    <li class="nav-item"><a class="nav-link {% if active_tab == 'analytics' %}active{% endif %}" href="?tab=analytics">Аналитика</a></li>
+    <li class="nav-item"><a class="nav-link {% if active_tab == 'prize' %}active{% endif %}" href="?tab=prize">Призовые</a></li>
+  </ul>
 
-  <div class="row g-3 mb-3">
-    <div class="col-lg-7">
-      <div class="table-panel p-3 p-md-4 h-100">
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-          <h2 class="h5 mb-0">Планирование сетки</h2>
-          {% if is_admin or is_judge %}
-            <form method="post" class="d-flex gap-2 flex-wrap">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="save_planning">
-              <select class="form-select form-select-sm" name="format">
-                <option value="single_elimination" {% if tournament.format == 'single_elimination' %}selected{% endif %}>single elimination</option>
-                <option value="group_stage" {% if tournament.format == 'group_stage' %}selected{% endif %}>group stage</option>
-              </select>
-              <select class="form-select form-select-sm" name="stage_type">
-                <option value="single" {% if tournament.stageType == 'single' %}selected{% endif %}>single</option>
-                <option value="groups" {% if tournament.stageType == 'groups' %}selected{% endif %}>groups</option>
-              </select>
-              <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
-            </form>
-          {% endif %}
-        </div>
-
-        {% if bracket.summary %}<div class="text-muted small mb-3">{{ bracket.summary }}</div>{% endif %}
-
-        {% if bracket.groups %}
-          <div class="row g-3 mb-3">
-            {% for group in bracket.groups %}
-              <div class="col-md-6">
-                <div class="card p-3 h-100">
-                  <div class="fw-semibold mb-2">{{ group.name }}</div>
-                  <ol class="mb-0 ps-3">
-                    {% for team in group.teams %}
-                      <li>{{ team.name }} <span class="text-muted small">(seed {{ team.seed }}, rating {{ team.ratingAverage|default:team.rating }})</span></li>
-                    {% endfor %}
-                  </ol>
-                </div>
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-
-        {% if bracket.matches %}
-          <div class="table-responsive">
-            <table class="table table-striped align-middle mb-0">
-              <thead><tr><th>Раунд/Группа</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
-              <tbody>
-                {% for m in bracket.matches %}
-                  <tr>
-                    <td>{{ m.round }}</td>
-                    <td>{{ m.teamA }}</td>
-                    <td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td>
-                    <td>{{ m.teamB }}</td>
-                    <td>{{ m.status }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <div class="empty-state">Сетка пока не построена — нужны заявки команд.</div>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="col-lg-5">
-      <div class="table-panel p-3 p-md-4 h-100 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Призовой фонд</h2><span class="badge text-bg-secondary">{{ prize_pool.totalAmount }}</span></div>
-        {% if prize_pool.payouts %}
-          <div class="d-flex flex-column gap-2 mb-3">
-            {% for p in prize_pool.payouts %}
-              <div class="card p-3 d-flex flex-row justify-content-between"><span>{{ p.place }}</span><span class="fw-semibold">{{ p.percent }}% · {{ p.amount }}</span></div>
-            {% endfor %}
-          </div>
-        {% endif %}
-
-        {% if is_admin or is_judge %}
-          <form method="post" class="row g-2">
+  {% if active_tab == 'overview' %}
+    {% if is_captain and not tournament.isExternal %}
+      <div class="section-panel p-3 p-md-4 mb-3">
+        <h2 class="h6 mb-2">Заявка на участие</h2>
+        {% if my_apps %}
+          <ul class="mb-0 ps-3">
+            {% for a in my_apps %}<li>{{ a.teamName|default:"Команда" }} — <span class="badge badge-status status-{{ a.status }}">{{ a.status }}</span></li>{% endfor %}
+          </ul>
+        {% elif my_teams %}
+          <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
             {% csrf_token %}
-            <input type="hidden" name="action" value="save_payouts">
-            <div class="col-6"><input class="form-control" name="place_1" value="1 место"></div>
-            <div class="col-6"><input class="form-control" name="percent_1" value="50" type="number" step="0.01"></div>
-            <div class="col-6"><input class="form-control" name="place_2" value="2 место"></div>
-            <div class="col-6"><input class="form-control" name="percent_2" value="30" type="number" step="0.01"></div>
-            <div class="col-6"><input class="form-control" name="place_3" value="3 место"></div>
-            <div class="col-6"><input class="form-control" name="percent_3" value="20" type="number" step="0.01"></div>
-            <div class="col-12"><button class="btn btn-outline-accent" type="submit">Сохранить распределение</button></div>
+            <input type="hidden" name="action" value="apply_to_tournament" />
+            <div style="min-width: 220px;">
+              <label class="form-label small mb-1">Команда</label>
+              <select class="form-select" name="team_id" required>
+                <option value="" selected disabled>Выберите команду</option>
+                {% for t in my_teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-accent" type="submit">Подать заявку</button>
           </form>
-        {% endif %}
-      </div>
-
-      {% if is_admin or is_judge %}
-      <div class="table-panel p-3 p-md-4">
-        <h2 class="h5 mb-3">Заявки команд</h2>
-        {% if all_apps %}
-          <div class="d-flex flex-column gap-2">
-            {% for app in all_apps %}
-              <div class="card p-3">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                  <div>
-                    <div class="fw-semibold">{{ app.teamName|default:"Команда" }}</div>
-                    <div class="text-muted small">{{ app.applicantEmail|default:"—" }} · {{ app.createdAtUtc }}</div>
-                  </div>
-                  <div class="d-flex gap-2">
-                    <span class="badge badge-status status-{{ app.status }}">{{ app.status }}</span>
-                    {% if app.status == 'pending' %}
-                      <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="approve_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-success" type="submit">Подтвердить</button></form>
-                      <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="reject_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-danger" type="submit">Отклонить</button></form>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
-            {% endfor %}
-          </div>
         {% else %}
-          <div class="empty-state">Заявок пока нет.</div>
+          <div class="text-muted">У вас нет команд капитана — создайте команду на вкладке «Команды».</div>
         {% endif %}
       </div>
+    {% endif %}
+
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="table-panel p-3 p-md-4 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h2 class="h5 mb-0">Планирование сетки</h2>
+            {% if is_admin or is_judge %}
+              <form method="post" class="d-flex gap-2 flex-wrap">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_planning">
+                <select class="form-select form-select-sm" name="format">
+                  <option value="single_elimination" {% if tournament.format == 'single_elimination' %}selected{% endif %}>single elimination</option>
+                  <option value="group_stage" {% if tournament.format == 'group_stage' %}selected{% endif %}>group stage</option>
+                </select>
+                <select class="form-select form-select-sm" name="stage_type">
+                  <option value="single" {% if tournament.stageType == 'single' %}selected{% endif %}>single</option>
+                  <option value="groups" {% if tournament.stageType == 'groups' %}selected{% endif %}>groups</option>
+                </select>
+                <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
+              </form>
+            {% endif %}
+          </div>
+          {% if bracket.summary %}<div class="text-muted small mb-3">{{ bracket.summary }}</div>{% endif %}
+          {% if bracket.groups %}
+            <div class="row g-3 mb-3">
+              {% for group in bracket.groups %}
+                <div class="col-md-6"><div class="card p-3 h-100"><div class="fw-semibold mb-2">{{ group.name }}</div><ol class="mb-0 ps-3">{% for team in group.teams %}<li>{{ team.name }} <span class="text-muted small">(seed {{ team.seed }}, rating {{ team.ratingAverage|default:team.rating }})</span></li>{% endfor %}</ol></div></div>
+              {% endfor %}
+            </div>
+          {% endif %}
+          {% if bracket.matches %}
+            <div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>Раунд/Группа</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead><tbody>{% for m in bracket.matches %}<tr><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td><td>{{ m.status }}</td></tr>{% endfor %}</tbody></table></div>
+          {% else %}<div class="empty-state">Сетка пока не построена — нужны заявки команд.</div>{% endif %}
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="table-panel p-3 p-md-4 h-100">
+          <h2 class="h5 mb-3">Заявки команд</h2>
+          {% if all_apps %}
+            <div class="d-flex flex-column gap-2">{% for app in all_apps %}<div class="card p-3"><div class="d-flex justify-content-between align-items-center flex-wrap gap-2"><div><div class="fw-semibold">{{ app.teamName|default:"Команда" }}</div><div class="text-muted small">{{ app.applicantEmail|default:"—" }} · {{ app.createdAtUtc }}</div></div><div class="d-flex gap-2"><span class="badge badge-status status-{{ app.status }}">{{ app.status }}</span>{% if app.status == 'pending' %}<form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="approve_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-success" type="submit">Подтвердить</button></form><form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="reject_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-danger" type="submit">Отклонить</button></form>{% endif %}</div></div></div>{% endfor %}</div>
+          {% else %}<div class="empty-state">Заявок пока нет.</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  {% elif active_tab == 'matches' %}
+    <div class="table-panel p-3 p-md-4">
+      <h2 class="h5 mb-3">Матчи турнира</h2>
+      {% if matches %}
+        <div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>Раунд</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead><tbody>{% for m in matches %}<tr><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td><td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td></tr>{% endfor %}</tbody></table></div>
+      {% else %}<div class="empty-state">Матчи ещё не опубликованы.</div>{% endif %}
+    </div>
+  {% elif active_tab == 'streams' %}
+    <div class="table-panel p-3 p-md-4">
+      <h2 class="h5 mb-3">Стримы турнира</h2>
+      {% if streams_payload %}
+        <div class="d-flex flex-column gap-2">{% for stream in streams_payload %}<div class="card p-3"><div class="fw-semibold">{{ stream.provider|default:"Стрим" }}</div><div class="text-muted small">online: {{ stream.status.online|default:False }} · viewers: {{ stream.status.viewers|default:0 }}</div><div class="text-break"><a href="{{ stream.url }}" target="_blank" rel="noopener">{{ stream.url }}</a></div></div>{% endfor %}</div>
+      {% else %}<div class="empty-state">Для турнира пока нет привязанных стримов.</div>{% endif %}
+    </div>
+  {% elif active_tab == 'mvp' %}
+    <div class="table-panel p-3 p-md-4">
+      <h2 class="h5 mb-3">MVP турнира</h2>
+      <div class="text-muted small mb-3">Голосование доступно в отдельном разделе турнира через backend API. Ниже выводятся текущие кандидаты и результаты.</div>
+      {% if mvp_payload.candidates or mvp_payload.results %}
+        <div class="row g-3">
+          <div class="col-lg-6"><div class="card p-3 h-100"><div class="fw-semibold mb-2">Кандидаты</div>{% if mvp_payload.candidates %}<ul class="mb-0 ps-3">{% for c in mvp_payload.candidates %}<li>{{ c.name|default:c.nickname|default:c.playerName }}</li>{% endfor %}</ul>{% else %}<div class="text-muted">Кандидаты ещё не назначены.</div>{% endif %}</div></div>
+          <div class="col-lg-6"><div class="card p-3 h-100"><div class="fw-semibold mb-2">Результаты</div>{% if mvp_payload.results %}<ul class="mb-0 ps-3">{% for r in mvp_payload.results %}<li>{{ r.name|default:r.nickname|default:r.playerName }} — {{ r.votes|default:0 }} голосов</li>{% endfor %}</ul>{% else %}<div class="text-muted">Голосов пока нет.</div>{% endif %}</div></div>
+        </div>
+      {% else %}<div class="empty-state">MVP-голосование пока не открыто.</div>{% endif %}
+    </div>
+  {% elif active_tab == 'analytics' %}
+    <div class="table-panel p-3 p-md-4">
+      <h2 class="h5 mb-3">Аналитика</h2>
+      <div class="row g-3 mb-3">
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="text-muted small">Всего команд</div><div class="display-6">{{ analytics_payload.summary.totalTeams|default:0 }}</div></div></div>
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="text-muted small">Всего игроков</div><div class="display-6">{{ analytics_payload.summary.totalPlayers|default:0 }}</div></div></div>
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="text-muted small">Подтверждено рейтингов</div><div class="display-6">{{ analytics_payload.summary.confirmedRatings|default:0 }}</div></div></div>
+      </div>
+      {% if analytics_payload.playerStats %}<div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>Игрок</th><th>Команда</th><th>Рейтинг</th><th>Статус</th></tr></thead><tbody>{% for p in analytics_payload.playerStats %}<tr><td>{{ p.player }}</td><td>{{ p.team }}</td><td>{{ p.rating|default:"—" }}</td><td>{{ p.ratingStatus|default:"—" }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">Статистика пока не собрана.</div>{% endif %}
+    </div>
+  {% elif active_tab == 'prize' %}
+    <div class="table-panel p-3 p-md-4">
+      <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Призовой фонд</h2><span class="badge text-bg-secondary">{{ prize_pool.totalAmount }}</span></div>
+      {% if prize_pool.payouts %}<div class="d-flex flex-column gap-2 mb-3">{% for p in prize_pool.payouts %}<div class="card p-3 d-flex flex-row justify-content-between"><span>{{ p.place }}</span><span class="fw-semibold">{{ p.percent }}% · {{ p.amount }}</span></div>{% endfor %}</div>{% else %}<div class="empty-state mb-3">Распределение призового фонда пока не настроено.</div>{% endif %}
+      {% if is_admin or is_judge %}
+        <form method="post" class="row g-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_payouts">
+          <div class="col-6"><input class="form-control" name="place_1" value="1 место"></div>
+          <div class="col-6"><input class="form-control" name="percent_1" value="50" type="number" step="0.01"></div>
+          <div class="col-6"><input class="form-control" name="place_2" value="2 место"></div>
+          <div class="col-6"><input class="form-control" name="percent_2" value="30" type="number" step="0.01"></div>
+          <div class="col-6"><input class="form-control" name="place_3" value="3 место"></div>
+          <div class="col-6"><input class="form-control" name="percent_3" value="20" type="number" step="0.01"></div>
+          <div class="col-12"><button class="btn btn-outline-accent" type="submit">Сохранить распределение</button></div>
+        </form>
       {% endif %}
     </div>
-  </div>
-
-  <div class="table-panel p-3 p-md-4">
-    <h2 class="h5 mb-3">Матчи турнира</h2>
-    {% if matches %}
-      <div class="table-responsive">
-        <table class="table table-striped align-middle mb-0">
-          <thead><tr><th>Раунд</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
-          <tbody>
-            {% for m in matches %}
-              <tr>
-                <td>{{ m.round }}</td>
-                <td>{{ m.teamA }}</td>
-                <td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td>
-                <td>{{ m.teamB }}</td>
-                <td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <div class="empty-state">Матчи ещё не опубликованы.</div>
-    {% endif %}
-  </div>
+  {% endif %}
 </section>
 {% endblock %}

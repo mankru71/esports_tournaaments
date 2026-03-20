@@ -106,6 +106,15 @@ class CSharpApiClient:
     def get_tournaments(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "tournament", token=token)
 
+    def update_profile(self, nickname: str, bio: str, token: str) -> ApiResult:
+        return self._request("PUT", "auth/profile", data={"nickname": nickname, "bio": bio}, token=token)
+
+    def verify_rating(self, provider: str, profile_url: str, token: str) -> ApiResult:
+        return self._request("POST", "auth/profile/verify-rating", data={"provider": provider, "profileUrl": profile_url}, token=token)
+
+    def create_tournament(self, token: str, payload: dict) -> ApiResult:
+        return self._request("POST", "tournament", data=payload, token=token)
+
     def get_tournament(self, tournament_id: int, token: str | None = None) -> ApiResult:
         return self._request("GET", f"tournament/{tournament_id}", token=token)
 

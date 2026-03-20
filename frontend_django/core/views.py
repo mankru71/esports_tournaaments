@@ -5,7 +5,7 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
 
 from .api_client import api_client
-from .forms import LoginForm, MatchResultForm, RegistrationForm, TeamCreateForm, TeamPlayerForm
+from .forms import LoginForm, MatchResultForm, RegistrationForm, TeamCreateForm, TeamPlayerForm, ProfileEditForm, RatingVerifyForm, TournamentCreateForm
 
 ROLE_ADMIN = "admin"
 ROLE_JUDGE = "judge"
@@ -195,12 +195,47 @@ def logout_view(request):
 
 def tournaments(request):
     token = request.session.get("api_token")
+    user = _read_current_user(request)
+    roles = _role_flags(user)
+
+    if request.method == "POST" and request.POST.get("action") == "create_tournament":
+        if not token:
+            messages.info(request, "Войдите, чтобы создавать турниры")
+            return redirect("login")
+        if not roles["is_admin"]:
+            messages.error(request, "Создавать турниры может только администратор")
+            return redirect("tournaments")
+        form = TournamentCreateForm(request.POST)
+        if form.is_valid():
+            payload = {
+                "name": form.cleaned_data["name"],
+                "game": form.cleaned_data["game"],
+                "prizePool": float(form.cleaned_data["prize_pool"]),
+                "maxParticipants": form.cleaned_data["max_participants"],
+                "startDate": form.cleaned_data["start_date"].strftime("%Y-%m-%d"),
+                "format": form.cleaned_data["format"],
+                "stageType": form.cleaned_data["stage_type"],
+                "status": "planned",
+            }
+            create_result = api_client.create_tournament(token=token, payload=payload)
+            if create_result.ok:
+                messages.success(request, "Турнир создан")
+                new_id = (create_result.data or {}).get("id")
+                if new_id:
+                    return redirect("tournament_detail", tournament_id=new_id)
+                return redirect("tournaments")
+            messages.error(request, (create_result.error or {}).get("message", "Не удалось создать турнир"))
+        else:
+            for errs in form.errors.values():
+                for err in errs:
+                    messages.error(request, err)
+
     tournaments_result = api_client.get_tournaments(token=token)
     tournaments_data = tournaments_result.data or []
     tournaments_list = [_normalize_tournament(item) for item in tournaments_data]
     if not tournaments_result.ok:
         messages.error(request, (tournaments_result.error or {}).get("message", "Не удалось получить турниры"))
-    return render(request, "tournaments.html", {"tournaments": tournaments_list, **_role_flags(_read_current_user(request))})
+    return render(request, "tournaments.html", {"tournaments": tournaments_list, "create_tournament_form": TournamentCreateForm(), **roles})
 
 
 def teams(request):
@@ -371,6 +406,13 @@ def tournament_detail(request, tournament_id: int):
 
     prize_result = api_client.get_prize_pool(tournament_id, token=token)
     prize_pool = prize_result.data if prize_result.ok else {"totalAmount": tournament["prizePool"], "payouts": tournament.get("prizePayouts", [])}
+    mvp_result = api_client.get_mvp(tournament_id, token=token)
+    mvp_payload = mvp_result.data if mvp_result.ok else {"isOpen": False, "candidates": [], "results": []}
+    analytics_result = api_client.get_analytics(token=token)
+    analytics_payload = analytics_result.data if analytics_result.ok else {"summary": {}, "playerStats": [], "disciplinePopularity": [], "prizePools": []}
+    streams_result = api_client.get_streams(token=token)
+    streams_payload = streams_result.data if streams_result.ok else []
+    active_tab = (request.GET.get("tab") or "overview").strip() or "overview"
 
     return render(
         request,
@@ -383,6 +425,10 @@ def tournament_detail(request, tournament_id: int):
             "all_apps": all_apps,
             "bracket": bracket,
             "prize_pool": prize_pool,
+            "mvp_payload": mvp_payload,
+            "analytics_payload": analytics_payload,
+            "streams_payload": streams_payload,
+            "active_tab": active_tab,
             **roles,
         },
     )
@@ -513,7 +559,36 @@ def profile(request):
         messages.info(request, "Войдите, чтобы открыть профиль.")
         return redirect("login")
 
+    token = request.session.get("api_token")
     roles = _role_flags(user)
+    edit_form = ProfileEditForm(initial={"nickname": user.get("nickname", ""), "bio": user.get("bio", "")})
+    verify_form = RatingVerifyForm(initial={"provider": user.get("ratingProvider") or "faceit", "profile_url": user.get("ratingProfileUrl") or ""})
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "save_profile":
+            edit_form = ProfileEditForm(request.POST)
+            if edit_form.is_valid():
+                result = api_client.update_profile(edit_form.cleaned_data["nickname"], edit_form.cleaned_data.get("bio") or "", token=token)
+                if result.ok:
+                    request.session["current_user"] = result.data
+                    user = result.data
+                    roles = _role_flags(user)
+                    messages.success(request, "Профиль обновлён")
+                else:
+                    messages.error(request, (result.error or {}).get("message", "Не удалось обновить профиль"))
+        elif action == "verify_rating":
+            verify_form = RatingVerifyForm(request.POST)
+            if verify_form.is_valid():
+                result = api_client.verify_rating(verify_form.cleaned_data["provider"], verify_form.cleaned_data["profile_url"], token=token)
+                if result.ok:
+                    user = (result.data or {}).get("profile") or user
+                    request.session["current_user"] = user
+                    roles = _role_flags(user)
+                    messages.success(request, (result.data or {}).get("message", "Рейтинг подтверждён"))
+                else:
+                    messages.error(request, (result.error or {}).get("message", "Не удалось подтвердить рейтинг"))
+
     selected_game = (request.GET.get("game") or "counterstrike").strip() or "counterstrike"
     nickname = (user.get("nickname") or "").strip()
     esports_payload = None
@@ -532,7 +607,7 @@ def profile(request):
     else:
         esports_error = "У аккаунта не задан ник."
 
-    return render(request, "profile.html", {"selected_game": selected_game, "esports_payload": esports_payload, "esports_results": esports_results, "esports_error": esports_error, **roles})
+    return render(request, "profile.html", {"selected_game": selected_game, "esports_payload": esports_payload, "esports_results": esports_results, "esports_error": esports_error, "edit_form": edit_form, "verify_form": verify_form, **roles})
 
 
 def streams(request):

@@ -2,24 +2,61 @@
 {% block title %}Профиль{% endblock %}
 {% block content %}
 <section class="mb-4">
-  <div class="d-flex flex-column flex-lg-row gap-4">
-    <div class="flex-grow-1">
-      <div class="form-card p-4 p-md-5 mb-4">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="form-card p-4 p-md-5 h-100">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
           <div>
             <h1 class="h3 mb-1">Профиль</h1>
-            <div class="text-muted">Ник: <span class="fw-semibold">{{ current_user.nickname }}</span></div>
+            <div class="text-muted">Email: <span class="fw-semibold">{{ current_user.email }}</span></div>
+            <div class="text-muted">Роль: <span class="fw-semibold text-capitalize">{{ current_user.role }}</span></div>
           </div>
-          <a class="btn btn-sm btn-outline-accent" href="{% url 'streams' %}">Поиск игроков/стримов</a>
+          <a class="btn btn-sm btn-outline-accent" href="{% url 'streams' %}">Поиск игроков и стримов</a>
         </div>
-        <hr class="my-3">
-        <div class="row g-3">
-          <div class="col-md-6"><div class="small text-muted">Email</div><div class="fw-semibold">{{ current_user.email }}</div></div>
-          <div class="col-md-6"><div class="small text-muted">Роль</div><div class="fw-semibold text-capitalize">{{ current_user.role }}</div></div>
+
+        <form method="post" class="d-flex flex-column gap-3 mb-4">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_profile">
+          <div>
+            <label class="form-label">{{ edit_form.nickname.label }}</label>
+            {{ edit_form.nickname }}
+          </div>
+          <div>
+            <label class="form-label">{{ edit_form.bio.label }}</label>
+            {{ edit_form.bio }}
+          </div>
+          <button class="btn btn-accent" type="submit">Сохранить профиль</button>
+        </form>
+
+        <div class="border-top pt-3">
+          <h2 class="h5 mb-3">Подтверждение рейтинга</h2>
+          <div class="row g-2 small mb-3">
+            <div class="col-6"><div class="text-muted">Рейтинг</div><div class="fw-semibold">{{ current_user.rating|default:"—" }}</div></div>
+            <div class="col-6"><div class="text-muted">Провайдер</div><div class="fw-semibold">{{ current_user.ratingProvider|default:"—" }}</div></div>
+            <div class="col-6"><div class="text-muted">Подтвержден</div><div class="fw-semibold">{% if current_user.ratingVerified %}Да{% else %}Нет{% endif %}</div></div>
+            <div class="col-6"><div class="text-muted">Дата</div><div class="fw-semibold">{{ current_user.ratingVerifiedAtUtc|default:"—" }}</div></div>
+            <div class="col-12"><div class="text-muted">Профиль</div><div class="fw-semibold text-break">{% if current_user.ratingProfileUrl %}<a href="{{ current_user.ratingProfileUrl }}" target="_blank" rel="noopener">{{ current_user.ratingProfileUrl }}</a>{% else %}—{% endif %}</div></div>
+          </div>
+
+          <form method="post" class="d-flex flex-column gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="verify_rating">
+            <div>
+              <label class="form-label">{{ verify_form.provider.label }}</label>
+              {{ verify_form.provider }}
+            </div>
+            <div>
+              <label class="form-label">{{ verify_form.profile_url.label }}</label>
+              {{ verify_form.profile_url }}
+            </div>
+            <button class="btn btn-outline-accent" type="submit">Подтвердить рейтинг (mock)</button>
+          </form>
         </div>
       </div>
+    </div>
 
-      <div class="form-card p-4 p-md-5">
+    <div class="col-lg-7">
+      <div class="form-card p-4 p-md-5 h-100">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
           <div>
             <h2 class="h5 mb-1">Данные игрока (PandaScore)</h2>
@@ -41,8 +78,7 @@
                       {% if p.role %}роль: {{ p.role }} · {% endif %}
                       {% if p.nationality %}{{ p.nationality }}{% endif %}
                     </div>
-                    <div class="text-muted small">{% if p.firstName or p.lastName %}{{ p.firstName }} {{ p.lastName }}{% endif %}</div>
-                    {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">Справка по endpoint PandaScore</a>{% endif %}
+                    {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">Открыть профиль/справку</a>{% endif %}
                   </div>
                   {% if p.imageUrl %}<img src="{{ p.imageUrl }}" alt="player" style="width:48px;height:48px;border-radius:14px;object-fit:cover;">{% endif %}
                 </div>
