@@ -1,9 +1,15 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Models;
 
 namespace Services;
 
+// Рекорды должны идти строго ПОСЛЕ namespace
 public record PlannedTeam(int TeamId, string Name, int Seed, decimal RatingAverage);
 public record PlannedMatch(string Round, string TeamA, string TeamB, int ScoreA, int ScoreB, string Status);
 public record PlannedGroup(string Name, List<PlannedTeam> Teams);
@@ -18,133 +24,119 @@ public class TournamentPlanningService
         _db = db;
     }
 
+    // Метод для обратной совместимости со старыми контроллерами
     public async Task<TournamentPlanVm> BuildPlanAsync(Tournament tournament, CancellationToken ct = default)
     {
-        var teams = await LoadTeamsAsync(tournament.Id, ct);
-        if (teams.Count == 0)
-        {
-            return new TournamentPlanVm(
-                tournament.StageType,
-                new List<PlannedGroup>(),
-                new List<PlannedMatch>(),
-                "Недостаточно зарегистрированных команд для построения сетки."
-            );
-        }
-
-        if (IsGroupStage(tournament))
-        {
-            var groups = BuildGroups(teams, 4);
-            var matches = BuildGroupMatches(groups);
-            return new TournamentPlanVm(
-                "groups",
-                groups,
-                matches,
-                $"Сформировано {groups.Count} групп и {matches.Count} матчей группового этапа."
-            );
-        }
-
-        var singleMatches = BuildSingleElimination(teams);
+        // Вызываем наш новый метод генерации и сохранения в базу
+        await GenerateAndSaveBracketAsync(tournament.Id, ct);
+        
         return new TournamentPlanVm(
-            "single",
+            tournament.StageType ?? "single",
             new List<PlannedGroup>(),
-            singleMatches,
-            $"Построена сетка single elimination на {teams.Count} команд."
+            new List<PlannedMatch>(),
+            "Сетка успешно сгенерирована и сохранена в базу данных."
         );
     }
 
-    private bool IsGroupStage(Tournament tournament)
+    // Наш новый метод, который реально сохраняет матчи в PostgreSQL
+    public async Task<bool> GenerateAndSaveBracketAsync(int tournamentId, CancellationToken ct = default)
     {
-        var format = (tournament.Format ?? string.Empty).ToLowerInvariant();
-        var stageType = (tournament.StageType ?? string.Empty).ToLowerInvariant();
-        return format.Contains("group") || stageType.Contains("group");
-    }
+        var tournament = await _db.Tournaments.FindAsync(new object[] { tournamentId }, ct);
+        if (tournament == null) return false;
 
-    private async Task<List<PlannedTeam>> LoadTeamsAsync(int tournamentId, CancellationToken ct)
-    {
+        // Удаляем старую сетку, если она была (для перегенерации)
+        var oldMatches = await _db.Matches.Where(m => m.TournamentId == tournamentId).ToListAsync(ct);
+        if (oldMatches.Any())
+        {
+            _db.Matches.RemoveRange(oldMatches);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        // Получаем подтвержденные команды, сортируем по среднему рейтингу
         var approvedApps = await _db.TournamentApplications
             .Include(a => a.Team)
                 .ThenInclude(t => t!.Players)
-            .Where(a => a.TournamentId == tournamentId && (a.Status == "approved" || a.Status == "pending"))
+            .Where(a => a.TournamentId == tournamentId && a.Status == "approved")
             .ToListAsync(ct);
 
         var teams = approvedApps
             .Where(a => a.Team != null)
             .Select(a => a.Team!)
-            .GroupBy(t => t.Id)
-            .Select(g => g.First())
-            .Select(t =>
-            {
-                var ratings = t.Players.Where(p => p.Rating.HasValue).Select(p => p.Rating!.Value).ToList();
-                var avgRating = ratings.Count > 0 ? ratings.Average() : 0m;
-                return new { Team = t, Rating = avgRating };
-            })
-            .OrderByDescending(x => x.Rating)
-            .ThenBy(x => x.Team.Name)
+            .OrderByDescending(t => t.Players.Any() ? t.Players.Average(p => p.Rating ?? 0) : 0)
             .ToList();
 
-        var result = new List<PlannedTeam>();
-        var seed = 1;
-        foreach (var item in teams)
-        {
-            result.Add(new PlannedTeam(item.Team.Id, item.Team.Name, seed++, item.Rating));
-        }
+        if (teams.Count < 2) return false;
 
-        return result;
+        // Генерируем объекты матчей
+        var matchesToSave = BuildSingleEliminationTree(tournamentId, teams);
+
+        await _db.Matches.AddRangeAsync(matchesToSave);
+        await _db.SaveChangesAsync(ct);
+
+        return true;
     }
 
-    private static List<PlannedMatch> BuildSingleElimination(List<PlannedTeam> teams)
+    private List<Match> BuildSingleEliminationTree(int tournamentId, List<Team> teams)
     {
-        var matches = new List<PlannedMatch>();
-        var roundTeams = teams.Select(t => t.Name).ToList();
-        var roundNumber = 1;
+        var allMatches = new List<Match>();
+        
+        int bracketSize = (int)Math.Pow(2, Math.Ceiling(Math.Log(teams.Count, 2)));
+        int byesCount = bracketSize - teams.Count;
+        int totalRounds = (int)Math.Log(bracketSize, 2);
 
-        while (roundTeams.Count > 1)
+        var currentRoundMatches = new List<Match>();
+
+        var finalMatch = new Match { TournamentId = tournamentId, RoundNumber = totalRounds, Round = "Final" };
+        currentRoundMatches.Add(finalMatch);
+        allMatches.Add(finalMatch);
+
+        for (int r = totalRounds - 1; r >= 1; r--)
         {
-            var nextRound = new List<string>();
-            for (var i = 0; i < roundTeams.Count; i += 2)
+            var nextRoundMatches = new List<Match>();
+            foreach (var match in currentRoundMatches)
             {
-                var teamA = roundTeams[i];
-                var teamB = i + 1 < roundTeams.Count ? roundTeams[i + 1] : "BYE";
-                matches.Add(new PlannedMatch($"R{roundNumber}", teamA, teamB, 0, 0, "planned"));
-                nextRound.Add(teamB == "BYE" ? teamA : "Победитель матча");
+                var prev1 = new Match { TournamentId = tournamentId, RoundNumber = r, Round = $"R{r}", NextMatch = match };
+                var prev2 = new Match { TournamentId = tournamentId, RoundNumber = r, Round = $"R{r}", NextMatch = match };
+                
+                nextRoundMatches.Add(prev1);
+                nextRoundMatches.Add(prev2);
+                allMatches.AddRange(new[] { prev1, prev2 });
             }
-            roundTeams = nextRound;
-            roundNumber++;
+            currentRoundMatches = nextRoundMatches; 
         }
 
-        return matches;
-    }
+        var teamQueue = new Queue<Team>(teams);
 
-    private static List<PlannedGroup> BuildGroups(List<PlannedTeam> teams, int groupSize)
-    {
-        var groups = new List<PlannedGroup>();
-        var groupCount = (int)Math.Ceiling(teams.Count / (double)groupSize);
-        for (var i = 0; i < groupCount; i++)
+        foreach (var match in currentRoundMatches)
         {
-            groups.Add(new PlannedGroup($"Группа {(char)('A' + i)}", new List<PlannedTeam>()));
-        }
+            if (teamQueue.Count > 0)
+                match.TeamAId = teamQueue.Dequeue().Id;
 
-        for (var i = 0; i < teams.Count; i++)
-        {
-            groups[i % groupCount].Teams.Add(teams[i]);
-        }
-
-        return groups;
-    }
-
-    private static List<PlannedMatch> BuildGroupMatches(List<PlannedGroup> groups)
-    {
-        var matches = new List<PlannedMatch>();
-        foreach (var group in groups)
-        {
-            for (var i = 0; i < group.Teams.Count; i++)
+            if (byesCount > 0)
             {
-                for (var j = i + 1; j < group.Teams.Count; j++)
-                {
-                    matches.Add(new PlannedMatch(group.Name, group.Teams[i].Name, group.Teams[j].Name, 0, 0, "planned"));
-                }
+                byesCount--;
+                match.TeamBId = null; 
+                match.WinnerId = match.TeamAId; 
+                match.Status = "finished";
+                
+                AdvanceWinnerToNextMatch(match, match.TeamAId!.Value);
+            }
+            else if (teamQueue.Count > 0)
+            {
+                match.TeamBId = teamQueue.Dequeue().Id;
             }
         }
-        return matches;
+
+        return allMatches;
+    }
+
+    private void AdvanceWinnerToNextMatch(Match completedMatch, int winnerId)
+    {
+        if (completedMatch.NextMatch == null) return;
+
+        if (completedMatch.NextMatch.TeamAId == null)
+            completedMatch.NextMatch.TeamAId = winnerId;
+        else
+            completedMatch.NextMatch.TeamBId = winnerId;
     }
 }

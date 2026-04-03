@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "Eh6M342lCQ8=",
+  "dgSpecHash": "izN4sa+02fo=",
   "success": true,
-  "projectFilePath": "D:\\project_practika\\backend_csharp\\EsportsBackend.csproj",
+  "projectFilePath": "D:\\esports_tournaaments\\backend_csharp\\EsportsBackend.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\artem\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\artem\\.nuget\\packages\\microsoft.aspnetcore.openapi\\8.0.0\\microsoft.aspnetcore.openapi.8.0.0.nupkg.sha512",

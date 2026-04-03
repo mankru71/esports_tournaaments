@@ -2,6 +2,7 @@ using Data;
 using Hubs;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using Models;
 using Services;
 using System.ComponentModel.DataAnnotations;
@@ -14,36 +15,13 @@ public class MatchesController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly PandaScoreService _pandascore;
-    private readonly TournamentPlanningService _planning;
     private readonly IHubContext<MatchesHub> _hub;
 
-    private static readonly List<DemoMatch> DemoMatches = new()
-    {
-        new() { Id = 1, TournamentId = 1, TeamA = "NaVi", TeamB = "G2", ScoreA = 1, ScoreB = 0, Status = "live", Round = "R1", GroupName = "A", StreamUrl = "https://twitch.tv/esl_csgo" },
-        new() { Id = 2, TournamentId = 1, TeamA = "Spirit", TeamB = "Faze", ScoreA = 0, ScoreB = 0, Status = "planned", Round = "R1", GroupName = "A", StreamUrl = "https://www.youtube.com/watch?v=jfKfPfyJRdk" },
-        new() { Id = 3, TournamentId = 2, TeamA = "Team Alpha", TeamB = "Team Beta", ScoreA = 0, ScoreB = 0, Status = "planned", Round = "Группа A", GroupName = "A", StreamUrl = "" }
-    };
-
-    public MatchesController(AppDbContext db, PandaScoreService pandascore, TournamentPlanningService planning, IHubContext<MatchesHub> hub)
+    public MatchesController(AppDbContext db, PandaScoreService pandascore, IHubContext<MatchesHub> hub)
     {
         _db = db;
         _pandascore = pandascore;
-        _planning = planning;
         _hub = hub;
-    }
-
-    public class DemoMatch
-    {
-        public int Id { get; set; }
-        public int TournamentId { get; set; }
-        public string TeamA { get; set; } = string.Empty;
-        public string TeamB { get; set; } = string.Empty;
-        public int ScoreA { get; set; }
-        public int ScoreB { get; set; }
-        public string Status { get; set; } = "planned";
-        public string Round { get; set; } = "R1";
-        public string GroupName { get; set; } = string.Empty;
-        public string StreamUrl { get; set; } = string.Empty;
     }
 
     public class MatchResultRequest
@@ -56,6 +34,8 @@ public class MatchesController : ControllerBase
     public async Task<IActionResult> Get([FromQuery] int tournamentId, CancellationToken ct)
     {
         var tournament = await _db.Tournaments.FindAsync(new object[] { tournamentId }, ct);
+        
+        // 1. Обработка внешних турниров (PandaScore)
         if (tournament != null && tournament.IsExternal && !string.IsNullOrWhiteSpace(tournament.ProviderTournamentId) && _pandascore.Enabled)
         {
             var matches = await _pandascore.GetMatchesForTournamentAsync(tournament.ProviderTournamentId!, 50, tournament.Game, ct);
@@ -75,41 +55,75 @@ public class MatchesController : ControllerBase
             return Ok(payload);
         }
 
-        if (tournament != null)
+        // 2. Обработка локальных турниров (Берем данные из таблицы Matches)
+        var matchesFromDb = await _db.Matches
+            .Include(m => m.TeamA)
+            .Include(m => m.TeamB)
+            .Where(m => m.TournamentId == tournamentId)
+            .OrderBy(m => m.RoundNumber)
+            .ToListAsync(ct);
+
+        if (matchesFromDb.Any())
         {
-            var dynamicPlan = await _planning.BuildPlanAsync(tournament, ct);
-            if (dynamicPlan.Matches.Count > 0)
+            var payload = matchesFromDb.Select(m => new
             {
-                var payload = dynamicPlan.Matches.Select((m, index) => new
-                {
-                    id = $"local-{tournamentId}-{index + 1}",
-                    tournamentId,
-                    teamA = m.TeamA,
-                    teamB = m.TeamB,
-                    scoreA = m.ScoreA,
-                    scoreB = m.ScoreB,
-                    status = m.Status,
-                    round = m.Round,
-                    groupName = dynamicPlan.StageType == "groups" ? m.Round : string.Empty,
-                    streamUrl = string.Empty
-                });
-                return Ok(payload);
-            }
+                id = m.Id,
+                tournamentId,
+                teamA = m.TeamA?.Name ?? "TBD",
+                teamB = m.TeamB?.Name ?? "TBD",
+                scoreA = m.ScoreA,
+                scoreB = m.ScoreB,
+                status = m.Status,
+                round = m.Round,
+                groupName = string.Empty,
+                streamUrl = string.Empty
+            });
+            return Ok(payload);
         }
 
-        return Ok(DemoMatches.Where(m => m.TournamentId == tournamentId));
+        return Ok(new List<object>()); // Возвращаем пустой список, если матчей еще нет
     }
 
-    [HttpPut("{id}/result")]
-    public async Task<IActionResult> SetMatchResult(string id, [FromBody] MatchResultRequest request)
+    [HttpPut("{id:int}/result")]
+    public async Task<IActionResult> SetMatchResult(int id, [FromBody] MatchResultRequest request)
     {
-        var match = DemoMatches.FirstOrDefault(m => string.Equals(m.Id.ToString(), id, StringComparison.OrdinalIgnoreCase));
+        // Проверка прав доступа (Админ или Судья)
+        if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+            return StatusCode(403, new { message = "Только администратор или судья может изменять результаты" });
+
+        var match = await _db.Matches
+            .Include(m => m.NextMatch)
+            .FirstOrDefaultAsync(m => m.Id == id);
+
         if (match == null)
-            return NotFound(new { message = "Match not found (editable only for local demo matches)" });
+            return NotFound(new { message = "Матч не найден" });
 
         match.ScoreA = request.ScoreA;
         match.ScoreB = request.ScoreB;
-        match.Status = "finished";
+        match.Status = "live";
+
+        // Логика завершения матча (например, до 16 раундов в CS)
+        if (match.ScoreA >= 16 || match.ScoreB >= 16)
+        {
+            match.Status = "finished";
+            match.WinnerId = match.ScoreA > match.ScoreB ? match.TeamAId : match.TeamBId;
+
+            // АВТОМАТИЧЕСКОЕ ПРОДВИЖЕНИЕ ПО СЕТКЕ
+            if (match.NextMatch != null && match.WinnerId.HasValue)
+            {
+                // Записываем победителя в следующий матч как Команду A или Команду B
+                if (match.NextMatch.TeamAId == null)
+                {
+                    match.NextMatch.TeamAId = match.WinnerId;
+                }
+                else if (match.NextMatch.TeamBId == null && match.NextMatch.TeamAId != match.WinnerId)
+                {
+                    match.NextMatch.TeamBId = match.WinnerId;
+                }
+            }
+        }
+
+        await _db.SaveChangesAsync();
 
         var payload = new
         {
@@ -121,7 +135,9 @@ public class MatchesController : ControllerBase
             updated = true
         };
 
+        // Отправка обновления через SignalR всем подписчикам турнира
         await _hub.Clients.Group($"tournament:{match.TournamentId}").SendAsync("matchUpdated", payload);
+
         return Ok(payload);
     }
 

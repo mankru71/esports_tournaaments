@@ -1,20 +1,24 @@
 {
   "format": 1,
   "restore": {
-    "D:\\project_practika\\backend_csharp\\EsportsBackend.csproj": {}
+    "D:\\esports_tournaaments\\backend_csharp\\EsportsBackend.csproj": {}
   },
   "projects": {
-    "D:\\project_practika\\backend_csharp\\EsportsBackend.csproj": {
+    "D:\\esports_tournaaments\\backend_csharp\\EsportsBackend.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\project_practika\\backend_csharp\\EsportsBackend.csproj",
+        "projectUniqueName": "D:\\esports_tournaaments\\backend_csharp\\EsportsBackend.csproj",
         "projectName": "EsportsBackend",
-        "projectPath": "D:\\project_practika\\backend_csharp\\EsportsBackend.csproj",
+        "projectPath": "D:\\esports_tournaaments\\backend_csharp\\EsportsBackend.csproj",
         "packagesPath": "C:\\Users\\artem\\.nuget\\packages\\",
-        "outputPath": "D:\\project_practika\\backend_csharp\\obj\\",
+        "outputPath": "D:\\esports_tournaaments\\backend_csharp\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
           "C:\\Users\\artem\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
@@ -40,7 +44,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.300"
+        "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
         "net8.0": {
@@ -55,6 +59,8 @@
               "version": "[8.0.12, )"
             },
             "Microsoft.EntityFrameworkCore.Tools": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
               "target": "Package",
               "version": "[8.0.12, )"
             },
@@ -86,7 +92,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.308/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

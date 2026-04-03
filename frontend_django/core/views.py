@@ -198,43 +198,65 @@ def tournaments(request):
     user = _read_current_user(request)
     roles = _role_flags(user)
 
-    if request.method == "POST" and request.POST.get("action") == "create_tournament":
-        if not token:
-            messages.info(request, "Войдите, чтобы создавать турниры")
-            return redirect("login")
-        if not roles["is_admin"]:
-            messages.error(request, "Создавать турниры может только администратор")
-            return redirect("tournaments")
-        form = TournamentCreateForm(request.POST)
-        if form.is_valid():
-            payload = {
-                "name": form.cleaned_data["name"],
-                "game": form.cleaned_data["game"],
-                "prizePool": float(form.cleaned_data["prize_pool"]),
-                "maxParticipants": form.cleaned_data["max_participants"],
-                "startDate": form.cleaned_data["start_date"].strftime("%Y-%m-%d"),
-                "format": form.cleaned_data["format"],
-                "stageType": form.cleaned_data["stage_type"],
-                "status": "planned",
-            }
-            create_result = api_client.create_tournament(token=token, payload=payload)
-            if create_result.ok:
-                messages.success(request, "Турнир создан")
-                new_id = (create_result.data or {}).get("id")
-                if new_id:
-                    return redirect("tournament_detail", tournament_id=new_id)
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        # --- БЛОК СОЗДАНИЯ ТУРНИРА ---
+        if action == "create_tournament":
+            if not token:
+                messages.info(request, "Войдите, чтобы создавать турниры")
+                return redirect("login")
+            if not roles["is_admin"]:
+                messages.error(request, "Создавать турниры может только администратор")
                 return redirect("tournaments")
-            messages.error(request, (create_result.error or {}).get("message", "Не удалось создать турнир"))
-        else:
-            for errs in form.errors.values():
-                for err in errs:
-                    messages.error(request, err)
+            form = TournamentCreateForm(request.POST)
+            if form.is_valid():
+                payload = {
+                    "name": form.cleaned_data["name"],
+                    "game": form.cleaned_data["game"],
+                    "prizePool": float(form.cleaned_data["prize_pool"]),
+                    "maxParticipants": form.cleaned_data["max_participants"],
+                    "startDate": form.cleaned_data["start_date"].strftime("%Y-%m-%d"),
+                    "format": form.cleaned_data["format"],
+                    "stageType": form.cleaned_data["stage_type"],
+                    "status": "planned",
+                }
+                create_result = api_client.create_tournament(token=token, payload=payload)
+                if create_result.ok:
+                    messages.success(request, "Турнир создан")
+                    new_id = (create_result.data or {}).get("id")
+                    if new_id:
+                        return redirect("tournament_detail", tournament_id=new_id)
+                    return redirect("tournaments")
+                messages.error(request, (create_result.error or {}).get("message", "Не удалось создать турнир"))
+            else:
+                for errs in form.errors.values():
+                    for err in errs:
+                        messages.error(request, err)
+        
+        # --- БЛОК УДАЛЕНИЯ ТУРНИРА ---
+        elif action == "delete_tournament":
+            if not token:
+                messages.info(request, "Войдите, чтобы управлять турнирами")
+                return redirect("login")
+            if not roles["is_admin"]:
+                messages.error(request, "Только админ может удалять турниры")
+                return redirect("tournaments")
+            
+            t_id = request.POST.get("tournament_id")
+            res = api_client.delete_tournament(t_id, token=token)
+            if res.ok:
+                messages.success(request, "Турнир успешно удален")
+            else:
+                messages.error(request, (res.error or {}).get("message", "Ошибка удаления турнира"))
+            return redirect("tournaments")
 
     tournaments_result = api_client.get_tournaments(token=token)
     tournaments_data = tournaments_result.data or []
     tournaments_list = [_normalize_tournament(item) for item in tournaments_data]
     if not tournaments_result.ok:
         messages.error(request, (tournaments_result.error or {}).get("message", "Не удалось получить турниры"))
+    
     return render(request, "tournaments.html", {"tournaments": tournaments_list, "create_tournament_form": TournamentCreateForm(), **roles})
 
 
@@ -357,7 +379,15 @@ def tournament_detail(request, tournament_id: int):
             else:
                 messages.error(request, (result.error or {}).get("message", "Не удалось сохранить настройки сетки"))
             return redirect("tournament_detail", tournament_id=tournament_id)
-
+        
+        if action == "generate_bracket":
+            result = api_client.generate_tournament_bracket(tournament_id, token=token)
+            if result.ok:
+                messages.success(request, "Сетка успешно сгенерирована!")
+            else:
+                messages.error(request, (result.error or {}).get("message", "Не удалось сгенерировать сетку (нужно минимум 2 команды)."))
+            return redirect("tournament_detail", tournament_id=tournament_id)
+        
         if action == "save_payouts":
             payouts = []
             for idx in range(1, 4):

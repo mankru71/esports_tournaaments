@@ -24,8 +24,76 @@ namespace Controllers
             var tournaments = _tournamentService.GetAllTournaments().Select(ToDto);
             return Ok(tournaments);
         }
+        [HttpPost("{id}/generate-bracket")]
+        public async Task<IActionResult> GenerateBracket(int id, [FromServices] TournamentPlanningService planningService)
+        {
+            // Проверка прав: только админ или судья
+            if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+                return StatusCode(403, new { message = "Только администратор или судья может генерировать сетку" });
 
+            // Вызываем наш сервис, который мы писали ранее!
+            var success = await planningService.GenerateAndSaveBracketAsync(id);
+            
+            if (!success)
+                return BadRequest(new { message = "Не удалось сгенерировать сетку. Убедитесь, что есть минимум 2 команды со статусом 'approved'." });
 
+            return Ok(new { message = "Сетка успешно сгенерирована" });
+        }
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id, [FromServices] Data.AppDbContext db)
+        {
+            if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin"))
+                return StatusCode(403, new { message = "Удалять турниры может только администратор" });
+
+            var tournament = await db.Tournaments.FindAsync(id);
+            if (tournament == null)
+                return NotFound(new { message = "Турнир не найден" });
+
+            // Удаляем турнир (EF Core удалит связанные матчи и заявки, если настроено каскадное удаление)
+            db.Tournaments.Remove(tournament);
+            await db.SaveChangesAsync();
+
+            return Ok(new { message = "Турнир успешно удален" });
+        }
+        [HttpGet("{id}/bracket")]
+        public async Task<IActionResult> GetBracket(int id, [FromServices] Data.AppDbContext db)
+        {
+            // Загружаем матчи из базы со всеми связями
+            var matches = await db.Matches
+                .Include(m => m.TeamA)
+                .Include(m => m.TeamB)
+                .Where(m => m.TournamentId == id)
+                .OrderBy(m => m.RoundNumber)
+                .ToListAsync();
+
+            // Формируем JSON, который ожидает твой Django (Views.py -> _normalize_match)
+            var result = new
+            {
+                summary = matches.Any() ? "Сетка построена" : "Сетка пока не построена — нужны заявки команд.",
+                groups = new List<object>(), // Можно расширить для групповых этапов
+                matches = matches.Select(m => new
+                {
+                    id = m.Id,
+                    teamA = m.TeamA?.Name ?? "TBD",
+                    teamB = m.TeamB?.Name ?? "TBD",
+                    scoreA = m.ScoreA,
+                    scoreB = m.ScoreB,
+                    status = m.Status,
+                    round = m.Round
+                })
+            };
+
+            return Ok(result);
+        }
+
+        // И добавь сюда же метод генерации (если еще не добавил)
+        [HttpPost("{id}/generate-bracket")]
+        public async Task<IActionResult> GenerateBracket(int id, [FromServices] Services.TournamentPlanningService planningService)
+        {
+            var success = await planningService.GenerateAndSaveBracketAsync(id);
+            if (!success) return BadRequest(new { message = "Нужно минимум 2 подтвержденные команды!" });
+            return Ok(new { message = "Сетка сгенерирована" });
+        }
         public class CreateTournamentRequest
         {
             public string Name { get; set; } = string.Empty;

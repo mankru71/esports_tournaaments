@@ -1,97 +1,55 @@
 using Microsoft.EntityFrameworkCore;
 using Models;
 
-namespace Data
+namespace Data;
+
+public class AppDbContext : DbContext
 {
-    public class AppDbContext : DbContext
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+    public DbSet<Nominee> Nominees { get; set; }
+    public DbSet<Vote> Votes { get; set; }
+    public DbSet<TeamPlayer> TeamPlayers { get; set; }
+    public DbSet<AppUser> Users { get; set; }
+    public DbSet<Team> Teams { get; set; }
+    public DbSet<Player> Players { get; set; }
+    public DbSet<Tournament> Tournaments { get; set; }
+    public DbSet<TournamentApplication> TournamentApplications { get; set; }
+    public DbSet<Match> Matches { get; set; }
+    // Существующие DbSets для Nominee, Vote...
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        base.OnModelCreating(modelBuilder);
 
-        public DbSet<Tournament> Tournaments { get; set; }
-        public DbSet<Nominee> Nominees { get; set; }
-        public DbSet<Vote> Votes { get; set; }
-        public DbSet<AppUser> Users { get; set; }
-        public DbSet<Team> Teams { get; set; }
-        public DbSet<TeamPlayer> TeamPlayers { get; set; }
-        public DbSet<TournamentApplication> TournamentApplications { get; set; }
-
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        // Настройка Match (самоссылки и защиты от каскадного удаления)
+        modelBuilder.Entity<Match>(entity =>
         {
-            modelBuilder.Entity<AppUser>().HasIndex(u => u.Email).IsUnique();
-            modelBuilder.Entity<AppUser>().HasIndex(u => u.Nickname).IsUnique();
+            entity.HasOne(m => m.TeamA)
+                  .WithMany()
+                  .HasForeignKey(m => m.TeamAId)
+                  .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<TeamPlayer>()
-                .HasIndex(tp => new { tp.TeamId, tp.Nickname })
-                .IsUnique();
+            entity.HasOne(m => m.TeamB)
+                  .WithMany()
+                  .HasForeignKey(m => m.TeamBId)
+                  .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<Team>()
-                .HasOne(t => t.CaptainUser)
-                .WithMany()
-                .HasForeignKey(t => t.CaptainUserId)
-                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(m => m.Winner)
+                  .WithMany()
+                  .HasForeignKey(m => m.WinnerId)
+                  .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<TeamPlayer>()
-                .HasOne(tp => tp.Team)
-                .WithMany(t => t.Players)
-                .HasForeignKey(tp => tp.TeamId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(m => m.NextMatch)
+                  .WithMany()
+                  .HasForeignKey(m => m.NextMatchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
 
-            modelBuilder.Entity<TournamentApplication>()
-                .HasIndex(a => new { a.TournamentId, a.TeamId })
-                .IsUnique();
-
-            modelBuilder.Entity<TournamentApplication>()
-                .HasOne(a => a.Team)
-                .WithMany()
-                .HasForeignKey(a => a.TeamId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<TournamentApplication>()
-                .HasOne(a => a.Tournament)
-                .WithMany()
-                .HasForeignKey(a => a.TournamentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<TournamentApplication>()
-                .HasOne(a => a.ApplicantUser)
-                .WithMany()
-                .HasForeignKey(a => a.ApplicantUserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            modelBuilder.Entity<Tournament>()
-                .HasIndex(t => new { t.Provider, t.ProviderTournamentId })
-                .IsUnique();
-
-            modelBuilder.Entity<Tournament>().HasData(
-                new Tournament
-                {
-                    Id = 1,
-                    Name = "Чемпионат Major по CS2",
-                    Game = "CS2",
-                    PrizePool = 1000000,
-                    MaxParticipants = 16,
-                    CurrentParticipants = 8,
-                    StartDate = "2026-10-24",
-                    Status = "planned",
-                    Format = "single_elimination",
-                    StageType = "single",
-                    PrizeDistributionJson = "[{\"place\":\"1 место\",\"percent\":50},{\"place\":\"2 место\",\"percent\":30},{\"place\":\"3 место\",\"percent\":20}]"
-                },
-                new Tournament
-                {
-                    Id = 2,
-                    Name = "Dota 2 University Cup",
-                    Game = "Dota 2",
-                    PrizePool = 300000,
-                    MaxParticipants = 8,
-                    CurrentParticipants = 4,
-                    StartDate = "2026-11-04",
-                    Status = "planned",
-                    Format = "group_stage",
-                    StageType = "groups",
-                    PrizeDistributionJson = "[{\"place\":\"1 место\",\"percent\":60},{\"place\":\"2 место\",\"percent\":25},{\"place\":\"3 место\",\"percent\":15}]"
-                }
-            );
-        }
+        // Капитан команды
+        modelBuilder.Entity<Team>()
+            .HasOne(t => t.CaptainUser) 
+            .WithMany()
+            .HasForeignKey(t => t.CaptainUserId) 
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -115,6 +115,9 @@ class CSharpApiClient:
     def create_tournament(self, token: str, payload: dict) -> ApiResult:
         return self._request("POST", "tournament", data=payload, token=token)
 
+    def delete_tournament(self, tournament_id: int, token: str) -> ApiResult:
+        return self._request("DELETE", f"tournament/{tournament_id}", token=token)
+    
     def get_tournament(self, tournament_id: int, token: str | None = None) -> ApiResult:
         return self._request("GET", f"tournament/{tournament_id}", token=token)
 
@@ -138,6 +141,9 @@ class CSharpApiClient:
     def confirm_team_player_rating(self, team_id: int, player_id: int, token: str) -> ApiResult:
         return self._request("POST", f"teams/{team_id}/players/{player_id}/confirm-rating", token=token)
 
+    def generate_tournament_bracket(self, tournament_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"tournament/{tournament_id}/generate-bracket", token=token)
+    
     def delete_team_player(self, team_id: int, player_id: int, token: str) -> ApiResult:
         return self._request("DELETE", f"teams/{team_id}/players/{player_id}", token=token)
 

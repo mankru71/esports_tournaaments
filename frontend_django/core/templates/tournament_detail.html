@@ -66,6 +66,13 @@
                 <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
               </form>
             {% endif %}
+            {% if is_admin or is_judge %}
+              <form method="post" class="mt-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="generate_bracket">
+                <button class="btn btn-sm btn-success w-100" type="submit">Сгенерировать сетку матчей</button>
+              </form>
+              {% endif %}
           </div>
           {% if bracket.summary %}<div class="text-muted small mb-3">{{ bracket.summary }}</div>{% endif %}
           {% if bracket.groups %}

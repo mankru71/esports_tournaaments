@@ -16,7 +16,10 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ILogger<AuthController> _logger;
-
+    public decimal? Rating { get; set; }
+    public bool RatingVerified { get; set; }
+    public DateTime? RatingVerifiedAtUtc { get; set; }
+    
     public AuthController(AppDbContext db, ILogger<AuthController> logger)
     {
         _db = db;
