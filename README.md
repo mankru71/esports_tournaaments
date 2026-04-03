@@ -29,7 +29,7 @@ docker compose up -d --build
 
 Если нужно полностью сбросить БД/тома:
 ```powershell
-docker compose down -v --remove-orphans
+docker compose down -v
 docker compose up -d --build
 ```
 

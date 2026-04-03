@@ -45,7 +45,6 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // Капитан команды
         modelBuilder.Entity<Team>()
             .HasOne(t => t.CaptainUser) 
             .WithMany()

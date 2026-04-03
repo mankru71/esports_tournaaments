@@ -81,7 +81,7 @@ public class EsportsDataController : ControllerBase
             if (string.IsNullOrWhiteSpace(tournament.Id))
                 continue;
 
-            var matches = await _pandascore.GetMatchesForTournamentAsync(tournament.Id, 50, game ?? tournament.VideogameSlug, ct);
+            var matches = await _pandascore.GetMatchesForTournamentAsync(tournament.Id, 50, tournament.VideogameSlug ?? game, ct);
             if (matches.Count == 0)
                 continue;
 
@@ -92,7 +92,7 @@ public class EsportsDataController : ControllerBase
         }
 
         if (selectedTournament == null)
-            return NotFound(new { message = "Не удалось получить матчи турнира" });
+            selectedTournament = tournaments.First();
 
         var streams = selectedMatches
             .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))

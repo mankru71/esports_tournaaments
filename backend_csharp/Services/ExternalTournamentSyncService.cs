@@ -32,7 +32,14 @@ public class ExternalTournamentSyncService
 
         try
         {
-            var upcoming = await _pandascore.GetUpcomingTournamentsAsync(25, ct: ct);
+            var synced = new List<PandaTournament>();
+            synced.AddRange(await _pandascore.GetRunningTournamentsAsync(15, ct: ct));
+            synced.AddRange(await _pandascore.GetUpcomingTournamentsAsync(25, ct: ct));
+            var upcoming = synced
+                .Where(t => !string.IsNullOrWhiteSpace(t.Id))
+                .GroupBy(t => t.Id)
+                .Select(g => g.First())
+                .ToList();
 
             foreach (var t in upcoming)
             {

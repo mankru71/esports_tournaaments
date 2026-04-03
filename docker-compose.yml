@@ -11,6 +11,7 @@ services:
       - ASPNETCORE_URLS=http://+:5000
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${DB_NAME:-esports_db};Username=${DB_USER:-esports_user};Password=${DB_PASSWORD:-esports123}
       - PandaScore__Token=${PANDASCORE_TOKEN}
+      - PandaScore__Enabled=true            
       - PANDASCORE_TOKEN=${PANDASCORE_TOKEN}
       - PANDASCORE_BASE_URL=${PANDASCORE_BASE_URL:-https://api.pandascore.co}
     depends_on:

@@ -102,6 +102,9 @@ public class MatchesController : ControllerBase
         match.ScoreB = request.ScoreB;
         match.Status = "live";
 
+        if (match.ScoreA == match.ScoreB && match.NextMatchId.HasValue)
+            return BadRequest(new { message = "Для матчей плей-офф ничья недопустима. Укажите победителя." });
+
         // Логика завершения матча (например, до 16 раундов в CS)
         if (match.ScoreA >= 16 || match.ScoreB >= 16)
         {
@@ -111,7 +114,6 @@ public class MatchesController : ControllerBase
             // АВТОМАТИЧЕСКОЕ ПРОДВИЖЕНИЕ ПО СЕТКЕ
             if (match.NextMatch != null && match.WinnerId.HasValue)
             {
-                // Записываем победителя в следующий матч как Команду A или Команду B
                 if (match.NextMatch.TeamAId == null)
                 {
                     match.NextMatch.TeamAId = match.WinnerId;

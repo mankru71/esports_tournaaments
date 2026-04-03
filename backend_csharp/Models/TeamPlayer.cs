@@ -18,4 +18,4 @@ public class TeamPlayer
     public string? ExternalPlayerId { get; set; }
     public string? ExternalProfileUrl { get; set; }
     public DateTime? ConfirmedAtUtc { get; set; }
-}dotnet build
+}

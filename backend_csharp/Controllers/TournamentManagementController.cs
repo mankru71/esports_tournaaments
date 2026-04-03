@@ -3,6 +3,7 @@ using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Services;
+using System.Linq;
 using System.Text.Json;
 
 namespace Controllers;
@@ -45,7 +46,31 @@ public class TournamentManagementController : ControllerBase
             return NotFound(new { message = "Турнир не найден" });
 
         var plan = await _planning.BuildPlanAsync(tournament, ct);
-        return Ok(plan);
+        return Ok(new
+        {
+            stageType = plan.StageType,
+            groups = plan.Groups.Select(g => new
+            {
+                name = g.Name,
+                teams = g.Teams.Select(t => new
+                {
+                    teamId = t.TeamId,
+                    name = t.Name,
+                    seed = t.Seed,
+                    ratingAverage = t.RatingAverage
+                }).ToList()
+            }).ToList(),
+            matches = plan.Matches.Select(m => new
+            {
+                round = m.Round,
+                teamA = m.TeamA,
+                teamB = m.TeamB,
+                scoreA = m.ScoreA,
+                scoreB = m.ScoreB,
+                status = m.Status
+            }).ToList(),
+            summary = plan.Summary
+        });
     }
 
     [HttpPost("planning")]

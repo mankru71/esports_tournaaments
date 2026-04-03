@@ -21,29 +21,31 @@ public class StreamsController : ControllerBase
         if (!_pandascore.Enabled)
             return StatusCode(503, new { message = "PandaScore token is not configured (PANDASCORE_TOKEN)" });
 
-        var query = string.IsNullOrWhiteSpace(q) ? "Major" : q!.Trim();
-        var tournaments = await _pandascore.SearchTournamentsAsync(query, 5, ct: ct);
-        var t = tournaments.FirstOrDefault();
+        var tournaments = string.IsNullOrWhiteSpace(q)
+            ? await _pandascore.GetRunningTournamentsAsync(5, ct: ct)
+            : await _pandascore.SearchTournamentsAsync(q!.Trim(), 5, ct: ct);
 
-        if (t == null || string.IsNullOrWhiteSpace(t.Id))
-            return Ok(Array.Empty<object>());
+        foreach (var tournament in tournaments.Where(t => !string.IsNullOrWhiteSpace(t.Id)))
+        {
+            var matches = await _pandascore.GetMatchesForTournamentAsync(tournament.Id, 50, tournament.VideogameSlug, ct);
+            var payload = matches
+                .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))
+                .Select(m => new
+                {
+                    provider = DetectProvider(m.StreamUrl!),
+                    url = m.StreamUrl!,
+                    channel = ExtractChannel(m.StreamUrl!),
+                    status = new { online = false, viewers = 0 },
+                    meta = new { source = "pandascore", tournament = tournament.Name, match = m.Name }
+                })
+                .DistinctBy(x => x.url)
+                .ToList();
 
-        var matches = await _pandascore.GetMatchesForTournamentAsync(t.Id, 50, ct: ct);
+            if (payload.Count > 0)
+                return Ok(payload);
+        }
 
-        var payload = matches
-            .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))
-            .Select(m => new
-            {
-                provider = DetectProvider(m.StreamUrl!),
-                url = m.StreamUrl!,
-                channel = ExtractChannel(m.StreamUrl!),
-                status = new { online = false, viewers = 0 },
-                meta = new { source = "pandascore", tournament = t.Name, match = m.Name }
-            })
-            .DistinctBy(x => x.url)
-            .ToList();
-
-        return Ok(payload);
+        return Ok(Array.Empty<object>());
     }
 
     private static string DetectProvider(string url)
