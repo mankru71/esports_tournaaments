@@ -16,10 +16,6 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ILogger<AuthController> _logger;
-    public decimal? Rating { get; set; }
-    public bool RatingVerified { get; set; }
-    public DateTime? RatingVerifiedAtUtc { get; set; }
-    
     public AuthController(AppDbContext db, ILogger<AuthController> logger)
     {
         _db = db;
@@ -213,6 +209,15 @@ public class AuthController : ControllerBase
         nickname = user.Nickname,
         role = user.Role,
         bio = user.Bio,
+        
+        isEmailVerified = user.IsEmailVerified,
+        faceitNickname = user.FaceitNickname,
+        faceitElo = user.FaceitElo,
+        faceitLevel = user.FaceitLevel,
+        faceitAvatar = user.FaceitAvatar,
+        faceitProfileUrl = user.FaceitProfileUrl,
+        faceitLinkedAt = user.FaceitLinkedAt,
+
         rating = user.Rating,
         ratingProvider = user.RatingProvider,
         ratingVerified = user.RatingVerified,

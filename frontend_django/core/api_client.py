@@ -182,7 +182,14 @@ class CSharpApiClient:
 
     def get_analytics(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "analytics", token=token)
+    
+    def send_email_verification(self, user_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"verification/send/{user_id}", token=token)
 
+    def confirm_email(self, user_id: int, verify_token: str) -> ApiResult:
+        payload = {"userId": user_id, "token": token}
+        return self._request("POST", "api/verification/confirm", data=payload)
+    
     def get_analytics_csv(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "analytics/export/csv", token=token)
 
@@ -209,6 +216,21 @@ class CSharpApiClient:
 
     def health_check(self) -> bool:
         return self._request("GET", "health").ok
+
+    def verify_faceit_account(self, user_id: int, nickname: str, token: str):
+        payload = {"FaceitNickname": nickname}
+        return self._request("POST", f"integrations/faceit/verify/{user_id}", data=payload, token=token)
+    
+    def verify_faceit(self, user_id: int, faceit_nickname: str, token: str) -> "ApiResult":
+        return self._request(
+            "POST",
+            f"integrations/faceit/verify/{user_id}",
+            data={"faceitNickname": faceit_nickname},
+            token=token,
+        )
+
+    def unlink_faceit(self, user_id: int, token: str) -> "ApiResult":
+        return self._request("DELETE", f"integrations/faceit/unlink/{user_id}", token=token)
 
     def esports_player(self, nickname: str, game: str = "counterstrike") -> ApiResult:
         return self._request("GET", "esports/player", params={"nickname": nickname, "game": game})

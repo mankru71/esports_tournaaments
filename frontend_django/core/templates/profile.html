@@ -1,95 +1,235 @@
 {% extends "base.html" %}
 {% block title %}Профиль{% endblock %}
 {% block content %}
-<section class="mb-4">
+<div class="text-muted">Email: <span class="fw-semibold">{{ current_user.email }}</span></div>
+
+{% if not current_user.isEmailVerified %}
+<div class="alert alert-danger mt-2 d-flex justify-content-between align-items-center p-2">
+    <span>⚠️ Почта не подтверждена!</span>
+    <form method="post" class="m-0">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="send_verification_email">
+        <button type="submit" class="btn btn-sm btn-danger">Отправить ссылку</button>
+    </form>
+</div>
+{% else %}
+<div class="badge bg-success mt-1 mb-2">✓ Почта подтверждена</div>
+{% endif %}
+<section class="mb-5">
   <div class="row g-4">
+
+    <!-- LEFT: Profile edit + Faceit -->
     <div class="col-lg-5">
-      <div class="form-card p-4 p-md-5 h-100">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-          <div>
-            <h1 class="h3 mb-1">Профиль</h1>
-            <div class="text-muted">Email: <span class="fw-semibold">{{ current_user.email }}</span></div>
-            <div class="text-muted">Роль: <span class="fw-semibold text-capitalize">{{ current_user.role }}</span></div>
+
+      <!-- Profile info card -->
+      <div class="form-card p-4 mb-4">
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width:56px;height:56px;font-size:1.4rem;font-weight:700;color:#fff;">
+            {{ current_user.nickname|first|upper }}
           </div>
-          <a class="btn btn-sm btn-outline-accent" href="{% url 'streams' %}">Поиск игроков и стримов</a>
+          <div>
+            <h1 class="h5 mb-0 fw-bold">{{ current_user.nickname }}</h1>
+            <div class="text-muted small">{{ current_user.email }}</div>
+            <span class="badge bg-secondary text-capitalize mt-1">{{ current_user.role }}</span>
+          </div>
         </div>
 
-        <form method="post" class="d-flex flex-column gap-3 mb-4">
+        <form method="post" class="d-flex flex-column gap-3">
           {% csrf_token %}
           <input type="hidden" name="action" value="save_profile">
           <div>
-            <label class="form-label">{{ edit_form.nickname.label }}</label>
+            <label class="form-label fw-semibold">{{ edit_form.nickname.label }}</label>
             {{ edit_form.nickname }}
           </div>
           <div>
-            <label class="form-label">{{ edit_form.bio.label }}</label>
+            <label class="form-label fw-semibold">{{ edit_form.bio.label }}</label>
             {{ edit_form.bio }}
           </div>
           <button class="btn btn-accent" type="submit">Сохранить профиль</button>
         </form>
+      </div>
 
-        <div class="border-top pt-3">
-          <h2 class="h5 mb-3">Подтверждение рейтинга</h2>
-          <div class="row g-2 small mb-3">
-            <div class="col-6"><div class="text-muted">Рейтинг</div><div class="fw-semibold">{{ current_user.rating|default:"—" }}</div></div>
-            <div class="col-6"><div class="text-muted">Провайдер</div><div class="fw-semibold">{{ current_user.ratingProvider|default:"—" }}</div></div>
-            <div class="col-6"><div class="text-muted">Подтвержден</div><div class="fw-semibold">{% if current_user.ratingVerified %}Да{% else %}Нет{% endif %}</div></div>
-            <div class="col-6"><div class="text-muted">Дата</div><div class="fw-semibold">{{ current_user.ratingVerifiedAtUtc|default:"—" }}</div></div>
-            <div class="col-12"><div class="text-muted">Профиль</div><div class="fw-semibold text-break">{% if current_user.ratingProfileUrl %}<a href="{{ current_user.ratingProfileUrl }}" target="_blank" rel="noopener">{{ current_user.ratingProfileUrl }}</a>{% else %}—{% endif %}</div></div>
+      <!-- Faceit card -->
+      <div class="form-card p-4">
+        <h2 class="h5 fw-bold mb-3 d-flex align-items-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff5500" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18L20 8.5v7l-8 4-8-4v-7l8-4.32z"/>
+          </svg>
+          Faceit
+        </h2>
+
+        {% if current_user.faceitNickname %}
+          <!-- Linked player widget -->
+          <div class="rounded-3 p-3 mb-3"
+               style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border:1px solid #ff5500;">
+            <div class="d-flex align-items-center gap-3">
+              {% if current_user.faceitAvatar %}
+                <img src="{{ current_user.faceitAvatar }}" alt="{{ current_user.faceitNickname }}"
+                     class="rounded-circle flex-shrink-0"
+                     style="width:52px;height:52px;object-fit:cover;border:2px solid #ff5500;">
+              {% else %}
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                     style="width:52px;height:52px;background:#ff5500;font-weight:700;font-size:1.3rem;color:#fff;">
+                  {{ current_user.faceitNickname|first|upper }}
+                </div>
+              {% endif %}
+
+              <div class="flex-grow-1 min-w-0">
+                <div class="fw-bold text-white text-truncate">{{ current_user.faceitNickname }}</div>
+                <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                  {% with lvl=current_user.faceitLevel %}
+                  <span class="badge fw-bold px-2 py-1"
+                    style="background:{% if lvl >= 10 %}#e03030{% elif lvl >= 8 %}#ff5500{% elif lvl >= 6 %}#ff9900{% elif lvl >= 4 %}#f0c040{% else %}#777{% endif %};color:#fff;font-size:.8rem;">
+                    Lvl {{ lvl|default:"—" }}
+                  </span>
+                  {% endwith %}
+                  <span class="fw-semibold" style="color:#ffb347;">
+                    {{ current_user.faceitElo|default:"—" }} ELO
+                  </span>
+                </div>
+              </div>
+
+              {% if current_user.faceitProfileUrl %}
+                <a href="{{ current_user.faceitProfileUrl }}" target="_blank" rel="noopener"
+                   class="btn btn-sm flex-shrink-0"
+                   style="background:#ff5500;color:#fff;border:none;font-size:.8rem;">
+                  ↗ Профиль
+                </a>
+              {% endif %}
+            </div>
           </div>
 
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="unlink_faceit">
+            <button class="btn btn-sm btn-outline-secondary w-100" type="submit">
+              Отвязать Faceit-аккаунт
+            </button>
+          </form>
+
+        {% else %}
+          <!-- Link form -->
+          <p class="text-muted small mb-3">
+            Привяжите Faceit-аккаунт, чтобы отображать ELO, уровень и аватар.
+          </p>
           <form method="post" class="d-flex flex-column gap-3">
             {% csrf_token %}
-            <input type="hidden" name="action" value="verify_rating">
+            <input type="hidden" name="action" value="verify_faceit">
             <div>
-              <label class="form-label">{{ verify_form.provider.label }}</label>
-              {{ verify_form.provider }}
+              <label class="form-label fw-semibold">{{ faceit_form.faceit_nickname.label }}</label>
+              {{ faceit_form.faceit_nickname }}
             </div>
-            <div>
-              <label class="form-label">{{ verify_form.profile_url.label }}</label>
-              {{ verify_form.profile_url }}
-            </div>
-            <button class="btn btn-outline-accent" type="submit">Подтвердить рейтинг (mock)</button>
+            <button class="btn w-100 fw-semibold" type="submit"
+                    style="background:#ff5500;border-color:#ff5500;color:#fff;">
+              Привязать Faceit
+            </button>
           </form>
-        </div>
+        {% endif %}
       </div>
     </div>
+    <div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Игровой профиль Faceit</h5>
+    </div>
+    <div class="card-body">
+        {% if current_user.faceitNickname %}
+            <div class="d-flex align-items-center bg-light p-3 rounded border">
+                {% if current_user.faceitAvatar %}
+                    <img src="{{ current_user.faceitAvatar }}" alt="Avatar" class="rounded-circle me-3" width="64" height="64" style="object-fit: cover;">
+                {% else %}
+                    <div class="rounded-circle bg-secondary me-3 d-flex align-items-center justify-content-center text-white fw-bold" style="width: 64px; height: 64px;">F</div>
+                {% endif %}
+                
+                <div class="flex-grow-1">
+                    <h4 class="mb-1 text-dark fw-bold">{{ current_user.faceitNickname }}</h4>
+                    <div class="d-flex gap-3 align-items-center">
+                        <span class="badge bg-warning text-dark fs-6" title="ELO">📈 {{ current_user.faceitElo }} ELO</span>
+                        <span class="badge bg-danger fs-6" title="Уровень">🏆 Lvl {{ current_user.faceitLevel }}</span>
+                    </div>
+                </div>
+                
+                <div class="text-end">
+                    <a href="{{ current_user.faceitProfileUrl }}" target="_blank" class="btn btn-sm btn-outline-dark mb-2 d-block">Открыть профиль</a>
+                    <form method="post" class="m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="unlink_faceit">
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">Отвязать</button>
+                    </form>
+                </div>
+            </div>
 
+        {% else %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="verify_faceit">
+                <div class="mb-3">
+                    <label class="form-label">Никнейм на Faceit</label>
+                    <div class="input-group">
+                        {{ faceit_form.faceit_nickname }}
+                        <button type="submit" class="btn btn-warning">Привязать</button>
+                    </div>
+                    <div class="form-text">Введите ваш точный никнейм на платформе Faceit (регистр важен).</div>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+</div>
+
+    <!-- RIGHT: PandaScore data -->
     <div class="col-lg-7">
-      <div class="form-card p-4 p-md-5 h-100">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+      <div class="form-card p-4 h-100 d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
           <div>
-            <h2 class="h5 mb-1">Данные игрока (PandaScore)</h2>
-            <div class="text-muted small">Ник автоматически берётся из аккаунта.</div>
+            <h2 class="h5 fw-bold mb-1">Данные игрока (PandaScore)</h2>
+            <div class="text-muted small">Ник берётся из аккаунта автоматически.</div>
           </div>
-          {% if esports_payload %}<span class="badge text-bg-secondary">Источник: {{ esports_payload.source }}</span>{% endif %}
+          {% if esports_payload %}
+            <span class="badge bg-secondary">{{ esports_payload.source }}</span>
+          {% endif %}
         </div>
 
         {% if esports_results %}
-          <div class="text-muted small mb-3">Найдено совпадений: {{ esports_results|length }}</div>
-          <div class="d-flex flex-column gap-2">
+          <div class="text-muted small mb-3">Найдено: {{ esports_results|length }}</div>
+          <div class="d-flex flex-column gap-2 flex-grow-1">
             {% for p in esports_results %}
               <div class="card p-3">
-                <div class="d-flex justify-content-between align-items-start gap-2">
-                  <div>
-                    <div class="fw-semibold">{{ p.name|default:"(без имени)" }}</div>
-                    <div class="text-muted small">
-                      {% if p.currentTeam %}{{ p.currentTeam }} · {% endif %}
-                      {% if p.role %}роль: {{ p.role }} · {% endif %}
-                      {% if p.nationality %}{{ p.nationality }}{% endif %}
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div class="flex-grow-1 min-w-0">
+                    <div class="fw-semibold text-truncate">{{ p.name|default:"(без имени)" }}</div>
+                    <div class="text-muted small mt-1">
+                      {% if p.currentTeam %}<span>{{ p.currentTeam }}</span> · {% endif %}
+                      {% if p.role %}<span>{{ p.role }}</span> · {% endif %}
+                      {% if p.nationality %}<span>{{ p.nationality }}</span>{% endif %}
                     </div>
-                    {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">Открыть профиль/справку</a>{% endif %}
+                    {% if p.profileUrl %}
+                      <a class="small mt-1 d-inline-block" href="{{ p.profileUrl }}"
+                         target="_blank" rel="noopener">Открыть профиль →</a>
+                    {% endif %}
                   </div>
-                  {% if p.imageUrl %}<img src="{{ p.imageUrl }}" alt="player" style="width:48px;height:48px;border-radius:14px;object-fit:cover;">{% endif %}
+                  {% if p.imageUrl %}
+                    <img src="{{ p.imageUrl }}" alt="{{ p.name }}"
+                         class="flex-shrink-0 rounded-3"
+                         style="width:48px;height:48px;object-fit:cover;">
+                  {% endif %}
                 </div>
               </div>
             {% endfor %}
           </div>
         {% else %}
-          <div class="alert alert-info mb-0">{% if esports_error %}{{ esports_error }}{% else %}Не удалось загрузить данные.{% endif %}</div>
+          <div class="alert alert-info flex-grow-1 mb-0">
+            {{ esports_error|default:"Не удалось загрузить данные." }}
+          </div>
         {% endif %}
+
+        <div class="mt-4 pt-3 border-top">
+          <a class="btn btn-sm btn-outline-accent" href="{% url 'streams' %}">
+            Поиск игроков и стримов →
+          </a>
+        </div>
       </div>
     </div>
+
   </div>
 </section>
 {% endblock %}

@@ -139,3 +139,15 @@ class TournamentCreateForm(forms.Form):
     start_date = forms.DateField(label='Дата старта', widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}))
     format = forms.ChoiceField(label='Формат', choices=(('single_elimination', 'Single elimination'), ('group_stage', 'Group stage')), widget=forms.Select(attrs={'class': 'form-select'}))
     stage_type = forms.ChoiceField(label='Тип этапа', choices=(('single', 'Single bracket'), ('groups', 'Groups')), widget=forms.Select(attrs={'class': 'form-select'}))
+
+
+class FaceitVerifyForm(forms.Form):
+    faceit_nickname = forms.CharField(
+        label='Faceit-ник',
+        max_length=64,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 's1mple',
+            'autocomplete': 'off'
+        })
+    )

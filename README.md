@@ -29,7 +29,7 @@ docker compose up -d --build
 
 Если нужно полностью сбросить БД/тома:
 ```powershell
-docker compose down -v
+docker compose down -v --remove-orphans
 docker compose up -d --build
 ```
 
@@ -63,3 +63,5 @@ Linux/macOS:
 - Если nginx уходит в restarting, проверь `nginx/nginx.conf`.
 - Если БД в странном состоянии, используй `docker compose down -v --remove-orphans`.
 - Если PandaScore не настроен, внешние турниры/стримы могут быть недоступны, но локальный сценарий защиты должен работать.
+
+yrbfzhsgtijcdrez

@@ -1,8 +1,8 @@
+# frontend_django/esports_tournament/urls.py
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
-
 from core import views
 
 urlpatterns = [
@@ -11,6 +11,9 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('profile/', views.profile, name='profile'),
+    # ДОБАВЛЯЕМ ЭТУ СТРОКУ:
+    path('verify-email/', views.verify_email_view, name='verify_email'),
+    
     path('tournaments/', views.tournaments, name='tournaments'),
     path('tournaments/<int:tournament_id>/', views.tournament_detail, name='tournament_detail'),
     path('tournaments/<int:tournament_id>/matches/', views.match_center, name='match_center'),

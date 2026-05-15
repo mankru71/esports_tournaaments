@@ -1,11 +1,12 @@
 from datetime import date
-
 from django.contrib import messages
 from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
-
 from .api_client import api_client
-from .forms import LoginForm, MatchResultForm, RegistrationForm, TeamCreateForm, TeamPlayerForm, ProfileEditForm, RatingVerifyForm, TournamentCreateForm
+from .forms import (
+    FaceitVerifyForm, LoginForm, MatchResultForm, ProfileEditForm,
+    RegistrationForm, TeamCreateForm, TeamPlayerForm, TournamentCreateForm,
+)
 
 ROLE_ADMIN = "admin"
 ROLE_JUDGE = "judge"
@@ -25,6 +26,25 @@ def _normalize_status(value):
     key = (value or "planned").lower()
     return key, STATUS_LABELS.get(key, value or "Запланирован")
 
+def verify_email_view(request):
+    """ЭТА ФУНКЦИЯ ДОЛЖНА БЫТЬ ЗДЕСЬ"""
+    user_id = request.GET.get('userId')
+    token = request.GET.get('token')
+    api_token = request.session.get("api_token")
+
+    if not user_id or not token:
+        messages.error(request, "Неверная ссылка для подтверждения.")
+        return redirect('login')
+
+    result = api_client.confirm_email(user_id, token)
+    if result.ok:
+        messages.success(request, "🎉 Ваша почта успешно подтверждена!")
+    else:
+        messages.error(request, "Ссылка недействительна или устарела.")
+        
+    if api_token:
+        return redirect('profile')
+    return redirect('login')
 
 def _normalize_tournament(item):
     status_key, status_label = _normalize_status(item.get("status", "planned"))
@@ -119,15 +139,14 @@ def _read_current_user(request):
 
 
 def _role_flags(user):
-    role = (user or {}).get("role", "guest")
+    if not user:
+        return {"is_admin": False, "is_organizer": False, "current_user": None}
+    role = (user.get("role") or "").lower()
     return {
-        "is_admin": role == ROLE_ADMIN,
-        "is_judge": role == ROLE_JUDGE,
-        "is_captain": role == ROLE_CAPTAIN,
-        "is_viewer": role == ROLE_VIEWER,
-        "current_user": user,
+        "is_admin": role == "admin",
+        "is_organizer": role in ["admin", "organizer"],
+        "current_user": user
     }
-
 
 def _process_result_error(request, result, *, clear_session_on_401=True):
     if result.ok:
@@ -201,7 +220,6 @@ def tournaments(request):
     if request.method == "POST":
         action = request.POST.get("action")
 
-        # --- БЛОК СОЗДАНИЯ ТУРНИРА ---
         if action == "create_tournament":
             if not token:
                 messages.info(request, "Войдите, чтобы создавать турниры")
@@ -234,7 +252,6 @@ def tournaments(request):
                     for err in errs:
                         messages.error(request, err)
         
-        # --- БЛОК УДАЛЕНИЯ ТУРНИРА ---
         elif action == "delete_tournament":
             if not token:
                 messages.info(request, "Войдите, чтобы управлять турнирами")
@@ -388,6 +405,37 @@ def tournament_detail(request, tournament_id: int):
                 messages.error(request, (result.error or {}).get("message", "Не удалось сгенерировать сетку (нужно минимум 2 команды)."))
             return redirect("tournament_detail", tournament_id=tournament_id)
         
+def profile_view(request):
+    user_id = request.session.get("user_id", 1) 
+    token = request.session.get("auth_token", "")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "verify_faceit":
+            nickname = request.POST.get("faceit_nickname", "").strip()
+            
+            result = api_client.verify_faceit_account(user_id, nickname, token)
+
+            if result.ok:
+                level = result.data.get('level')
+                elo = result.data.get('elo')
+                messages.success(request, f"Faceit успешно привязан! Ваш уровень: {level}, Elo: {elo}")
+            else:
+                error_msg = result.error.get("message", "Ошибка верификации аккаунта.")
+                messages.error(request, error_msg)
+                
+            return redirect("profile")
+        
+        if action == "send_verification_email":
+            res = api_client.send_email_verification(user_id, token)
+            if res.ok:
+                messages.success(request, "Письмо отправлено! Проверьте вашу почту (включая папку Спам).")
+            else:
+                messages.error(request, res.error.get("message", "Ошибка при отправке письма."))
+            return redirect("profile")
+
+
         if action == "save_payouts":
             payouts = []
             for idx in range(1, 4):
@@ -464,6 +512,7 @@ def tournament_detail(request, tournament_id: int):
     )
 
 
+
 def match_center(request, tournament_id: int):
     token = request.session.get("api_token")
     user = _read_current_user(request)
@@ -512,6 +561,24 @@ def match_center(request, tournament_id: int):
         },
     )
 
+def verify_email_view(request):
+    user_id = request.GET.get('userId')
+    token = request.GET.get('token')
+
+    if not user_id or not token:
+        messages.error(request, "Неверная ссылка для подтверждения.")
+        return redirect('login')
+
+    result = api_client.confirm_email(user_id, token)
+
+    if result.ok:
+        messages.success(request, "🎉 Ваша почта успешно подтверждена!")
+    else:
+        messages.error(request, result.error.get("message", "Ссылка недействительна или устарела."))
+        
+    if request.session.get('auth_token'):
+        return redirect('profile')
+    return redirect('login')
 
 def voting(request):
     nominees_result = api_client.get_nominees()
@@ -591,33 +658,67 @@ def profile(request):
 
     token = request.session.get("api_token")
     roles = _role_flags(user)
-    edit_form = ProfileEditForm(initial={"nickname": user.get("nickname", ""), "bio": user.get("bio", "")})
-    verify_form = RatingVerifyForm(initial={"provider": user.get("ratingProvider") or "faceit", "profile_url": user.get("ratingProfileUrl") or ""})
+    user_id = user.get("id")
+
+    edit_form = ProfileEditForm(initial={
+        "nickname": user.get("nickname", ""), 
+        "bio": user.get("bio", "")
+    })
+    faceit_form = FaceitVerifyForm()
 
     if request.method == "POST":
         action = request.POST.get("action")
+
         if action == "save_profile":
             edit_form = ProfileEditForm(request.POST)
             if edit_form.is_valid():
-                result = api_client.update_profile(edit_form.cleaned_data["nickname"], edit_form.cleaned_data.get("bio") or "", token=token)
+                result = api_client.update_profile(
+                    edit_form.cleaned_data["nickname"],
+                    edit_form.cleaned_data.get("bio") or "",
+                    token=token,
+                )
                 if result.ok:
                     request.session["current_user"] = result.data
-                    user = result.data
-                    roles = _role_flags(user)
                     messages.success(request, "Профиль обновлён")
+                    return redirect("profile")
                 else:
                     messages.error(request, (result.error or {}).get("message", "Не удалось обновить профиль"))
-        elif action == "verify_rating":
-            verify_form = RatingVerifyForm(request.POST)
-            if verify_form.is_valid():
-                result = api_client.verify_rating(verify_form.cleaned_data["provider"], verify_form.cleaned_data["profile_url"], token=token)
+
+        elif action == "verify_faceit":
+            faceit_form = FaceitVerifyForm(request.POST)
+            if faceit_form.is_valid():
+                nickname = faceit_form.cleaned_data["faceit_nickname"]
+                result = api_client.verify_faceit_account(user_id, nickname, token=token)
                 if result.ok:
-                    user = (result.data or {}).get("profile") or user
-                    request.session["current_user"] = user
-                    roles = _role_flags(user)
-                    messages.success(request, (result.data or {}).get("message", "Рейтинг подтверждён"))
+                    me_res = api_client.me(token)
+                    if me_res.ok:
+                        request.session["current_user"] = me_res.data
+                    
+                    elo = result.data.get('elo')
+                    messages.success(request, f"Faceit привязан! Ваш рейтинг: {elo} ELO")
+                    return redirect("profile")
                 else:
-                    messages.error(request, (result.error or {}).get("message", "Не удалось подтвердить рейтинг"))
+                    err = (result.error or {}).get("message", "Ошибка Faceit API")
+                    messages.error(request, f"Ошибка: {err}")
+
+        elif action == "unlink_faceit":
+            result = api_client.unlink_faceit(user_id, token=token)
+            if result.ok:
+                me_res = api_client.me(token)
+                if me_res.ok:
+                    request.session["current_user"] = me_res.data
+                messages.success(request, "Faceit-аккаунт отвязан")
+                return redirect("profile")
+            else:
+                messages.error(request, "Не удалось отвязать аккаунт")
+
+        elif action == "send_verification_email":
+            res = api_client.send_email_verification(user_id, token)
+            if res.ok:
+                messages.success(request, "Письмо со ссылкой отправлено! Проверьте почту (и папку Спам).")
+            else:
+                messages.error(request, (res.error or {}).get("message", "Ошибка отправки письма"))
+            return redirect("profile")
 
     selected_game = (request.GET.get("game") or "counterstrike").strip() or "counterstrike"
     nickname = (user.get("nickname") or "").strip()
@@ -637,7 +738,16 @@ def profile(request):
     else:
         esports_error = "У аккаунта не задан ник."
 
-    return render(request, "profile.html", {"selected_game": selected_game, "esports_payload": esports_payload, "esports_results": esports_results, "esports_error": esports_error, "edit_form": edit_form, "verify_form": verify_form, **roles})
+    context = {
+        "selected_game": selected_game,
+        "esports_payload": esports_payload,
+        "esports_results": esports_results,
+        "esports_error": esports_error,
+        "edit_form": edit_form,
+        "faceit_form": faceit_form,
+        **roles,
+    }
+    return render(request, "profile.html", context)
 
 
 def streams(request):

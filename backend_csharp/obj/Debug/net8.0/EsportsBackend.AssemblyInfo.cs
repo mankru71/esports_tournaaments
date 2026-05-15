@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("EsportsBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+df699b1351e67d93994f117b40ec1e252b751429")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c33c0cc824c7ede193931dc42527f7284ef6829b")]
 [assembly: System.Reflection.AssemblyProductAttribute("EsportsBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("EsportsBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
