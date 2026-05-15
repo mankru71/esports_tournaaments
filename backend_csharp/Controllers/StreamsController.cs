@@ -1,7 +1,6 @@
-using Data;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Services;
+using System.Linq;
 
 namespace Controllers;
 
@@ -10,68 +9,17 @@ namespace Controllers;
 public class StreamsController : ControllerBase
 {
     private readonly PandaScoreService _pandascore;
-    private readonly AppDbContext _db;
 
-    public StreamsController(PandaScoreService pandascore, AppDbContext db)
+    public StreamsController(PandaScoreService pandascore)
     {
         _pandascore = pandascore;
-        _db = db;
-    }
-
-    [HttpGet("tournament/{tournamentId:int}")]
-    public async Task<IActionResult> TournamentStreams(int tournamentId)
-    {
-        var matches = await _db.Matches
-            .Include(m => m.TeamA)
-            .Include(m => m.TeamB)
-            .Where(m => m.TournamentId == tournamentId && !string.IsNullOrWhiteSpace(m.StreamUrl))
-            .OrderBy(m => m.RoundNumber)
-            .ThenBy(m => m.Id)
-            .ToListAsync();
-
-        var streams = matches.Select(m => new
-        {
-            provider = string.IsNullOrWhiteSpace(m.StreamProvider) ? DetectProvider(m.StreamUrl!) : m.StreamProvider,
-            url = m.StreamUrl!,
-            channel = ExtractChannel(m.StreamUrl!),
-            status = new { online = m.Status == "live", viewers = m.Status == "live" ? 1200 : 0 },
-            meta = new { source = "local", matchId = m.Id, round = m.Round, match = $"{m.TeamA?.Name ?? "TBD"} vs {m.TeamB?.Name ?? "TBD"}" }
-        });
-
-        return Ok(streams);
     }
 
     [HttpGet("status")]
     public async Task<IActionResult> Status([FromQuery] string? q = null, CancellationToken ct = default)
     {
-        var query = (q ?? string.Empty).Trim().ToLowerInvariant();
-        var localMatches = await _db.Matches
-            .Include(m => m.Tournament)
-            .Include(m => m.TeamA)
-            .Include(m => m.TeamB)
-            .Where(m => !string.IsNullOrWhiteSpace(m.StreamUrl))
-            .OrderByDescending(m => m.Status == "live")
-            .Take(25)
-            .ToListAsync(ct);
-
-        var localStreams = localMatches
-            .Where(m => string.IsNullOrWhiteSpace(query) || (m.Tournament?.Name ?? string.Empty).ToLowerInvariant().Contains(query))
-            .Take(10)
-            .Select(m => new
-            {
-                provider = string.IsNullOrWhiteSpace(m.StreamProvider) ? DetectProvider(m.StreamUrl!) : m.StreamProvider,
-                url = m.StreamUrl!,
-                channel = ExtractChannel(m.StreamUrl!),
-                status = new { online = m.Status == "live", viewers = m.Status == "live" ? 1200 : 0 },
-                meta = new { source = "local", tournament = m.Tournament?.Name ?? "Local", match = $"{m.TeamA?.Name ?? "TBD"} vs {m.TeamB?.Name ?? "TBD"}" }
-            })
-            .ToList();
-
-        if (localStreams.Count > 0)
-            return Ok(localStreams);
-
         if (!_pandascore.Enabled)
-            return Ok(Array.Empty<object>());
+            return StatusCode(503, new { message = "PandaScore token is not configured (PANDASCORE_TOKEN)" });
 
         var tournaments = string.IsNullOrWhiteSpace(q)
             ? await _pandascore.GetRunningTournamentsAsync(5, ct: ct)

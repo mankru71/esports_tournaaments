@@ -34,15 +34,15 @@ public class MatchesController : ControllerBase
 
     public class MatchStreamRequest
     {
-        [Required, Url] public string StreamUrl { get; set; } = string.Empty;
-        public string? StreamStatus { get; set; }
+        [Required] public string StreamUrl { get; set; } = string.Empty;
     }
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] int tournamentId, CancellationToken ct)
     {
         var tournament = await _db.Tournaments.FindAsync(new object[] { tournamentId }, ct);
-
+        
+        // Внешние турниры
         if (tournament != null && tournament.IsExternal && !string.IsNullOrWhiteSpace(tournament.ProviderTournamentId) && _pandascore.Enabled)
         {
             var matches = await _pandascore.GetMatchesForTournamentAsync(tournament.ProviderTournamentId!, 50, tournament.Game, ct);
@@ -57,26 +57,42 @@ public class MatchesController : ControllerBase
                 status = NormalizeMatchStatus(m.Status),
                 round = string.IsNullOrWhiteSpace(m.Name) ? "Match" : m.Name!,
                 groupName = string.Empty,
-                streamUrl = m.StreamUrl ?? string.Empty,
-                streamProvider = DetectProvider(m.StreamUrl),
-                streamStatus = string.IsNullOrWhiteSpace(m.StreamUrl) ? "offline" : "linked"
+                streamUrl = m.StreamUrl ?? string.Empty
             });
             return Ok(payload);
         }
 
+        // Локальные турниры
         var matchesFromDb = await _db.Matches
             .Include(m => m.TeamA)
             .Include(m => m.TeamB)
             .Where(m => m.TournamentId == tournamentId)
             .OrderBy(m => m.RoundNumber)
-            .ThenBy(m => m.Id)
             .ToListAsync(ct);
 
-        return Ok(matchesFromDb.Select(ToDto));
+        if (matchesFromDb.Any())
+        {
+            var payload = matchesFromDb.Select(m => new
+            {
+                id = m.Id,
+                tournamentId,
+                teamA = m.TeamA?.Name ?? "TBD",
+                teamB = m.TeamB?.Name ?? "TBD",
+                scoreA = m.ScoreA,
+                scoreB = m.ScoreB,
+                status = m.Status,
+                round = m.Round,
+                groupName = string.Empty,
+                streamUrl = m.StreamUrl
+            });
+            return Ok(payload);
+        }
+
+        return Ok(new List<object>());
     }
 
     [HttpPut("{id:int}/result")]
-    public async Task<IActionResult> SetMatchResult(int id, [FromBody] MatchResultRequest request, CancellationToken ct)
+    public async Task<IActionResult> SetMatchResult(int id, [FromBody] MatchResultRequest request)
     {
         if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
             return StatusCode(403, new { message = "Только администратор или судья может изменять результаты" });
@@ -86,15 +102,11 @@ public class MatchesController : ControllerBase
             .Include(m => m.TeamA)
             .Include(m => m.TeamB)
             .Include(m => m.Tournament)
-            .FirstOrDefaultAsync(m => m.Id == id, ct);
+            .FirstOrDefaultAsync(m => m.Id == id);
 
         if (match == null)
             return NotFound(new { message = "Матч не найден" });
 
-        if (match.Tournament?.Status == "paused")
-            return BadRequest(new { message = "Турнир приостановлен. Внесение результатов заблокировано." });
-
-        var previousStatus = match.Status;
         match.ScoreA = request.ScoreA;
         match.ScoreB = request.ScoreB;
         match.Status = "live";
@@ -102,35 +114,25 @@ public class MatchesController : ControllerBase
         if (match.ScoreA == match.ScoreB && match.NextMatchId.HasValue)
             return BadRequest(new { message = "Для матчей плей-офф ничья недопустима. Укажите победителя." });
 
-        // Учебное правило: при счёте 16+ матч считается завершённым.
         if (match.ScoreA >= 16 || match.ScoreB >= 16)
         {
             match.Status = "finished";
             match.WinnerId = match.ScoreA > match.ScoreB ? match.TeamAId : match.TeamBId;
-            if (match.Tournament != null && match.Tournament.Status != "finished")
-                match.Tournament.Status = "live";
 
             if (match.NextMatch != null && match.WinnerId.HasValue)
             {
                 if (match.NextMatch.TeamAId == null)
+                {
                     match.NextMatch.TeamAId = match.WinnerId;
+                }
                 else if (match.NextMatch.TeamBId == null && match.NextMatch.TeamAId != match.WinnerId)
+                {
                     match.NextMatch.TeamBId = match.WinnerId;
-            }
-
-            if (string.Equals(match.Round, "Final", StringComparison.OrdinalIgnoreCase) && match.Tournament != null)
-            {
-                match.Tournament.Status = "finished";
-                match.Tournament.CurrentStage = "finished";
-                match.Tournament.MvpVotingOpen = true;
+                }
             }
         }
-        else if (match.Tournament != null)
-        {
-            match.Tournament.Status = "live";
-        }
 
-        await _db.SaveChangesAsync(ct);
+        await _db.SaveChangesAsync();
 
         var payload = new
         {
@@ -142,54 +144,33 @@ public class MatchesController : ControllerBase
             updated = true
         };
 
-        await _hub.Clients.Group($"tournament:{match.TournamentId}").SendAsync("matchUpdated", payload, ct);
-
-        if (!string.Equals(previousStatus, "live", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(match.Status, "live", StringComparison.OrdinalIgnoreCase))
-        {
-            await _discord.NotifyMatchLiveAsync(match, ct);
-        }
+        await _hub.Clients.Group($"tournament:{match.TournamentId}").SendAsync("matchUpdated", payload);
+        if (match.Status == "live")
+            await _discord.NotifyMatchLiveAsync(match);
 
         return Ok(payload);
     }
 
+
     [HttpPut("{id:int}/stream")]
-    public async Task<IActionResult> SetMatchStream(int id, [FromBody] MatchStreamRequest request, CancellationToken ct)
+    public async Task<IActionResult> AttachStream(int id, [FromBody] MatchStreamRequest request)
     {
         if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
-            return StatusCode(403, new { message = "Только администратор или судья может привязывать стримы" });
+            return StatusCode(403, new { message = "Только администратор или судья может привязывать трансляции" });
 
-        var match = await _db.Matches
-            .Include(m => m.TeamA)
-            .Include(m => m.TeamB)
-            .FirstOrDefaultAsync(m => m.Id == id, ct);
+        var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
         if (match == null)
             return NotFound(new { message = "Матч не найден" });
 
-        var streamUrl = request.StreamUrl.Trim();
-        match.StreamUrl = streamUrl;
-        match.StreamProvider = DetectProvider(streamUrl);
-        match.StreamStatus = string.IsNullOrWhiteSpace(request.StreamStatus) ? "linked" : request.StreamStatus.Trim().ToLowerInvariant();
-        await _db.SaveChangesAsync(ct);
+        var url = request.StreamUrl.Trim();
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed) || parsed.Scheme is not ("http" or "https"))
+            return BadRequest(new { message = "Укажите корректную ссылку на трансляцию" });
 
-        return Ok(ToDto(match));
+        match.StreamUrl = url;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { match.Id, match.TournamentId, match.StreamUrl });
     }
-
-    private static object ToDto(Match m) => new
-    {
-        id = m.Id,
-        tournamentId = m.TournamentId,
-        teamA = m.TeamA?.Name ?? "TBD",
-        teamB = m.TeamB?.Name ?? "TBD",
-        scoreA = m.ScoreA,
-        scoreB = m.ScoreB,
-        status = m.Status,
-        round = m.Round,
-        groupName = m.GroupName,
-        streamUrl = m.StreamUrl ?? string.Empty,
-        streamProvider = m.StreamProvider ?? DetectProvider(m.StreamUrl),
-        streamStatus = m.StreamStatus
-    };
 
     private static string NormalizeMatchStatus(string? status)
     {
@@ -203,13 +184,5 @@ public class MatchesController : ControllerBase
             "not_started" => "planned",
             _ => "planned",
         };
-    }
-
-    private static string DetectProvider(string? url)
-    {
-        var u = (url ?? string.Empty).ToLowerInvariant();
-        if (u.Contains("twitch.tv")) return "Twitch";
-        if (u.Contains("youtube.com") || u.Contains("youtu.be")) return "YouTube";
-        return string.IsNullOrWhiteSpace(u) ? "" : "Stream";
     }
 }

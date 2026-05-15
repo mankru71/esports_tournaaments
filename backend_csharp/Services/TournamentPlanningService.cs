@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Models;
@@ -5,10 +10,9 @@ using Models;
 namespace Services;
 
 public record PlannedTeam(int TeamId, string Name, int Seed, decimal RatingAverage);
-public record PlannedMatch(int Id, string Round, string GroupName, string TeamA, string TeamB, int ScoreA, int ScoreB, string Status, string? StreamUrl);
+public record PlannedMatch(string Round, string TeamA, string TeamB, int ScoreA, int ScoreB, string Status);
 public record PlannedGroup(string Name, List<PlannedTeam> Teams);
-public record GroupStanding(string GroupName, string Team, int Played, int Wins, int Losses, int Points);
-public record TournamentPlanVm(string StageType, List<PlannedGroup> Groups, List<PlannedMatch> Matches, List<GroupStanding> Standings, string Summary);
+public record TournamentPlanVm(string StageType, List<PlannedGroup> Groups, List<PlannedMatch> Matches, string Summary);
 
 public class TournamentPlanningService
 {
@@ -35,26 +39,21 @@ public class TournamentPlanningService
 
         var plannedMatches = matches
             .Select(m => new PlannedMatch(
-                m.Id,
                 m.Round,
-                m.GroupName,
                 m.TeamA?.Name ?? "TBD",
                 m.TeamB?.Name ?? "TBD",
                 m.ScoreA,
                 m.ScoreB,
-                m.Status,
-                m.StreamUrl))
+                m.Status))
             .ToList();
 
-        var standings = stageType == "groups" ? BuildStandings(matches) : new List<GroupStanding>();
-
         var summary = plannedMatches.Any()
-            ? $"Сетка сохранена в базе: {plannedMatches.Count} матчей. Посев выполнен по среднему рейтингу игроков."
+            ? "Сетка успешно сгенерирована и сохранена в базу данных."
             : approvedTeams.Count < 2
-                ? "Сетка пока не построена — нужны минимум 2 подтверждённые команды."
+                ? "Сетка пока не построена — нужны заявки команд."
                 : "Сетка ещё не сгенерирована. Нажмите «Сгенерировать сетку матчей».";
 
-        return new TournamentPlanVm(stageType, groups, plannedMatches, standings, summary);
+        return new TournamentPlanVm(stageType, groups, plannedMatches, summary);
     }
 
     public async Task<bool> GenerateAndSaveBracketAsync(int tournamentId, CancellationToken ct = default)
@@ -69,7 +68,10 @@ public class TournamentPlanningService
 
         var oldMatches = await _db.Matches.Where(m => m.TournamentId == tournamentId).ToListAsync(ct);
         if (oldMatches.Count > 0)
+        {
             _db.Matches.RemoveRange(oldMatches);
+            await _db.SaveChangesAsync(ct);
+        }
 
         var matchesToSave = NormalizeStageType(tournament) == "groups"
             ? BuildGroupStageMatches(tournamentId, teams)
@@ -78,8 +80,6 @@ public class TournamentPlanningService
         if (matchesToSave.Count == 0)
             return false;
 
-        tournament.Status = "planned";
-        tournament.CurrentStage = NormalizeStageType(tournament) == "groups" ? "group_stage" : "playoff";
         await _db.Matches.AddRangeAsync(matchesToSave, ct);
         await _db.SaveChangesAsync(ct);
         return true;
@@ -105,23 +105,8 @@ public class TournamentPlanningService
     private async Task<List<PlannedTeam>> LoadApprovedTeamsAsync(int tournamentId, CancellationToken ct)
     {
         var teams = await LoadApprovedTeamEntitiesAsync(tournamentId, ct);
-        return SeedTeams(teams)
-            .Select(t => new PlannedTeam(t.TeamId, t.Name, t.Seed, t.RatingAverage))
-            .ToList();
-    }
-
-    private static string NormalizeStageType(Tournament tournament)
-    {
-        var value = (tournament.StageType ?? string.Empty).Trim().ToLowerInvariant();
-        if (value == "groups") return "groups";
-        var format = (tournament.Format ?? string.Empty).Trim().ToLowerInvariant();
-        return format == "group_stage" ? "groups" : "single";
-    }
-
-    private static List<SeededTeam> SeedTeams(IEnumerable<Team> teams)
-    {
         return teams
-            .Select(t => new SeededTeam(
+            .Select(t => new PlannedTeam(
                 t.Id,
                 t.Name,
                 0,
@@ -130,6 +115,16 @@ public class TournamentPlanningService
             .ThenBy(t => t.Name)
             .Select((t, index) => t with { Seed = index + 1 })
             .ToList();
+    }
+
+    private static string NormalizeStageType(Tournament tournament)
+    {
+        var value = (tournament.StageType ?? string.Empty).Trim().ToLowerInvariant();
+        if (value == "groups")
+            return "groups";
+
+        var format = (tournament.Format ?? string.Empty).Trim().ToLowerInvariant();
+        return format == "group_stage" ? "groups" : "single";
     }
 
     private static List<PlannedGroup> BuildGroupPreviews(List<PlannedTeam> teams)
@@ -144,7 +139,18 @@ public class TournamentPlanningService
 
     private static List<Match> BuildGroupStageMatches(int tournamentId, List<Team> teams)
     {
-        var groups = DistributeIntoGroups(SeedTeams(teams));
+        var seededTeams = teams
+            .Select(t => new SeededTeam(
+                t.Id,
+                t.Name,
+                0,
+                t.Players.Any() ? Math.Round(t.Players.Average(p => p.Rating ?? 0m), 2) : 0m))
+            .OrderByDescending(t => t.RatingAverage)
+            .ThenBy(t => t.Name)
+            .Select((t, index) => t with { Seed = index + 1 })
+            .ToList();
+
+        var groups = DistributeIntoGroups(seededTeams);
         var matches = new List<Match>();
         var roundNumber = 1;
 
@@ -159,22 +165,26 @@ public class TournamentPlanningService
                         TournamentId = tournamentId,
                         RoundNumber = roundNumber,
                         Round = group.Name,
-                        GroupName = group.Name,
                         TeamAId = group.Teams[i].TeamId,
                         TeamBId = group.Teams[j].TeamId,
                         Status = "planned"
                     });
-                    roundNumber++;
                 }
             }
+
+            roundNumber += 1;
         }
 
         return matches;
     }
 
-    private static List<Match> BuildSingleEliminationTree(int tournamentId, List<Team> teams)
+    private List<Match> BuildSingleEliminationTree(int tournamentId, List<Team> teams)
     {
-        var rankedTeams = SeedTeams(teams);
+        var rankedTeams = teams
+            .OrderByDescending(t => t.Players.Any() ? t.Players.Average(p => p.Rating ?? 0m) : 0m)
+            .ThenBy(t => t.Name)
+            .ToList();
+
         var bracketSize = NextPowerOfTwo(rankedTeams.Count);
         var totalRounds = (int)Math.Log2(bracketSize);
         var allMatches = new List<Match>();
@@ -231,76 +241,39 @@ public class TournamentPlanningService
             var leftTeam = seededSlots[slot * 2];
             var rightTeam = seededSlots[slot * 2 + 1];
 
-            match.TeamAId = leftTeam?.TeamId;
-            match.TeamBId = rightTeam?.TeamId;
+            match.TeamAId = leftTeam?.Id;
+            match.TeamBId = rightTeam?.Id;
 
             if (leftTeam != null && rightTeam == null)
             {
-                match.WinnerId = leftTeam.TeamId;
+                match.WinnerId = leftTeam.Id;
                 match.Status = "approved";
-                AdvanceWinnerToNextMatch(match, leftTeam.TeamId);
+                AdvanceWinnerToNextMatch(match, leftTeam.Id);
             }
             else if (leftTeam == null && rightTeam != null)
             {
-                match.WinnerId = rightTeam.TeamId;
+                match.WinnerId = rightTeam.Id;
                 match.Status = "approved";
-                AdvanceWinnerToNextMatch(match, rightTeam.TeamId);
+                AdvanceWinnerToNextMatch(match, rightTeam.Id);
             }
         }
 
         return allMatches;
     }
 
-    private static List<GroupStanding> BuildStandings(IEnumerable<Match> matches)
-    {
-        var table = new Dictionary<(string group, int teamId), (string name, int played, int wins, int losses, int points)>();
-
-        foreach (var match in matches.Where(m => !string.IsNullOrWhiteSpace(m.GroupName)))
-        {
-            AddTeam(match.GroupName, match.TeamAId, match.TeamA?.Name);
-            AddTeam(match.GroupName, match.TeamBId, match.TeamB?.Name);
-
-            if (match.Status == "finished" && match.TeamAId.HasValue && match.TeamBId.HasValue)
-            {
-                var aWon = match.ScoreA > match.ScoreB;
-                Update(match.GroupName, match.TeamAId.Value, aWon);
-                Update(match.GroupName, match.TeamBId.Value, !aWon);
-            }
-        }
-
-        return table
-            .Select(x => new GroupStanding(x.Key.group, x.Value.name, x.Value.played, x.Value.wins, x.Value.losses, x.Value.points))
-            .OrderBy(x => x.GroupName)
-            .ThenByDescending(x => x.Points)
-            .ThenBy(x => x.Team)
-            .ToList();
-
-        void AddTeam(string group, int? teamId, string? name)
-        {
-            if (!teamId.HasValue) return;
-            var key = (group, teamId.Value);
-            if (!table.ContainsKey(key))
-                table[key] = (string.IsNullOrWhiteSpace(name) ? "TBD" : name!, 0, 0, 0, 0);
-        }
-
-        void Update(string group, int teamId, bool won)
-        {
-            var key = (group, teamId);
-            if (!table.TryGetValue(key, out var row)) return;
-            table[key] = (row.name, row.played + 1, row.wins + (won ? 1 : 0), row.losses + (won ? 0 : 1), row.points + (won ? 3 : 0));
-        }
-    }
-
     private static int NextPowerOfTwo(int value)
     {
         var size = 1;
-        while (size < value) size *= 2;
+        while (size < value)
+            size *= 2;
         return size;
     }
 
     private static string GetRoundLabel(int totalRounds, int roundNumber)
     {
-        if (roundNumber == totalRounds) return "Final";
+        if (roundNumber == totalRounds)
+            return "Final";
+
         var matchesInRound = 1 << (totalRounds - roundNumber);
         return matchesInRound switch
         {
@@ -312,53 +285,89 @@ public class TournamentPlanningService
 
     private static List<int> BuildSeedPositions(int bracketSize)
     {
-        var positions = new List<int> { 1, 2 };
-        while (positions.Count < bracketSize)
+        if (bracketSize <= 1)
+            return new List<int> { 1 };
+
+        var previous = BuildSeedPositions(bracketSize / 2);
+        var result = new List<int>(bracketSize);
+        foreach (var seed in previous)
         {
-            var next = new List<int>();
-            var size = positions.Count * 2 + 1;
-            foreach (var seed in positions)
-            {
-                next.Add(seed);
-                next.Add(size - seed);
-            }
-            positions = next;
+            result.Add(seed);
+            result.Add(bracketSize + 1 - seed);
         }
-        return positions;
+        return result;
     }
 
-    private static void AdvanceWinnerToNextMatch(Match match, int winnerId)
+    private static void AdvanceWinnerToNextMatch(Match completedMatch, int winnerId)
     {
-        if (match.NextMatch == null) return;
-        if (match.NextMatch.TeamAId == null)
-        {
-            match.NextMatch.TeamAId = winnerId;
-        }
-        else if (match.NextMatch.TeamBId == null && match.NextMatch.TeamAId != winnerId)
-        {
-            match.NextMatch.TeamBId = winnerId;
-        }
+        if (completedMatch.NextMatch == null)
+            return;
+
+        if (!completedMatch.NextMatch.TeamAId.HasValue)
+            completedMatch.NextMatch.TeamAId = winnerId;
+        else if (!completedMatch.NextMatch.TeamBId.HasValue && completedMatch.NextMatch.TeamAId != winnerId)
+            completedMatch.NextMatch.TeamBId = winnerId;
     }
 
-    private record SeededTeam(int TeamId, string Name, int Seed, decimal RatingAverage);
-    private record SeededGroup(string Name, List<SeededTeam> Teams);
-
-    private static List<SeededGroup> DistributeIntoGroups(List<SeededTeam> teams)
+    private static List<GroupSeedBucket> DistributeIntoGroups(List<SeededTeam> teams)
     {
-        var groupCount = Math.Max(1, (int)Math.Ceiling(teams.Count / 4.0));
-        groupCount = Math.Min(groupCount, 4);
+        if (teams.Count == 0)
+            return new List<GroupSeedBucket>();
+
+        var groupCount = teams.Count switch
+        {
+            <= 4 => 1,
+            <= 8 => 2,
+            <= 12 => 3,
+            _ => 4,
+        };
+
         var groups = Enumerable.Range(0, groupCount)
-            .Select(i => new SeededGroup($"Группа {(char)('A' + i)}", new List<SeededTeam>()))
+            .Select(index => new GroupSeedBucket(((char)('A' + index)).ToString()))
             .ToList();
 
-        for (var i = 0; i < teams.Count; i++)
+        var direction = 1;
+        var cursor = 0;
+        foreach (var team in teams)
         {
-            var groupIndex = i % (groupCount * 2) < groupCount
-                ? i % groupCount
-                : groupCount - 1 - (i % groupCount);
-            groups[groupIndex].Teams.Add(teams[i]);
+            groups[cursor].Teams.Add(team);
+
+            if (groupCount == 1)
+                continue;
+
+            cursor += direction;
+            if (cursor >= groupCount)
+            {
+                direction = -1;
+                cursor = groupCount - 1;
+            }
+            else if (cursor < 0)
+            {
+                direction = 1;
+                cursor = 0;
+            }
         }
 
-        return groups;
+        return groups
+            .Where(g => g.Teams.Count > 0)
+            .Select(g =>
+            {
+                g.Teams = g.Teams.OrderBy(t => t.Seed).ToList();
+                return g;
+            })
+            .ToList();
+    }
+
+    private sealed record SeededTeam(int TeamId, string Name, int Seed, decimal RatingAverage);
+
+    private sealed class GroupSeedBucket
+    {
+        public GroupSeedBucket(string shortName)
+        {
+            Name = $"Group {shortName}";
+        }
+
+        public string Name { get; }
+        public List<SeededTeam> Teams { get; set; } = new();
     }
 }

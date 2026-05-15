@@ -179,21 +179,3 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
-# .NET build artifacts
-bin/
-obj/
-[Bb]in/
-[Oo]bj/
-*.user
-*.suo
-.vs/
-
-# Local docker/runtime files
-.env
-*.db
-*.sqlite3
-
-# OS/editor
-.DS_Store
-.idea/
-.vscode/

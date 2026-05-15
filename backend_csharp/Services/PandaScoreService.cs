@@ -97,7 +97,7 @@ public class PandaScoreService
             {
                 Success = false,
                 StatusCode = 503,
-                Message = "PandaScore token is not configured. Укажи PANDASCORE_TOKEN в .env и пересобери контейнеры."
+                Message = "PandaScore token is not configured. Set PANDASCORE_TOKEN in .env and rebuild containers."
             };
         }
 
@@ -204,7 +204,7 @@ public class PandaScoreService
 
         return statusCode switch
         {
-            401 => "PandaScore отклонил токен. Проверь PANDASCORE_TOKEN в .env.",
+            401 => "PandaScore отклонил токен. Проверьте PANDASCORE_TOKEN в .env.",
             403 => "PandaScore запретил доступ для текущего токена или плана.",
             404 => "Ресурс PandaScore не найден.",
             _ => string.IsNullOrWhiteSpace(body) ? $"PandaScore error {statusCode}" : body!

@@ -1,4 +1,3 @@
-using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Services;
 
@@ -18,28 +17,6 @@ public class DiscordController : ControllerBase
     [HttpGet("status")]
     public IActionResult Status()
     {
-        return Ok(new
-        {
-            enabled = _discord.Enabled,
-            message = _discord.Enabled
-                ? "Discord Webhook настроен"
-                : "Discord Webhook не настроен. Добавьте DISCORD_WEBHOOK_URL в .env"
-        });
-    }
-
-    [HttpPost("test")]
-    public async Task<IActionResult> Test(CancellationToken ct)
-    {
-        if (!AuthTokenHelper.IsInAnyRole(Request, "admin"))
-            return StatusCode(403, new { message = "Тест Discord может запускать только администратор" });
-
-        var sent = await _discord.SendTestAsync(ct);
-        return Ok(new
-        {
-            sent,
-            message = sent
-                ? "Тестовое сообщение отправлено в Discord"
-                : "Webhook не настроен или Discord отклонил запрос. Проверьте DISCORD_WEBHOOK_URL и логи backend."
-        });
+        return Ok(new { enabled = _discord.Enabled });
     }
 }

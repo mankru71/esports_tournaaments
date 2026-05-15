@@ -64,15 +64,12 @@ public class TournamentController : ControllerBase
 
         var matches = await db.Matches.Where(m => m.TournamentId == id).ToListAsync();
         var applications = await db.TournamentApplications.Where(a => a.TournamentId == id).ToListAsync();
-        var mvpVotes = await db.MvpVotes.Where(v => v.TournamentId == id).ToListAsync();
-        var payouts = await db.PrizePayouts.Where(p => p.TournamentId == id).ToListAsync();
         db.Matches.RemoveRange(matches);
         db.TournamentApplications.RemoveRange(applications);
-        db.MvpVotes.RemoveRange(mvpVotes);
-        db.PrizePayouts.RemoveRange(payouts);
         db.Tournaments.Remove(tournament);
+
         await db.SaveChangesAsync();
-        return Ok(new { message = "Турнир успешно удален" });
+        return Ok(new { message = "Турнир удалён" });
     }
 
     [HttpPost("{id:int}/generate-bracket")]
@@ -85,7 +82,7 @@ public class TournamentController : ControllerBase
         if (tournament == null)
             return NotFound(new { message = "Турнир не найден" });
         if (tournament.IsExternal)
-            return BadRequest(new { message = "Для внешних турниров генерация локальной сетки недоступна" });
+            return BadRequest(new { message = "Для выбранного турнира генерация сетки недоступна" });
 
         var success = await planningService.GenerateAndSaveBracketAsync(id, ct);
         if (!success)
@@ -133,8 +130,6 @@ public class TournamentController : ControllerBase
             format = t.Format,
             stageType = t.StageType,
             status = t.Status,
-            currentStage = t.CurrentStage,
-            mvpVotingOpen = t.MvpVotingOpen,
             startDate = t.StartDate,
             prizePool = t.PrizePool,
             totalAmount = t.PrizePool,

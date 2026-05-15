@@ -4,52 +4,33 @@
 <section>
   <div class="page-hero">
     <div>
-      <h1 class="h3 mb-2">Турниры</h1>
-      <p class="text-muted mb-0">Локальные и внешние турниры. Для локальных доступны заявки, сетка, матчи, MVP и Discord-уведомления.</p>
+      <p class="eyebrow mb-2">Турниры</p>
+      <h1 class="h2 mb-2">Управление соревнованиями</h1>
+      <p class="text-muted mb-0">Создавайте турниры, принимайте заявки, ведите сетку и отслеживайте результаты.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button class="btn btn-outline-accent" type="button" data-show-favorites="all">Все</button>
+      <button class="btn btn-outline-accent" type="button" data-show-favorites="only">Избранные</button>
     </div>
   </div>
 
   {% if is_admin %}
     <div class="section-panel p-3 p-md-4 mb-3">
-      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-        <div>
-          <h2 class="h5 mb-1">Создать турнир</h2>
-          <div class="text-muted small">После создания backend автоматически отправит красивое уведомление в Discord, если задан <code>DISCORD_WEBHOOK_URL</code>.</div>
-        </div>
-        <span class="badge text-bg-primary">Discord Webhook demo</span>
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="h5 mb-0">Создать турнир</h2>
+        <span class="text-muted small">После создания турнир появится в общем списке.</span>
       </div>
       <form method="post" class="row g-3">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_tournament">
-        <div class="col-md-6">
-          <label class="form-label">{{ create_tournament_form.name.label }}</label>
-          {{ create_tournament_form.name }}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">{{ create_tournament_form.game.label }}</label>
-          {{ create_tournament_form.game }}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">{{ create_tournament_form.prize_pool.label }}</label>
-          {{ create_tournament_form.prize_pool }}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">{{ create_tournament_form.max_participants.label }}</label>
-          {{ create_tournament_form.max_participants }}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">{{ create_tournament_form.start_date.label }}</label>
-          {{ create_tournament_form.start_date }}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">{{ create_tournament_form.format.label }}</label>
-          {{ create_tournament_form.format }}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">{{ create_tournament_form.stage_type.label }}</label>
-          {{ create_tournament_form.stage_type }}
-        </div>
-        <div class="col-12"><button class="btn btn-accent" type="submit">Создать турнир и отправить в Discord</button></div>
+        <div class="col-md-6"><label class="form-label">{{ create_tournament_form.name.label }}</label>{{ create_tournament_form.name }}</div>
+        <div class="col-md-3"><label class="form-label">{{ create_tournament_form.game.label }}</label>{{ create_tournament_form.game }}</div>
+        <div class="col-md-3"><label class="form-label">{{ create_tournament_form.prize_pool.label }}</label>{{ create_tournament_form.prize_pool }}</div>
+        <div class="col-md-3"><label class="form-label">{{ create_tournament_form.max_participants.label }}</label>{{ create_tournament_form.max_participants }}</div>
+        <div class="col-md-3"><label class="form-label">{{ create_tournament_form.start_date.label }}</label>{{ create_tournament_form.start_date }}</div>
+        <div class="col-md-3"><label class="form-label">{{ create_tournament_form.format.label }}</label>{{ create_tournament_form.format }}</div>
+        <div class="col-md-3"><label class="form-label">{{ create_tournament_form.stage_type.label }}</label>{{ create_tournament_form.stage_type }}</div>
+        <div class="col-12"><button class="btn btn-accent" type="submit">Создать</button></div>
       </form>
     </div>
   {% endif %}
@@ -57,7 +38,7 @@
   <div class="table-panel p-3 p-md-4">
     {% if tournaments %}
       <div class="table-responsive">
-        <table class="table table-striped align-middle mb-0">
+        <table class="table table-striped align-middle mb-0 tournament-table">
           <thead>
             <tr>
               <th>Турнир</th>
@@ -65,13 +46,12 @@
               <th>Формат</th>
               <th>Участники</th>
               <th>Статус</th>
-              <th>Источник</th>
-              <th class="text-end">Действия</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {% for tournament in tournaments %}
-              <tr>
+              <tr data-tournament-row="{{ tournament.id }}">
                 <td>
                   <div class="fw-semibold">{{ tournament.name }}</div>
                   <div class="text-muted small">Старт: {{ tournament.startDate }}</div>
@@ -80,16 +60,16 @@
                 <td>{{ tournament.format }}</td>
                 <td>{{ tournament.currentParticipants }}/{{ tournament.maxParticipants }}</td>
                 <td><span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span></td>
-                <td>{% if tournament.isExternal %}<span class="badge text-bg-secondary">{{ tournament.provider|default:"external" }}</span>{% else %}<span class="badge text-bg-warning text-dark">local</span>{% endif %}</td>
-                <td class="text-end">
-                  <div class="d-inline-flex gap-2 flex-wrap justify-content-end">
+                <td>
+                  <div class="d-flex justify-content-end gap-2 flex-wrap">
+                    <button class="btn btn-sm btn-ghost" type="button" data-favorite-tournament="{{ tournament.id }}">В избранное</button>
                     <a class="btn btn-sm btn-outline-accent" href="{% url 'tournament_detail' tournament.id %}">Открыть</a>
                     {% if is_admin and not tournament.isExternal %}
-                      <form method="post" action="{% url 'tournaments' %}" class="d-inline">
+                      <form method="post" class="m-0" onsubmit="return confirm('Удалить турнир?');">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="delete_tournament">
                         <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
-                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Точно удалить турнир?');">Удалить</button>
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
                       </form>
                     {% endif %}
                   </div>
@@ -99,6 +79,7 @@
           </tbody>
         </table>
       </div>
+      <div class="empty-state d-none" data-favorites-empty>В избранном пока нет турниров.</div>
     {% else %}
       <div class="empty-state">Турниров пока нет.</div>
     {% endif %}

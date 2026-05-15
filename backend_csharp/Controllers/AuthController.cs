@@ -113,7 +113,7 @@ public class AuthController : ControllerBase
         if (user is null || user.PasswordHash != Hash(request.Password))
             return Unauthorized(new { message = "Неверный email или пароль" });
 
-        var token = BuildDemoToken(user.Id, user.Email, user.Nickname, user.Role);
+        var token = BuildAccessToken(user.Id, user.Email, user.Nickname, user.Role);
         return Ok(new
         {
             token,
@@ -197,7 +197,7 @@ public class AuthController : ControllerBase
 
         return Ok(new
         {
-            message = "Рейтинг подтверждён (mock)",
+            message = "Рейтинг подтверждён",
             profile = ToUserDto(user)
         });
     }
@@ -231,7 +231,7 @@ public class AuthController : ControllerBase
         return Convert.ToHexString(bytes);
     }
 
-    private static string BuildDemoToken(int userId, string email, string nickname, string role)
+    private static string BuildAccessToken(int userId, string email, string nickname, string role)
     {
         var header = Base64UrlEncode("{\"alg\":\"none\",\"typ\":\"JWT\"}");
         var payloadObj = new
@@ -243,7 +243,7 @@ public class AuthController : ControllerBase
             exp = DateTimeOffset.UtcNow.AddHours(8).ToUnixTimeSeconds()
         };
         var payload = Base64UrlEncode(JsonSerializer.Serialize(payloadObj));
-        return $"{header}.{payload}.demo";
+        return $"{header}.{payload}.local";
     }
 
     private static string Base64UrlEncode(string plain)

@@ -5,7 +5,7 @@
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Стримы и игроки</h1>
-      <p class="text-muted mb-0">Данные берутся из PandaScore. Если токен или тариф не подходят, ниже появится нормальная причина ошибки.</p>
+      <p class="text-muted mb-0">Поиск трансляций турниров и публичной информации об игроках.</p>
     </div>
   </div>
 
@@ -47,7 +47,7 @@
                 {% endfor %}
               </div>
             {% else %}
-              <div class="alert alert-warning mt-3 mb-0">У найденного турнира нет стримов в выдаче PandaScore, но матчи были получены.</div>
+              <div class="alert alert-warning mt-3 mb-0">Для найденного турнира трансляции не обнаружены.</div>
             {% endif %}
           </div>
         {% endif %}
@@ -74,7 +74,7 @@
                       <div>
                         <div class="fw-semibold">{{ p.name|default:"(без имени)" }}</div>
                         <div class="text-muted small">{% if p.currentTeam %}{{ p.currentTeam }} · {% endif %}{% if p.role %}роль: {{ p.role }} · {% endif %}{% if p.nationality %}{{ p.nationality }}{% endif %}</div>
-                        {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">PandaScore reference</a>{% endif %}
+                        {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">Профиль игрока</a>{% endif %}
                       </div>
                       {% if p.imageUrl %}<img src="{{ p.imageUrl }}" alt="player" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">{% endif %}
                     </div>

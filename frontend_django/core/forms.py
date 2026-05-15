@@ -122,7 +122,7 @@ class ProfileEditForm(forms.Form):
 class RatingVerifyForm(forms.Form):
     provider = forms.ChoiceField(
         label='Провайдер рейтинга',
-        choices=(('faceit', 'Faceit (mock)'), ('steam', 'Steam (mock)')),
+        choices=(('faceit', 'Faceit'), ('steam', 'Steam')),
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     profile_url = forms.URLField(

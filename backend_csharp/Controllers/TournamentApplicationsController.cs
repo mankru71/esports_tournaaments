@@ -32,7 +32,6 @@ public class TournamentApplicationsController : ControllerBase
 
         var apps = await _db.TournamentApplications
             .Include(a => a.Team)
-                .ThenInclude(t => t!.Players)
             .Include(a => a.ApplicantUser)
             .Where(a => a.TournamentId == tournamentId)
             .OrderByDescending(a => a.CreatedAtUtc)
@@ -49,7 +48,6 @@ public class TournamentApplicationsController : ControllerBase
 
         var apps = await _db.TournamentApplications
             .Include(a => a.Team)
-                .ThenInclude(t => t!.Players)
             .Where(a => a.TournamentId == tournamentId && a.ApplicantUserId == userId.Value)
             .OrderByDescending(a => a.CreatedAtUtc)
             .ToListAsync();
@@ -67,7 +65,7 @@ public class TournamentApplicationsController : ControllerBase
         if (tournament is null) return NotFound(new { message = "Турнир не найден" });
 
         if (tournament.IsExternal)
-            return BadRequest(new { message = "Для внешних турниров доступен только просмотр данных. Заявки можно подавать только в локальные турниры." });
+            return BadRequest(new { message = "Для выбранного турнира подача заявок недоступна." });
 
         var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == request.TeamId);
         if (team is null) return NotFound(new { message = "Команда не найдена" });
@@ -105,24 +103,9 @@ public class TournamentApplicationsController : ControllerBase
 
         var app = await _db.TournamentApplications
             .Include(a => a.Team)
-                .ThenInclude(t => t!.Players)
             .Include(a => a.ApplicantUser)
             .FirstOrDefaultAsync(a => a.Id == applicationId && a.TournamentId == tournamentId);
         if (app is null) return NotFound(new { message = "Заявка не найдена" });
-
-        if (app.Status == "approved")
-            return Ok(ToDto(app));
-
-        if (tournament.MaxParticipants > 0 && tournament.CurrentParticipants >= tournament.MaxParticipants)
-            return BadRequest(new { message = "Турнир уже заполнен" });
-
-        var players = app.Team?.Players?.ToList() ?? new List<Models.TeamPlayer>();
-        if (players.Count == 0)
-            return BadRequest(new { message = "В команде нет игроков. Добавьте состав перед подтверждением заявки." });
-
-        var unconfirmed = players.Where(p => p.RatingStatus != "confirmed").Select(p => p.Nickname).ToList();
-        if (unconfirmed.Count > 0)
-            return BadRequest(new { message = "Нельзя подтвердить заявку: сначала подтвердите рейтинг игроков: " + string.Join(", ", unconfirmed) });
 
         app.Status = "approved";
         tournament.CurrentParticipants += 1;
@@ -139,17 +122,9 @@ public class TournamentApplicationsController : ControllerBase
 
         var app = await _db.TournamentApplications
             .Include(a => a.Team)
-                .ThenInclude(t => t!.Players)
             .Include(a => a.ApplicantUser)
             .FirstOrDefaultAsync(a => a.Id == applicationId && a.TournamentId == tournamentId);
         if (app is null) return NotFound(new { message = "Заявка не найдена" });
-
-        if (app.Status == "approved")
-        {
-            var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
-            if (tournament != null && tournament.CurrentParticipants > 0)
-                tournament.CurrentParticipants -= 1;
-        }
 
         app.Status = "rejected";
         await _db.SaveChangesAsync();
@@ -164,8 +139,6 @@ public class TournamentApplicationsController : ControllerBase
         teamName = a.Team?.Name,
         status = a.Status,
         createdAtUtc = a.CreatedAtUtc,
-        applicantEmail = a.ApplicantUser?.Email,
-        playersCount = a.Team?.Players?.Count ?? 0,
-        unconfirmedRatings = a.Team?.Players?.Count(p => p.RatingStatus != "confirmed") ?? 0
+        applicantEmail = a.ApplicantUser?.Email
     };
 }

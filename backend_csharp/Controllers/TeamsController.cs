@@ -208,30 +208,6 @@ public class TeamsController : ControllerBase
         if (team is null) return NotFound(new { message = "Команда не найдена" });
         if (team.CaptainUserId != userId.Value) return StatusCode(403, new { message = "Недостаточно прав" });
 
-        var applications = await _db.TournamentApplications
-            .Include(a => a.Tournament)
-            .Where(a => a.TeamId == teamId)
-            .ToListAsync();
-
-        foreach (var app in applications.Where(a => a.Status == "approved" && a.Tournament != null))
-        {
-            app.Tournament!.CurrentParticipants = Math.Max(0, app.Tournament.CurrentParticipants - 1);
-        }
-
-        var matches = await _db.Matches
-            .Where(m => m.TeamAId == teamId || m.TeamBId == teamId || m.WinnerId == teamId)
-            .ToListAsync();
-
-        foreach (var match in matches)
-        {
-            if (match.TeamAId == teamId) match.TeamAId = null;
-            if (match.TeamBId == teamId) match.TeamBId = null;
-            if (match.WinnerId == teamId) match.WinnerId = null;
-            if (match.Status != "finished") match.Status = "planned";
-        }
-
-        _db.TournamentApplications.RemoveRange(applications);
-        _db.TeamPlayers.RemoveRange(team.Players);
         _db.Teams.Remove(team);
         await _db.SaveChangesAsync();
         return NoContent();

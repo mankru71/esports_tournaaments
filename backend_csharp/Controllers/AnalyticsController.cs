@@ -21,68 +21,41 @@ public class AnalyticsController : ControllerBase
     {
         var teams = await _db.Teams.Include(t => t.Players).ToListAsync();
         var tournaments = await _db.Tournaments.ToListAsync();
-        var matches = await _db.Matches.ToListAsync();
-        var payouts = await _db.PrizePayouts.Include(p => p.Team).Include(p => p.Tournament).ToListAsync();
 
         var playerStats = teams
-            .SelectMany(t => t.Players.Select(p =>
+            .SelectMany(t => t.Players.Select(p => new
             {
-                var played = matches.Count(m => m.TeamAId == t.Id || m.TeamBId == t.Id);
-                var wins = matches.Count(m => m.WinnerId == t.Id);
-                return new
-                {
-                    player = p.Nickname,
-                    team = t.Name,
-                    rating = p.Rating,
-                    ratingStatus = p.RatingStatus,
-                    played,
-                    wins,
-                    winRate = played == 0 ? 0 : Math.Round((decimal)wins * 100m / played, 2)
-                };
+                player = p.Nickname,
+                team = t.Name,
+                rating = p.Rating,
+                ratingStatus = p.RatingStatus
             }))
             .OrderByDescending(p => p.rating ?? 0m)
-            .ThenByDescending(p => p.winRate)
-            .Take(15)
+            .Take(10)
             .ToList();
 
         var disciplinePopularity = tournaments
             .GroupBy(t => string.IsNullOrWhiteSpace(t.Game) ? "Не указано" : t.Game)
-            .Select(g => new { discipline = g.Key, value = g.Count(), prizePool = g.Sum(t => t.PrizePool) })
+            .Select(g => new { discipline = g.Key, value = g.Count() })
             .OrderByDescending(x => x.value)
             .ToList();
 
-        var prizePools = tournaments
-            .Select(t => new { tournament = t.Name, prizePool = t.PrizePool, status = t.Status, stage = t.CurrentStage })
+        var payouts = tournaments
+            .Select(t => new { tournament = t.Name, prizePool = t.PrizePool, status = t.Status })
             .OrderByDescending(x => x.prizePool)
             .Take(10)
             .ToList();
-
-        var liveMatches = matches.Count(m => m.Status == "live");
-        var finishedMatches = matches.Count(m => m.Status == "finished");
-        var linkedStreams = matches.Count(m => !string.IsNullOrWhiteSpace(m.StreamUrl));
 
         return Ok(new
         {
             playerStats,
             disciplinePopularity,
-            prizePools,
-            payouts = payouts.Select(p => new
-            {
-                tournament = p.Tournament?.Name,
-                place = p.PlaceTitle,
-                team = p.Team?.Name ?? "TBD",
-                p.Amount,
-                p.Status
-            }),
+            prizePools = payouts,
             summary = new
             {
                 totalTeams = teams.Count,
                 totalPlayers = teams.SelectMany(t => t.Players).Count(),
-                confirmedRatings = teams.SelectMany(t => t.Players).Count(p => p.RatingStatus == "confirmed"),
-                totalTournaments = tournaments.Count,
-                liveMatches,
-                finishedMatches,
-                linkedStreams
+                confirmedRatings = teams.SelectMany(t => t.Players).Count(p => p.RatingStatus == "confirmed")
             }
         });
     }
@@ -90,23 +63,17 @@ public class AnalyticsController : ControllerBase
     [HttpGet("export/csv")]
     public async Task<IActionResult> ExportCsv()
     {
-        var teams = await _db.Teams.Include(t => t.Players).ToListAsync();
-        var matches = await _db.Matches.ToListAsync();
+        var players = await _db.Teams.Include(t => t.Players).ToListAsync();
         var sb = new StringBuilder();
-        sb.AppendLine("team,player,rating,rating_status,played,wins,win_rate");
-        foreach (var team in teams)
+        sb.AppendLine("team,player,rating,rating_status");
+        foreach (var team in players)
         {
-            var played = matches.Count(m => m.TeamAId == team.Id || m.TeamBId == team.Id);
-            var wins = matches.Count(m => m.WinnerId == team.Id);
-            var winRate = played == 0 ? 0 : Math.Round((decimal)wins * 100m / played, 2);
             foreach (var player in team.Players)
             {
-                sb.AppendLine($"\"{Escape(team.Name)}\",\"{Escape(player.Nickname)}\",\"{player.Rating}\",\"{player.RatingStatus}\",\"{played}\",\"{wins}\",\"{winRate}\"");
+                sb.AppendLine($"\"{team.Name}\",\"{player.Nickname}\",\"{player.Rating}\",\"{player.RatingStatus}\"");
             }
         }
 
         return File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "analytics.csv");
     }
-
-    private static string Escape(string? value) => (value ?? string.Empty).Replace("\"", "\"\"");
 }

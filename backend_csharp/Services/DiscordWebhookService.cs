@@ -1,4 +1,4 @@
-using System.Text;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Models;
 
@@ -18,137 +18,85 @@ public class DiscordWebhookService
     }
 
     public bool Enabled => !string.IsNullOrWhiteSpace(WebhookUrl);
-
-    private string? WebhookUrl =>
-        _config["Discord:WebhookUrl"] ??
-        _config["DISCORD_WEBHOOK_URL"];
-
-    private string FrontendUrl =>
-        (_config["PUBLIC_FRONTEND_URL"] ?? "http://localhost").TrimEnd('/');
-
-    private string BotName =>
-        _config["Discord:BotName"] ??
-        _config["DISCORD_BOT_NAME"] ??
-        "Esports Arena";
+    private string WebhookUrl => (_config["DISCORD_WEBHOOK_URL"] ?? string.Empty).Trim();
+    private string BotName => string.IsNullOrWhiteSpace(_config["DISCORD_BOT_NAME"]) ? "Arena Control" : _config["DISCORD_BOT_NAME"]!;
 
     public async Task NotifyTournamentCreatedAsync(Tournament tournament, CancellationToken ct = default)
     {
-        var url = $"{FrontendUrl}/tournaments/{tournament.Id}/";
+        if (!Enabled) return;
+
         var payload = new
         {
             username = BotName,
-            content = "🏆 **Создан новый турнир!**",
             embeds = new[]
             {
                 new
                 {
-                    title = tournament.Name,
-                    description = $"Дисциплина: **{NormalizeGame(tournament.Game)}**\nФормат: **{tournament.Format}**\nУчастников: **0/{tournament.MaxParticipants}**",
-                    url,
-                    color = 0x5865F2,
+                    title = "Новый турнир",
+                    description = tournament.Name,
+                    color = 13150570,
                     fields = new[]
                     {
-                        new { name = "Старт", value = SafeValue(tournament.StartDate), inline = true },
-                        new { name = "Призовой фонд", value = $"{tournament.PrizePool:0.##}", inline = true },
-                        new { name = "Статус", value = SafeValue(tournament.Status), inline = true }
+                        new { name = "Дисциплина", value = tournament.Game, inline = true },
+                        new { name = "Участники", value = tournament.MaxParticipants.ToString(), inline = true },
+                        new { name = "Старт", value = tournament.StartDate, inline = true },
+                        new { name = "Призовой фонд", value = tournament.PrizePool.ToString("0.##"), inline = true }
                     },
-                    thumbnail = new { url = "https://cdn-icons-png.flaticon.com/512/871/871392.png" },
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    footer = new { text = "Esports Tournaments · учебный проект" }
+                    timestamp = DateTimeOffset.UtcNow
                 }
             }
         };
 
-        await SendAsync(payload, "tournament-created", ct);
+        await SendAsync(payload, ct);
     }
 
     public async Task NotifyMatchLiveAsync(Match match, CancellationToken ct = default)
     {
-        var tournament = match.Tournament;
-        var url = tournament == null ? FrontendUrl : $"{FrontendUrl}/tournaments/{match.TournamentId}/matches/";
+        if (!Enabled) return;
+
         var teamA = match.TeamA?.Name ?? "TBD";
         var teamB = match.TeamB?.Name ?? "TBD";
+        var tournamentName = match.Tournament?.Name ?? $"Турнир #{match.TournamentId}";
+
         var payload = new
         {
             username = BotName,
-            content = "🔴 **Матч перешёл в LIVE!**",
             embeds = new[]
             {
                 new
                 {
-                    title = $"{teamA} vs {teamB}",
-                    description = tournament == null ? "Матч начался." : $"Турнир: **{tournament.Name}**",
-                    url,
-                    color = 0xED4245,
+                    title = "Матч в эфире",
+                    description = $"{teamA} — {teamB}",
+                    color = 15844367,
                     fields = new[]
                     {
-                        new { name = "Раунд", value = SafeValue(match.Round), inline = true },
-                        new { name = "Счёт", value = $"{match.ScoreA} : {match.ScoreB}", inline = true },
-                        new { name = "Статус", value = "LIVE", inline = true }
+                        new { name = "Турнир", value = tournamentName, inline = false },
+                        new { name = "Счёт", value = $"{match.ScoreA}:{match.ScoreB}", inline = true },
+                        new { name = "Этап", value = string.IsNullOrWhiteSpace(match.Round) ? "Match" : match.Round, inline = true },
+                        new { name = "Стрим", value = string.IsNullOrWhiteSpace(match.StreamUrl) ? "Не привязан" : match.StreamUrl, inline = false }
                     },
-                    thumbnail = new { url = "https://cdn-icons-png.flaticon.com/512/5968/5968756.png" },
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    footer = new { text = "Live update from backend" }
+                    timestamp = DateTimeOffset.UtcNow
                 }
             }
         };
 
-        await SendAsync(payload, "match-live", ct);
+        await SendAsync(payload, ct);
     }
 
-    public async Task<bool> SendTestAsync(CancellationToken ct = default)
+    private async Task SendAsync(object payload, CancellationToken ct)
     {
-        var payload = new
-        {
-            username = BotName,
-            content = "✅ Discord Webhook подключён. Тестовое уведомление из учебного проекта работает.",
-            embeds = new[]
-            {
-                new
-                {
-                    title = "Проверка интеграции",
-                    description = "Если это сообщение появилось в канале, можно показывать Discord-интеграцию на защите.",
-                    color = 0x57F287,
-                    timestamp = DateTimeOffset.UtcNow.ToString("O")
-                }
-            }
-        };
-
-        return await SendAsync(payload, "test", ct);
-    }
-
-    private async Task<bool> SendAsync(object payload, string eventName, CancellationToken ct)
-    {
-        if (!Enabled)
-        {
-            _logger.LogInformation("Discord webhook is not configured. Event {EventName} was skipped.", eventName);
-            return false;
-        }
-
         try
         {
-            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            using var response = await _http.PostAsync(WebhookUrl, content, ct);
-
-            if (response.IsSuccessStatusCode)
+            using var response = await _http.PostAsJsonAsync(WebhookUrl, payload, new JsonSerializerOptions(JsonSerializerDefaults.Web), ct);
+            if (!response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Discord webhook event {EventName} sent successfully.", eventName);
-                return true;
+                var body = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogWarning("Discord webhook returned {Status}: {Body}", (int)response.StatusCode, body);
             }
-
-            var body = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogWarning("Discord webhook event {EventName} failed: {StatusCode} {Body}", eventName, (int)response.StatusCode, body);
-            return false;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Discord webhook event {EventName} failed.", eventName);
-            return false;
+            _logger.LogWarning(ex, "Discord webhook request failed");
         }
     }
-
-    private static string SafeValue(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value.Trim();
-
-    private static string NormalizeGame(string? game) => string.IsNullOrWhiteSpace(game) ? "Не указано" : game.Trim();
 }

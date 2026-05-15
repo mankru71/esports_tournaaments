@@ -186,9 +186,8 @@ class CSharpApiClient:
     def send_email_verification(self, user_id: int, token: str) -> ApiResult:
         return self._request("POST", f"verification/send/{user_id}", token=token)
 
-    def confirm_email(self, user_id: int | str, verify_token: str) -> ApiResult:
-        payload = {"token": verify_token}
-        return self._request("POST", f"verification/confirm/{user_id}", data=payload)
+    def confirm_email(self, user_id: int, verify_token: str) -> ApiResult:
+        return self._request("POST", f"verification/confirm/{user_id}", data={"token": verify_token})
     
     def get_analytics_csv(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "analytics/export/csv", token=token)
@@ -202,29 +201,17 @@ class CSharpApiClient:
     def get_prize_pool(self, tournament_id: int, token: str | None = None) -> ApiResult:
         return self._request("GET", f"tournament/{tournament_id}/prize-pool", token=token)
 
-    def set_tournament_stage(self, tournament_id: int, token: str, status: str, stage: str | None = None) -> ApiResult:
-        payload = {"status": status}
-        if stage:
-            payload["stage"] = stage
-        return self._request("POST", f"tournament/{tournament_id}/stage", data=payload, token=token)
-
-    def set_match_stream(self, match_id: int | str, stream_url: str, token: str, stream_status: str = "linked") -> ApiResult:
-        return self._request("PUT", f"matches/{match_id}/stream", data={"streamUrl": stream_url, "streamStatus": stream_status}, token=token)
-
-    def open_mvp_voting(self, tournament_id: int, token: str, is_open: bool = True) -> ApiResult:
-        return self._request("POST", "mvp/open", data={"tournamentId": tournament_id, "isOpen": is_open}, token=token)
-
-    def distribute_prize_pool(self, tournament_id: int, token: str) -> ApiResult:
-        return self._request("POST", f"tournament/{tournament_id}/prize-pool/distribute", token=token)
-
-    def mark_prizes_paid(self, tournament_id: int, token: str) -> ApiResult:
-        return self._request("POST", f"tournament/{tournament_id}/prize-pool/mark-paid", token=token)
-
-    def get_tournament_streams(self, tournament_id: int, token: str | None = None) -> ApiResult:
-        return self._request("GET", f"streams/tournament/{tournament_id}", token=token)
-
     def set_prize_payouts(self, tournament_id: int, token: str, payouts: list[dict]) -> ApiResult:
         return self._request("POST", f"tournament/{tournament_id}/prize-pool/payouts", data={"payouts": payouts}, token=token)
+
+    def update_tournament_status(self, tournament_id: int, status: str, token: str) -> ApiResult:
+        return self._request("POST", f"tournament/{tournament_id}/status", data={"status": status}, token=token)
+
+    def attach_match_stream(self, match_id: int, stream_url: str, token: str) -> ApiResult:
+        return self._request("PUT", f"matches/{match_id}/stream", data={"streamUrl": stream_url}, token=token)
+
+    def distribute_prizes(self, tournament_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"prizes/{tournament_id}/distribute", token=token)
 
     def get_nominees(self) -> ApiResult:
         return self._request("GET", "voting/nominees")
@@ -238,11 +225,15 @@ class CSharpApiClient:
     def health_check(self) -> bool:
         return self._request("GET", "health").ok
 
-    def verify_faceit_account(self, user_id: int, nickname: str, token: str) -> ApiResult:
+    def verify_faceit_account(self, user_id: int, nickname: str, token: str):
+        payload = {"FaceitNickname": nickname}
+        return self._request("POST", f"integrations/faceit/verify/{user_id}", data=payload, token=token)
+    
+    def verify_faceit(self, user_id: int, faceit_nickname: str, token: str) -> "ApiResult":
         return self._request(
             "POST",
             f"integrations/faceit/verify/{user_id}",
-            data={"faceitNickname": nickname},
+            data={"faceitNickname": faceit_nickname},
             token=token,
         )
 

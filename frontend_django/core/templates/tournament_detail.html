@@ -4,13 +4,15 @@
 <section>
   <div class="page-hero">
     <div>
-      <h1 class="h3 mb-2">{{ tournament.name }}</h1>
-      <p class="text-muted mb-0">
-        {{ tournament.discipline }} · {{ tournament.format }} · {{ tournament.stagesSummary }} ·
-        этап: {{ tournament.currentStage }} · призовой фонд: {{ tournament.prizePool }}
-      </p>
+      <p class="eyebrow mb-2">Турнир</p>
+      <h1 class="h2 mb-2">{{ tournament.name }}</h1>
+      <p class="text-muted mb-0">{{ tournament.discipline }} · {{ tournament.format }} · призовой фонд: {{ tournament.prizePool }}</p>
     </div>
-    <span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button class="btn btn-ghost" type="button" data-copy-current-url>Скопировать ссылку</button>
+      <button class="btn btn-outline-accent" type="button" data-favorite-tournament="{{ tournament.id }}">В избранное</button>
+      <span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span>
+    </div>
   </div>
 
   <ul class="nav nav-tabs mb-3">
@@ -25,52 +27,43 @@
   {% if active_tab == 'overview' %}
     {% if is_admin or is_judge %}
       <div class="section-panel p-3 p-md-4 mb-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
           <div>
-            <h2 class="h6 mb-1">Управление этапом турнира</h2>
-            <div class="text-muted small">Админ/судья может запустить, поставить на паузу или завершить этап. При завершении автоматически открывается MVP.</div>
+            <h2 class="h5 mb-1">Состояние турнира</h2>
+            <div class="text-muted small">Статус влияет на отображение турнира и работу этапов.</div>
           </div>
+          <form method="post" class="d-flex gap-2 flex-wrap">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="set_status">
+            <select class="form-select form-select-sm" name="status">
+              <option value="planned" {% if tournament.status == 'planned' %}selected{% endif %}>Запланирован</option>
+              <option value="live" {% if tournament.status == 'live' %}selected{% endif %}>Идёт</option>
+              <option value="paused" {% if tournament.status == 'paused' %}selected{% endif %}>Пауза</option>
+              <option value="finished" {% if tournament.status == 'finished' %}selected{% endif %}>Завершён</option>
+            </select>
+            <button class="btn btn-sm btn-outline-accent" type="submit">Обновить</button>
+          </form>
         </div>
-        <form method="post" class="row g-2 align-items-end">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="set_stage">
-          <div class="col-md-4">
-            <label class="form-label small mb-1">Статус</label>
-            <select class="form-select" name="status">
-              <option value="planned" {% if tournament.status == 'planned' %}selected{% endif %}>planned — подготовка</option>
-              <option value="live" {% if tournament.status == 'live' %}selected{% endif %}>live — идёт</option>
-              <option value="paused" {% if tournament.status == 'paused' %}selected{% endif %}>paused — пауза</option>
-              <option value="finished" {% if tournament.status == 'finished' %}selected{% endif %}>finished — завершён</option>
-            </select>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small mb-1">Этап</label>
-            <select class="form-select" name="stage">
-              <option value="registration" {% if tournament.currentStage == 'registration' %}selected{% endif %}>registration</option>
-              <option value="group_stage" {% if tournament.currentStage == 'group_stage' %}selected{% endif %}>group_stage</option>
-              <option value="playoff" {% if tournament.currentStage == 'playoff' %}selected{% endif %}>playoff</option>
-              <option value="finished" {% if tournament.currentStage == 'finished' %}selected{% endif %}>finished</option>
-            </select>
-          </div>
-          <div class="col-md-4"><button class="btn btn-outline-accent w-100" type="submit">Обновить этап</button></div>
-        </form>
       </div>
     {% endif %}
 
     {% if is_captain and not tournament.isExternal %}
       <div class="section-panel p-3 p-md-4 mb-3">
-        <h2 class="h6 mb-2">Заявка на участие</h2>
+        <h2 class="h5 mb-3">Заявка на участие</h2>
         {% if my_apps %}
-          <ul class="mb-0 ps-3">
+          <div class="d-flex flex-column gap-2">
             {% for a in my_apps %}
-              <li>{{ a.teamName|default:"Команда" }} — <span class="badge badge-status status-{{ a.status }}">{{ a.status }}</span></li>
+              <div class="card p-3 d-flex flex-row justify-content-between align-items-center">
+                <span>{{ a.teamName|default:"Команда" }}</span>
+                <span class="badge badge-status status-{{ a.status }}">{{ a.status }}</span>
+              </div>
             {% endfor %}
-          </ul>
+          </div>
         {% elif my_teams %}
           <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="apply_to_tournament" />
-            <div style="min-width: 220px;">
+            <div style="min-width: 240px;">
               <label class="form-label small mb-1">Команда</label>
               <select class="form-select" name="team_id" required>
                 <option value="" selected disabled>Выберите команду</option>
@@ -80,7 +73,7 @@
             <button class="btn btn-accent" type="submit">Подать заявку</button>
           </form>
         {% else %}
-          <div class="text-muted">У вас нет команд капитана — создайте команду на вкладке «Команды».</div>
+          <div class="empty-state">Для подачи заявки нужна команда, где вы указаны капитаном.</div>
         {% endif %}
       </div>
     {% endif %}
@@ -88,30 +81,35 @@
     <div class="row g-3">
       <div class="col-lg-7">
         <div class="table-panel p-3 p-md-4 h-100">
-          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h2 class="h5 mb-0">Планирование сетки</h2>
+          <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+            <div>
+              <h2 class="h5 mb-1">Сетка</h2>
+              {% if bracket.summary %}<div class="text-muted small">{{ bracket.summary }}</div>{% endif %}
+            </div>
             {% if is_admin or is_judge %}
-              <form method="post" class="d-flex gap-2 flex-wrap">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="save_planning">
-                <select class="form-select form-select-sm" name="format">
-                  <option value="single_elimination" {% if tournament.format == 'single_elimination' %}selected{% endif %}>single elimination</option>
-                  <option value="group_stage" {% if tournament.format == 'group_stage' %}selected{% endif %}>group stage</option>
-                </select>
-                <select class="form-select form-select-sm" name="stage_type">
-                  <option value="single" {% if tournament.stageType == 'single' %}selected{% endif %}>single</option>
-                  <option value="groups" {% if tournament.stageType == 'groups' %}selected{% endif %}>groups</option>
-                </select>
-                <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
-              </form>
-              <form method="post">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="generate_bracket">
-                <button class="btn btn-sm btn-success" type="submit">Сгенерировать сетку</button>
-              </form>
+              <div class="d-flex flex-column gap-2">
+                <form method="post" class="d-flex gap-2 flex-wrap">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="save_planning">
+                  <select class="form-select form-select-sm" name="format">
+                    <option value="single_elimination" {% if tournament.format == 'single_elimination' %}selected{% endif %}>Одиночная сетка</option>
+                    <option value="group_stage" {% if tournament.format == 'group_stage' %}selected{% endif %}>Групповой этап</option>
+                  </select>
+                  <select class="form-select form-select-sm" name="stage_type">
+                    <option value="single" {% if tournament.stageType == 'single' %}selected{% endif %}>Сетка</option>
+                    <option value="groups" {% if tournament.stageType == 'groups' %}selected{% endif %}>Группы</option>
+                  </select>
+                  <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
+                </form>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="generate_bracket">
+                  <button class="btn btn-sm btn-accent w-100" type="submit">Сгенерировать матчи</button>
+                </form>
+              </div>
             {% endif %}
           </div>
-          {% if bracket.summary %}<div class="text-muted small mb-3">{{ bracket.summary }}</div>{% endif %}
+
           {% if bracket.groups %}
             <div class="row g-3 mb-3">
               {% for group in bracket.groups %}
@@ -120,7 +118,7 @@
                     <div class="fw-semibold mb-2">{{ group.name }}</div>
                     <ol class="mb-0 ps-3">
                       {% for team in group.teams %}
-                        <li>{{ team.name }} <span class="text-muted small">seed {{ team.seed }}, rating {{ team.ratingAverage|default:team.rating }}</span></li>
+                        <li>{{ team.name }} <span class="text-muted small">seed {{ team.seed }}</span></li>
                       {% endfor %}
                     </ol>
                   </div>
@@ -128,18 +126,21 @@
               {% endfor %}
             </div>
           {% endif %}
-          {% if bracket.standings %}
-            <h3 class="h6 mt-3">Таблица групп</h3>
-            <div class="table-responsive mb-3">
-              <table class="table table-sm table-striped align-middle mb-0">
-                <thead><tr><th>Группа</th><th>Команда</th><th>И</th><th>В</th><th>П</th><th>Очки</th></tr></thead>
-                <tbody>{% for s in bracket.standings %}<tr><td>{{ s.groupName }}</td><td>{{ s.team }}</td><td>{{ s.played }}</td><td>{{ s.wins }}</td><td>{{ s.losses }}</td><td class="fw-semibold">{{ s.points }}</td></tr>{% endfor %}</tbody>
+
+          {% if bracket.matches %}
+            <div class="table-responsive">
+              <table class="table table-striped align-middle mb-0">
+                <thead><tr><th>Этап</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
+                <tbody>
+                  {% for m in bracket.matches %}
+                    <tr><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td><td>{{ m.status }}</td></tr>
+                  {% endfor %}
+                </tbody>
               </table>
             </div>
+          {% else %}
+            <div class="empty-state">Сетка ещё не построена.</div>
           {% endif %}
-          {% if bracket.matches %}
-            <div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>Раунд/Группа</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead><tbody>{% for m in bracket.matches %}<tr><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td><td>{{ m.status }}</td></tr>{% endfor %}</tbody></table></div>
-          {% else %}<div class="empty-state">Сетка пока не построена — нужны заявки команд.</div>{% endif %}
         </div>
       </div>
       <div class="col-lg-5">
@@ -152,14 +153,22 @@
                   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                       <div class="fw-semibold">{{ app.teamName|default:"Команда" }}</div>
-                      <div class="text-muted small">{{ app.applicantEmail|default:"—" }} · игроков: {{ app.playersCount|default:0 }} · неподтв.: {{ app.unconfirmedRatings|default:0 }}</div>
+                      <div class="text-muted small">{{ app.applicantEmail|default:"—" }} · {{ app.createdAtUtc }}</div>
                     </div>
-                    <div class="d-flex gap-2"><span class="badge badge-status status-{{ app.status }}">{{ app.status }}</span>{% if app.status == 'pending' %}<form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="approve_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-success" type="submit">Подтвердить</button></form><form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="reject_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-danger" type="submit">Отклонить</button></form>{% endif %}</div>
+                    <div class="d-flex gap-2 flex-wrap">
+                      <span class="badge badge-status status-{{ app.status }}">{{ app.status }}</span>
+                      {% if app.status == 'pending' %}
+                        <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="approve_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-success" type="submit">Принять</button></form>
+                        <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="reject_application"><input type="hidden" name="application_id" value="{{ app.id }}"><button class="btn btn-sm btn-outline-danger" type="submit">Отклонить</button></form>
+                      {% endif %}
+                    </div>
                   </div>
                 </div>
               {% endfor %}
             </div>
-          {% else %}<div class="empty-state">Заявок пока нет.</div>{% endif %}
+          {% else %}
+            <div class="empty-state">Заявок пока нет.</div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -167,53 +176,59 @@
   {% elif active_tab == 'matches' %}
     <div class="table-panel p-3 p-md-4">
       <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h2 class="h5 mb-0">Матчи турнира</h2>
-        <a class="btn btn-sm btn-outline-accent" href="{% url 'match_center' tournament.id %}">Открыть live match-center</a>
+        <h2 class="h5 mb-0">Матчи</h2>
+        <a class="btn btn-sm btn-outline-accent" href="{% url 'match_center' tournament.id %}">Матч-центр</a>
       </div>
       {% if matches %}
-        <div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>ID</th><th>Раунд</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th><th>Стрим</th></tr></thead><tbody>{% for m in matches %}<tr><td>{{ m.id }}</td><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td><td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td><td>{% if m.streamUrl %}<a href="{{ m.streamUrl }}" target="_blank">{{ m.streamProvider|default:"stream" }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
-      {% else %}<div class="empty-state">Матчи ещё не опубликованы.</div>{% endif %}
+        <div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>ID</th><th>Этап</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead><tbody>{% for m in matches %}<tr><td>#{{ m.id }}</td><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td><td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td></tr>{% endfor %}</tbody></table></div>
+      {% else %}
+        <div class="empty-state">Матчи ещё не опубликованы.</div>
+      {% endif %}
     </div>
 
   {% elif active_tab == 'streams' %}
-    <div class="table-panel p-3 p-md-4">
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <div>
-          <h2 class="h5 mb-1">Twitch/YouTube стримы</h2>
-          <div class="text-muted small">Привяжи ссылку к матчу — она появится в карточке матча и в разделе стримов.</div>
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="table-panel p-3 p-md-4 h-100">
+          <h2 class="h5 mb-3">Трансляции матчей</h2>
+          {% if matches %}
+            <div class="d-flex flex-column gap-2">
+              {% for m in matches %}
+                <div class="card p-3">
+                  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                      <div class="fw-semibold">#{{ m.id }} · {{ m.teamA }} — {{ m.teamB }}</div>
+                      <div class="text-muted small">{{ m.round }} · {{ m.status_label }}</div>
+                      {% if m.streamUrl %}<a href="{{ m.streamUrl }}" target="_blank" rel="noopener">{{ m.streamUrl }}</a>{% else %}<div class="text-muted small">Стрим не привязан</div>{% endif %}
+                    </div>
+                    {% if is_admin or is_judge %}
+                      <form method="post" class="stream-attach-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="attach_stream">
+                        <input type="hidden" name="match_id" value="{{ m.id }}">
+                        <input class="form-control form-control-sm" name="stream_url" type="url" placeholder="Twitch или YouTube" value="{{ m.streamUrl }}" required>
+                        <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">Сначала сгенерируйте матчи.</div>
+          {% endif %}
         </div>
       </div>
-      {% if is_admin or is_judge %}
-        <form method="post" class="row g-2 align-items-end mb-3">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="set_match_stream">
-          <div class="col-md-3">
-            <label class="form-label small mb-1">Матч</label>
-            <select class="form-select" name="match_id" required>
-              {% for m in matches %}<option value="{{ m.id }}">#{{ m.id }} · {{ m.teamA }} vs {{ m.teamB }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="col-md-7">
-            <label class="form-label small mb-1">Ссылка Twitch / YouTube</label>
-            <input class="form-control" name="stream_url" placeholder="https://www.twitch.tv/channel или https://youtube.com/watch?v=..." required>
-          </div>
-          <div class="col-md-2"><button class="btn btn-outline-accent w-100" type="submit">Привязать</button></div>
-        </form>
-      {% endif %}
-      {% if streams_payload %}
-        <div class="row g-3">
-          {% for stream in streams_payload %}
-            <div class="col-lg-6">
-              <div class="card p-3 h-100">
-                <div class="fw-semibold">{{ stream.provider|default:"Стрим" }}</div>
-                <div class="text-muted small">online: {{ stream.status.online|default:False }} · viewers: {{ stream.status.viewers|default:0 }}</div>
-                <div class="text-break mb-2"><a href="{{ stream.url }}" target="_blank" rel="noopener">{{ stream.url }}</a></div>
-                {% if stream.meta.match %}<div class="small">{{ stream.meta.match }}</div>{% endif %}
-              </div>
-            </div>
-          {% endfor %}
+      <div class="col-lg-5">
+        <div class="table-panel p-3 p-md-4 h-100">
+          <h2 class="h5 mb-3">Найденные стримы</h2>
+          {% if streams_payload %}
+            <div class="d-flex flex-column gap-2">{% for stream in streams_payload %}<div class="card p-3"><div class="fw-semibold">{{ stream.provider|default:"Стрим" }}</div><div class="text-muted small">viewers: {{ stream.status.viewers|default:0 }}</div><div class="text-break"><a href="{{ stream.url }}" target="_blank" rel="noopener">{{ stream.url }}</a></div></div>{% endfor %}</div>
+          {% else %}
+            <div class="empty-state">Автоматически найденных стримов пока нет.</div>
+          {% endif %}
         </div>
-      {% else %}<div class="empty-state">Для турнира пока нет привязанных стримов.</div>{% endif %}
+      </div>
     </div>
 
   {% elif active_tab == 'mvp' %}
@@ -221,14 +236,9 @@
       <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
           <h2 class="h5 mb-1">MVP турнира</h2>
-          <div class="text-muted small">Статус голосования: {% if mvp_payload.isOpen %}<span class="text-success fw-semibold">открыто</span>{% else %}<span class="text-muted">закрыто</span>{% endif %}</div>
+          <div class="text-muted small">Голосование за самого ценного игрока.</div>
         </div>
-        {% if is_admin or is_judge %}
-          <div class="d-flex gap-2">
-            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="toggle_mvp"><input type="hidden" name="is_open" value="true"><button class="btn btn-sm btn-success" type="submit">Открыть MVP</button></form>
-            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="toggle_mvp"><input type="hidden" name="is_open" value="false"><button class="btn btn-sm btn-outline-danger" type="submit">Закрыть</button></form>
-          </div>
-        {% endif %}
+        <span class="badge {% if mvp_payload.isOpen %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if mvp_payload.isOpen %}Открыто{% else %}Закрыто{% endif %}</span>
       </div>
       {% if mvp_payload.candidates or mvp_payload.results %}
         <div class="row g-3">
@@ -238,69 +248,85 @@
               {% if mvp_payload.candidates %}
                 <div class="d-flex flex-column gap-2">
                   {% for c in mvp_payload.candidates %}
-                    <div class="d-flex justify-content-between align-items-center gap-2 border rounded-3 px-3 py-2">
-                      <div>{{ c.name|default:c.nickname|default:c.playerName }} <span class="text-muted small">{{ c.team|default:"" }}</span></div>
+                    <div class="d-flex justify-content-between align-items-center gap-2 border rounded-3 px-3 py-2 candidate-row">
+                      <div>{{ c.displayName }} <span class="text-muted small">{{ c.teamName }}</span></div>
                       {% if mvp_payload.isOpen and current_user %}
                         <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="vote_mvp"><input type="hidden" name="player_id" value="{{ c.id }}"><button class="btn btn-sm btn-outline-accent" type="submit">Голос</button></form>
                       {% endif %}
                     </div>
                   {% endfor %}
                 </div>
-              {% else %}<div class="text-muted">Кандидаты ещё не назначены.</div>{% endif %}
+              {% else %}
+                <div class="empty-state">Кандидаты ещё не назначены.</div>
+              {% endif %}
             </div>
           </div>
           <div class="col-lg-6">
             <div class="card p-3 h-100">
               <div class="fw-semibold mb-2">Результаты</div>
               {% if mvp_payload.results %}
-                <ol class="mb-0 ps-3">{% for r in mvp_payload.results %}<li>{{ r.name|default:r.nickname|default:r.playerName }} — {{ r.votes|default:0 }} голосов</li>{% endfor %}</ol>
-              {% else %}<div class="text-muted">Голосов пока нет.</div>{% endif %}
+                <div class="d-flex flex-column gap-2">
+                  {% for r in mvp_payload.results %}
+                    <div class="d-flex justify-content-between border rounded-3 px-3 py-2"><span>{{ r.displayName }}</span><span class="fw-semibold">{{ r.votes }} голосов</span></div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="empty-state">Голосов пока нет.</div>
+              {% endif %}
             </div>
           </div>
         </div>
-      {% else %}<div class="empty-state">MVP-кандидаты появятся после подтверждения команд-участниц.</div>{% endif %}
+      {% else %}
+        <div class="empty-state">Кандидаты появятся после формирования состава турнира.</div>
+      {% endif %}
     </div>
 
   {% elif active_tab == 'analytics' %}
     <div class="table-panel p-3 p-md-4">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h5 mb-0">Аналитика</h2>
-        <a class="btn btn-sm btn-outline-accent" href="/api/analytics/export/csv" target="_blank" rel="noopener">Экспорт CSV</a>
-      </div>
+      <h2 class="h5 mb-3">Аналитика</h2>
       <div class="row g-3 mb-3">
-        <div class="col-md-3"><div class="card p-3 h-100"><div class="text-muted small">Команд</div><div class="display-6">{{ analytics_payload.summary.totalTeams|default:0 }}</div></div></div>
-        <div class="col-md-3"><div class="card p-3 h-100"><div class="text-muted small">Игроков</div><div class="display-6">{{ analytics_payload.summary.totalPlayers|default:0 }}</div></div></div>
-        <div class="col-md-3"><div class="card p-3 h-100"><div class="text-muted small">Live-матчи</div><div class="display-6">{{ analytics_payload.summary.liveMatches|default:0 }}</div></div></div>
-        <div class="col-md-3"><div class="card p-3 h-100"><div class="text-muted small">Стримы</div><div class="display-6">{{ analytics_payload.summary.linkedStreams|default:0 }}</div></div></div>
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="text-muted small">Команд</div><div class="display-6">{{ analytics_payload.summary.totalTeams|default:0 }}</div></div></div>
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="text-muted small">Игроков</div><div class="display-6">{{ analytics_payload.summary.totalPlayers|default:0 }}</div></div></div>
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="text-muted small">Подтверждено рейтингов</div><div class="display-6">{{ analytics_payload.summary.confirmedRatings|default:0 }}</div></div></div>
       </div>
-      {% if analytics_payload.playerStats %}<div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>Игрок</th><th>Команда</th><th>Рейтинг</th><th>Статус</th><th>Игр</th><th>Winrate</th></tr></thead><tbody>{% for p in analytics_payload.playerStats %}<tr><td>{{ p.player }}</td><td>{{ p.team }}</td><td>{{ p.rating|default:"—" }}</td><td>{{ p.ratingStatus|default:"—" }}</td><td>{{ p.played|default:0 }}</td><td>{{ p.winRate|default:0 }}%</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">Статистика пока не собрана.</div>{% endif %}
+      {% if analytics_payload.playerStats %}
+        <div class="table-responsive"><table class="table table-striped align-middle mb-0"><thead><tr><th>Игрок</th><th>Команда</th><th>Рейтинг</th><th>Статус</th></tr></thead><tbody>{% for p in analytics_payload.playerStats %}<tr><td>{{ p.player }}</td><td>{{ p.team }}</td><td>{{ p.rating|default:"—" }}</td><td>{{ p.ratingStatus|default:"—" }}</td></tr>{% endfor %}</tbody></table></div>
+      {% else %}
+        <div class="empty-state">Статистика пока не собрана.</div>
+      {% endif %}
     </div>
 
   {% elif active_tab == 'prize' %}
     <div class="table-panel p-3 p-md-4">
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h2 class="h5 mb-0">Призовой фонд</h2>
-        <span class="badge text-bg-secondary">{{ prize_pool.totalAmount }}</span>
-      </div>
-      {% if prize_pool.payouts %}<div class="d-flex flex-column gap-2 mb-3">{% for p in prize_pool.payouts %}<div class="card p-3 d-flex flex-row justify-content-between align-items-center"><div><span class="fw-semibold">{{ p.place }}</span>{% if p.team %}<div class="small text-muted">Команда: {{ p.team }}</div>{% endif %}</div><span>{{ p.percent }}% · {{ p.amount }} · {{ p.status|default:"pending" }}</span></div>{% endfor %}</div>{% else %}<div class="empty-state mb-3">Распределение призового фонда пока не настроено.</div>{% endif %}
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2"><h2 class="h5 mb-0">Призовой фонд</h2><span class="badge text-bg-secondary">{{ prize_pool.totalAmount }}</span></div>
+      {% if prize_pool.payouts %}
+        <div class="d-flex flex-column gap-2 mb-3">{% for p in prize_pool.payouts %}<div class="card p-3 d-flex flex-row justify-content-between"><span>{{ p.place }}</span><span class="fw-semibold">{{ p.percent }}% · {{ p.amount }}</span></div>{% endfor %}</div>
+      {% else %}
+        <div class="empty-state mb-3">Распределение призового фонда пока не настроено.</div>
+      {% endif %}
       {% if is_admin or is_judge %}
-        <form method="post" class="row g-2 mb-3">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="save_payouts">
-          <div class="col-6"><input class="form-control" name="place_1" value="1 место"></div>
-          <div class="col-6"><input class="form-control" name="percent_1" value="50" type="number" step="0.01"></div>
-          <div class="col-6"><input class="form-control" name="place_2" value="2 место"></div>
-          <div class="col-6"><input class="form-control" name="percent_2" value="30" type="number" step="0.01"></div>
-          <div class="col-6"><input class="form-control" name="place_3" value="3 место"></div>
-          <div class="col-6"><input class="form-control" name="percent_3" value="20" type="number" step="0.01"></div>
-          <div class="col-12"><button class="btn btn-outline-accent" type="submit">Сохранить проценты</button></div>
-        </form>
-        {% if is_admin %}
-          <div class="d-flex gap-2 flex-wrap">
-            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="distribute_prizes"><button class="btn btn-success" type="submit">Распределить выплаты</button></form>
-            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="mark_prizes_paid"><button class="btn btn-outline-success" type="submit">Подтвердить выплаты</button></form>
+        <div class="row g-3">
+          <div class="col-lg-8">
+            <form method="post" class="row g-2">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="save_payouts">
+              <div class="col-6"><input class="form-control" name="place_1" value="1 место"></div>
+              <div class="col-6"><input class="form-control" name="percent_1" value="50" type="number" step="0.01"></div>
+              <div class="col-6"><input class="form-control" name="place_2" value="2 место"></div>
+              <div class="col-6"><input class="form-control" name="percent_2" value="30" type="number" step="0.01"></div>
+              <div class="col-6"><input class="form-control" name="place_3" value="3 место"></div>
+              <div class="col-6"><input class="form-control" name="percent_3" value="20" type="number" step="0.01"></div>
+              <div class="col-12"><button class="btn btn-outline-accent" type="submit">Сохранить распределение</button></div>
+            </form>
           </div>
-        {% endif %}
+          <div class="col-lg-4">
+            <form method="post" class="h-100">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="distribute_prizes">
+              <button class="btn btn-accent w-100 h-100" type="submit">Рассчитать выплаты</button>
+            </form>
+          </div>
+        </div>
       {% endif %}
     </div>
   {% endif %}

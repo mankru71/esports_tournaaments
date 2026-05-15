@@ -16,7 +16,7 @@
         {% for c in mvp.candidates %}
           <div class="card p-3 mb-2">
             <div class="d-flex justify-content-between gap-2 align-items-center">
-              <div class="fw-semibold">{{ c.name }}</div>
+              <div class="fw-semibold">{{ c.displayName }}</div>
               {% if mvp.isOpen %}
                 <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="player_id" value="{{ c.id }}"><button class="btn btn-sm btn-outline-accent" type="submit">Голосовать</button></form>
               {% endif %}
@@ -31,7 +31,7 @@
       <div class="section-panel p-3 h-100">
         <h2 class="h5 mb-3">Результаты</h2>
         {% for r in mvp.results %}
-          <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>{{ r.name }}</span><span class="fw-semibold">{{ r.votes }} голосов</span></div>
+          <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>{{ r.displayName }}</span><span class="fw-semibold">{{ r.votes }} голосов</span></div>
         {% empty %}
           <div class="empty-state">Результаты пока отсутствуют.</div>
         {% endfor %}
