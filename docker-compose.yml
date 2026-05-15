@@ -10,15 +10,22 @@ services:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ASPNETCORE_URLS=http://+:5000
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${DB_NAME:-esports_db};Username=${DB_USER:-esports_user};Password=${DB_PASSWORD:-esports123}
-      - PandaScore__Token=${PANDASCORE_TOKEN}
-      - PandaScore__Enabled=true            
-      - PANDASCORE_TOKEN=${PANDASCORE_TOKEN}
+      - PandaScore__Token=${PANDASCORE_TOKEN:-}
+      - PandaScore__BaseUrl=${PANDASCORE_BASE_URL:-https://api.pandascore.co}
+      - PANDASCORE_TOKEN=${PANDASCORE_TOKEN:-}
       - PANDASCORE_BASE_URL=${PANDASCORE_BASE_URL:-https://api.pandascore.co}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-      - PUBLIC_FRONTEND_URL=${PUBLIC_FRONTEND_URL}
+      - Faceit__ApiKey=${FACEIT_API_KEY:-}
+      - FACEIT_API_KEY=${FACEIT_API_KEY:-}
+      - LIQUIPEDIA_USER_AGENT=${LIQUIPEDIA_USER_AGENT:-EsportsTournamentsStudyProject/1.0}
+      - Discord__WebhookUrl=${DISCORD_WEBHOOK_URL:-}
+      - Discord__BotName=${DISCORD_BOT_NAME:-Esports Arena}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - DISCORD_BOT_NAME=${DISCORD_BOT_NAME:-Esports Arena}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - PUBLIC_FRONTEND_URL=${PUBLIC_FRONTEND_URL:-http://localhost}
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,6 +50,7 @@ services:
       - DJANGO_SETTINGS_MODULE=esports_tournament.settings
       - DJANGO_API_BASE_URL=${DJANGO_API_BASE_URL:-http://csharp-api:5000/api}
       - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL:-http://localhost/api}
+      - PUBLIC_FRONTEND_URL=${PUBLIC_FRONTEND_URL:-http://localhost}
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-your-secret-key}
       - DJANGO_DEBUG=${DJANGO_DEBUG:-True}
       - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}

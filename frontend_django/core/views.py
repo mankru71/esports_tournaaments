@@ -1,22 +1,32 @@
 from datetime import date
+
 from django.contrib import messages
 from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
+
 from .api_client import api_client
 from .forms import (
-    FaceitVerifyForm, LoginForm, MatchResultForm, ProfileEditForm,
-    RegistrationForm, TeamCreateForm, TeamPlayerForm, TournamentCreateForm,
+    FaceitVerifyForm,
+    LoginForm,
+    MatchResultForm,
+    ProfileEditForm,
+    RegistrationForm,
+    TeamCreateForm,
+    TeamPlayerForm,
+    TournamentCreateForm,
 )
 
 ROLE_ADMIN = "admin"
 ROLE_JUDGE = "judge"
 ROLE_CAPTAIN = "captain"
 ROLE_VIEWER = "viewer"
+
 STATUS_LABELS = {
     "planned": "Запланирован",
     "live": "Идёт",
     "finished": "Завершён",
     "approved": "Подтверждён",
+    "paused": "Пауза",
     "pending": "На рассмотрении",
     "rejected": "Отклонена",
 }
@@ -26,25 +36,6 @@ def _normalize_status(value):
     key = (value or "planned").lower()
     return key, STATUS_LABELS.get(key, value or "Запланирован")
 
-def verify_email_view(request):
-    """ЭТА ФУНКЦИЯ ДОЛЖНА БЫТЬ ЗДЕСЬ"""
-    user_id = request.GET.get('userId')
-    token = request.GET.get('token')
-    api_token = request.session.get("api_token")
-
-    if not user_id or not token:
-        messages.error(request, "Неверная ссылка для подтверждения.")
-        return redirect('login')
-
-    result = api_client.confirm_email(user_id, token)
-    if result.ok:
-        messages.success(request, "🎉 Ваша почта успешно подтверждена!")
-    else:
-        messages.error(request, "Ссылка недействительна или устарела.")
-        
-    if api_token:
-        return redirect('profile')
-    return redirect('login')
 
 def _normalize_tournament(item):
     status_key, status_label = _normalize_status(item.get("status", "planned"))
@@ -56,6 +47,8 @@ def _normalize_tournament(item):
         "stageType": item.get("stageType") or item.get("stage_type") or "single",
         "status": status_key,
         "status_label": status_label,
+        "currentStage": item.get("currentStage") or item.get("current_stage") or "registration",
+        "mvpVotingOpen": bool(item.get("mvpVotingOpen")),
         "startDate": item.get("startDate") or item.get("start_date") or "н/д",
         "prizePool": item.get("prizePool") or item.get("prize_pool") or item.get("totalAmount") or "н/д",
         "participants": item.get("participants") or f"{item.get('currentParticipants', '0')}/{item.get('maxParticipants', '0')}",
@@ -81,9 +74,9 @@ def _normalize_match(item):
         "round": item.get("round", "н/д"),
         "groupName": item.get("groupName", ""),
         "streamUrl": item.get("streamUrl", ""),
+        "streamProvider": item.get("streamProvider", ""),
+        "streamStatus": item.get("streamStatus", "offline"),
     }
-
-
 
 
 def _detect_stream_provider(url: str) -> str:
@@ -98,8 +91,9 @@ def _detect_stream_provider(url: str) -> str:
 def _extract_twitch_channel(url: str) -> str:
     try:
         from urllib.parse import urlparse
-        p = urlparse(url)
-        parts = [x for x in p.path.split("/") if x]
+
+        parsed = urlparse(url)
+        parts = [x for x in parsed.path.split("/") if x]
         return parts[0] if parts else ""
     except Exception:
         return ""
@@ -108,14 +102,16 @@ def _extract_twitch_channel(url: str) -> str:
 def _build_youtube_embed(url: str) -> str:
     try:
         from urllib.parse import parse_qs, urlparse
+
         parsed = urlparse(url)
-        if parsed.netloc.endswith('youtu.be'):
-            video_id = parsed.path.strip('/')
+        if parsed.netloc.endswith("youtu.be"):
+            video_id = parsed.path.strip("/")
         else:
-            video_id = parse_qs(parsed.query).get('v', [''])[0]
+            video_id = parse_qs(parsed.query).get("v", [""])[0]
         return f"https://www.youtube.com/embed/{video_id}" if video_id else url
     except Exception:
         return url
+
 
 def _read_current_user(request):
     token = request.session.get("api_token")
@@ -139,31 +135,16 @@ def _read_current_user(request):
 
 
 def _role_flags(user):
-    if not user:
-        return {"is_admin": False, "is_organizer": False, "current_user": None}
-    role = (user.get("role") or "").lower()
+    role = (user or {}).get("role", "").lower() if user else ""
     return {
-        "is_admin": role == "admin",
-        "is_organizer": role in ["admin", "organizer"],
-        "current_user": user
+        "is_admin": role == ROLE_ADMIN,
+        "is_judge": role == ROLE_JUDGE,
+        "is_captain": role == ROLE_CAPTAIN,
+        "is_player": role == "player",
+        "is_viewer": role == ROLE_VIEWER,
+        "is_organizer": role in [ROLE_ADMIN, "organizer"],
+        "current_user": user,
     }
-
-def _process_result_error(request, result, *, clear_session_on_401=True):
-    if result.ok:
-        return None
-    code = (result.error or {}).get("code")
-    message = (result.error or {}).get("message", "Ошибка API")
-    if code == "unauthorized":
-        if clear_session_on_401:
-            request.session.pop("api_token", None)
-            request.session.pop("current_user", None)
-        messages.info(request, "Сессия истекла. Войдите заново.")
-        return redirect("login")
-    if code == "forbidden":
-        messages.error(request, message)
-        return HttpResponseForbidden(message)
-    messages.error(request, message)
-    return None
 
 
 def dashboard(request):
@@ -212,6 +193,56 @@ def logout_view(request):
     return redirect("dashboard")
 
 
+def registration(request):
+    if request.method == "POST":
+        form = RegistrationForm(request.POST)
+        if form.is_valid():
+            register_result = api_client.register(
+                form.cleaned_data["email"],
+                form.cleaned_data["password"],
+                form.cleaned_data["nickname"],
+                form.cleaned_data["role"],
+            )
+            if register_result.ok:
+                login_result = api_client.login(form.cleaned_data["email"], form.cleaned_data["password"])
+                if login_result.ok:
+                    token = (login_result.data or {}).get("token")
+                    if token:
+                        request.session["api_token"] = token
+                        me_result = api_client.me(token)
+                        request.session["current_user"] = me_result.data if me_result.ok else (login_result.data or {}).get("user", {})
+                    messages.success(request, "Регистрация успешна. Вы вошли в систему.")
+                    return redirect("tournaments")
+                messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
+                return redirect("login")
+            form.add_error(None, (register_result.error or {}).get("message", "Ошибка регистрации"))
+    else:
+        form = RegistrationForm()
+
+    return render(request, "registration.html", {"form": form, **_role_flags(_read_current_user(request))})
+
+
+def verify_email_view(request):
+    user_id = request.GET.get("userId")
+    token = request.GET.get("token")
+
+    if not user_id or not token:
+        messages.error(request, "Неверная ссылка для подтверждения.")
+        return redirect("login")
+
+    result = api_client.confirm_email(user_id, token)
+    if result.ok:
+        messages.success(request, "🎉 Ваша почта успешно подтверждена!")
+        if request.session.get("api_token"):
+            me_result = api_client.me(request.session["api_token"])
+            if me_result.ok:
+                request.session["current_user"] = me_result.data
+    else:
+        messages.error(request, (result.error or {}).get("message", "Ссылка недействительна или устарела."))
+
+    return redirect("profile" if request.session.get("api_token") else "login")
+
+
 def tournaments(request):
     token = request.session.get("api_token")
     user = _read_current_user(request)
@@ -227,6 +258,7 @@ def tournaments(request):
             if not roles["is_admin"]:
                 messages.error(request, "Создавать турниры может только администратор")
                 return redirect("tournaments")
+
             form = TournamentCreateForm(request.POST)
             if form.is_valid():
                 payload = {
@@ -241,7 +273,7 @@ def tournaments(request):
                 }
                 create_result = api_client.create_tournament(token=token, payload=payload)
                 if create_result.ok:
-                    messages.success(request, "Турнир создан")
+                    messages.success(request, "Турнир создан. Если Discord Webhook настроен, уведомление уже отправлено.")
                     new_id = (create_result.data or {}).get("id")
                     if new_id:
                         return redirect("tournament_detail", tournament_id=new_id)
@@ -251,7 +283,7 @@ def tournaments(request):
                 for errs in form.errors.values():
                     for err in errs:
                         messages.error(request, err)
-        
+
         elif action == "delete_tournament":
             if not token:
                 messages.info(request, "Войдите, чтобы управлять турнирами")
@@ -259,13 +291,13 @@ def tournaments(request):
             if not roles["is_admin"]:
                 messages.error(request, "Только админ может удалять турниры")
                 return redirect("tournaments")
-            
-            t_id = request.POST.get("tournament_id")
-            res = api_client.delete_tournament(t_id, token=token)
-            if res.ok:
-                messages.success(request, "Турнир успешно удален")
+
+            tournament_id = int(request.POST.get("tournament_id", "0") or 0)
+            result = api_client.delete_tournament(tournament_id, token=token)
+            if result.ok:
+                messages.success(request, "Турнир успешно удалён")
             else:
-                messages.error(request, (res.error or {}).get("message", "Ошибка удаления турнира"))
+                messages.error(request, (result.error or {}).get("message", "Ошибка удаления турнира"))
             return redirect("tournaments")
 
     tournaments_result = api_client.get_tournaments(token=token)
@@ -273,8 +305,12 @@ def tournaments(request):
     tournaments_list = [_normalize_tournament(item) for item in tournaments_data]
     if not tournaments_result.ok:
         messages.error(request, (tournaments_result.error or {}).get("message", "Не удалось получить турниры"))
-    
-    return render(request, "tournaments.html", {"tournaments": tournaments_list, "create_tournament_form": TournamentCreateForm(), **roles})
+
+    return render(
+        request,
+        "tournaments.html",
+        {"tournaments": tournaments_list, "create_tournament_form": TournamentCreateForm(), **roles},
+    )
 
 
 def teams(request):
@@ -292,10 +328,7 @@ def teams(request):
             form = TeamCreateForm(request.POST)
             if form.is_valid():
                 result = api_client.create_team(form.cleaned_data["name"], token=token)
-                if result.ok:
-                    messages.success(request, "Команда создана")
-                else:
-                    messages.error(request, (result.error or {}).get("message", "Не удалось создать команду"))
+                messages.success(request, "Команда создана") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось создать команду"))
             else:
                 for errors in form.errors.values():
                     for error in errors:
@@ -308,39 +341,27 @@ def teams(request):
             rating = (request.POST.get("rating") or "").strip()
             game = (request.POST.get("game") or "counterstrike").strip()
             result = api_client.add_team_player(team_id, nickname, token=token, rating=rating, game=game)
-            if result.ok:
-                messages.success(request, "Игрок добавлен")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось добавить игрока"))
+            messages.success(request, "Игрок добавлен") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось добавить игрока"))
             return redirect("teams")
 
         if action == "confirm_rating":
             team_id = int(request.POST.get("team_id", "0") or 0)
             player_id = int(request.POST.get("player_id", "0") or 0)
             result = api_client.confirm_team_player_rating(team_id, player_id, token=token)
-            if result.ok:
-                messages.success(request, "Рейтинг подтверждён")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось подтвердить рейтинг"))
+            messages.success(request, "Рейтинг подтверждён") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось подтвердить рейтинг"))
             return redirect("teams")
 
         if action == "delete_player":
             team_id = int(request.POST.get("team_id", "0") or 0)
             player_id = int(request.POST.get("player_id", "0") or 0)
             result = api_client.delete_team_player(team_id, player_id, token=token)
-            if result.ok:
-                messages.success(request, "Игрок удалён")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось удалить игрока"))
+            messages.success(request, "Игрок удалён") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось удалить игрока"))
             return redirect("teams")
 
         if action == "delete_team":
             team_id = int(request.POST.get("team_id", "0") or 0)
             result = api_client.delete_team(team_id, token=token)
-            if result.ok:
-                messages.success(request, "Команда удалена")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось удалить команду"))
+            messages.success(request, "Команда удалена") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось удалить команду"))
             return redirect("teams")
 
     teams_result = api_client.get_teams(token=token)
@@ -358,6 +379,7 @@ def tournament_detail(request, tournament_id: int):
 
     if request.method == "POST":
         action = request.POST.get("action")
+
         if action == "apply_to_tournament":
             if not token:
                 messages.info(request, "Войдите, чтобы подать заявку.")
@@ -367,10 +389,7 @@ def tournament_detail(request, tournament_id: int):
                 return redirect("tournament_detail", tournament_id=tournament_id)
             team_id = int(request.POST.get("team_id", "0") or 0)
             result = api_client.apply_to_tournament(tournament_id, team_id, token=token)
-            if result.ok:
-                messages.success(request, "Заявка отправлена")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось отправить заявку"))
+            messages.success(request, "Заявка отправлена") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось отправить заявку"))
             return redirect("tournament_detail", tournament_id=tournament_id)
 
         if action in {"approve_application", "reject_application"}:
@@ -381,60 +400,59 @@ def tournament_detail(request, tournament_id: int):
             else:
                 result = api_client.reject_tournament_application(tournament_id, application_id, token=token)
                 success_text = "Заявка отклонена"
-            if result.ok:
-                messages.success(request, success_text)
-            else:
-                messages.error(request, (result.error or {}).get("message", "Ошибка обработки заявки"))
+            messages.success(request, success_text) if result.ok else messages.error(request, (result.error or {}).get("message", "Ошибка обработки заявки"))
             return redirect("tournament_detail", tournament_id=tournament_id)
 
         if action == "save_planning":
             format_value = request.POST.get("format", "single_elimination")
             stage_type = request.POST.get("stage_type", "single")
             result = api_client.save_tournament_planning(tournament_id, token=token, format_value=format_value, stage_type=stage_type)
-            if result.ok:
-                messages.success(request, "Параметры сетки сохранены")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось сохранить настройки сетки"))
+            messages.success(request, "Параметры сетки сохранены") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось сохранить настройки сетки"))
             return redirect("tournament_detail", tournament_id=tournament_id)
-        
+
         if action == "generate_bracket":
             result = api_client.generate_tournament_bracket(tournament_id, token=token)
-            if result.ok:
-                messages.success(request, "Сетка успешно сгенерирована!")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось сгенерировать сетку (нужно минимум 2 команды)."))
+            messages.success(request, "Сетка успешно сгенерирована!") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось сгенерировать сетку (нужно минимум 2 команды)."))
             return redirect("tournament_detail", tournament_id=tournament_id)
-        
-def profile_view(request):
-    user_id = request.session.get("user_id", 1) 
-    token = request.session.get("auth_token", "")
 
-    if request.method == "POST":
-        action = request.POST.get("action")
+        if action == "set_stage":
+            status = request.POST.get("status", "planned")
+            stage = request.POST.get("stage", "")
+            result = api_client.set_tournament_stage(tournament_id, token=token, status=status, stage=stage or None)
+            messages.success(request, "Статус этапа обновлён") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось обновить этап"))
+            return redirect(f"{request.path}?tab=overview")
 
-        if action == "verify_faceit":
-            nickname = request.POST.get("faceit_nickname", "").strip()
-            
-            result = api_client.verify_faceit_account(user_id, nickname, token)
+        if action == "set_match_stream":
+            match_id = int(request.POST.get("match_id", "0") or 0)
+            stream_url = (request.POST.get("stream_url") or "").strip()
+            result = api_client.set_match_stream(match_id, stream_url, token=token)
+            messages.success(request, "Стрим привязан к матчу") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось привязать стрим"))
+            return redirect(f"{request.path}?tab=streams")
 
-            if result.ok:
-                level = result.data.get('level')
-                elo = result.data.get('elo')
-                messages.success(request, f"Faceit успешно привязан! Ваш уровень: {level}, Elo: {elo}")
-            else:
-                error_msg = result.error.get("message", "Ошибка верификации аккаунта.")
-                messages.error(request, error_msg)
-                
-            return redirect("profile")
-        
-        if action == "send_verification_email":
-            res = api_client.send_email_verification(user_id, token)
-            if res.ok:
-                messages.success(request, "Письмо отправлено! Проверьте вашу почту (включая папку Спам).")
-            else:
-                messages.error(request, res.error.get("message", "Ошибка при отправке письма."))
-            return redirect("profile")
+        if action == "vote_mvp":
+            if not token:
+                messages.info(request, "Войдите, чтобы голосовать за MVP")
+                return redirect("login")
+            player_id = int(request.POST.get("player_id", "0") or 0)
+            result = api_client.vote_mvp(tournament_id, player_id, token=token)
+            messages.success(request, "Голос за MVP принят") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось проголосовать"))
+            return redirect(f"{request.path}?tab=mvp")
 
+        if action == "toggle_mvp":
+            is_open = request.POST.get("is_open") == "true"
+            result = api_client.open_mvp_voting(tournament_id, token=token, is_open=is_open)
+            messages.success(request, "MVP-голосование обновлено") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось изменить голосование"))
+            return redirect(f"{request.path}?tab=mvp")
+
+        if action == "distribute_prizes":
+            result = api_client.distribute_prize_pool(tournament_id, token=token)
+            messages.success(request, "Призовой фонд распределён") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось распределить призовые"))
+            return redirect(f"{request.path}?tab=prize")
+
+        if action == "mark_prizes_paid":
+            result = api_client.mark_prizes_paid(tournament_id, token=token)
+            messages.success(request, "Выплаты отмечены как выполненные") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось подтвердить выплаты"))
+            return redirect(f"{request.path}?tab=prize")
 
         if action == "save_payouts":
             payouts = []
@@ -448,10 +466,7 @@ def profile_view(request):
                         messages.error(request, f"Некорректный процент для {place}")
                         return redirect("tournament_detail", tournament_id=tournament_id)
             result = api_client.set_prize_payouts(tournament_id, token=token, payouts=payouts)
-            if result.ok:
-                messages.success(request, "Распределение призового фонда обновлено")
-            else:
-                messages.error(request, (result.error or {}).get("message", "Не удалось сохранить распределение"))
+            messages.success(request, "Распределение призового фонда обновлено") if result.ok else messages.error(request, (result.error or {}).get("message", "Не удалось сохранить распределение"))
             return redirect("tournament_detail", tournament_id=tournament_id)
 
     tournament_result = api_client.get_tournament(tournament_id, token=token)
@@ -488,8 +503,11 @@ def profile_view(request):
     mvp_payload = mvp_result.data if mvp_result.ok else {"isOpen": False, "candidates": [], "results": []}
     analytics_result = api_client.get_analytics(token=token)
     analytics_payload = analytics_result.data if analytics_result.ok else {"summary": {}, "playerStats": [], "disciplinePopularity": [], "prizePools": []}
-    streams_result = api_client.get_streams(token=token)
+    streams_result = api_client.get_tournament_streams(tournament_id, token=token)
     streams_payload = streams_result.data if streams_result.ok else []
+    if not streams_payload:
+        fallback_streams_result = api_client.get_streams(token=token)
+        streams_payload = fallback_streams_result.data if fallback_streams_result.ok else []
     active_tab = (request.GET.get("tab") or "overview").strip() or "overview"
 
     return render(
@@ -510,7 +528,6 @@ def profile_view(request):
             **roles,
         },
     )
-
 
 
 def match_center(request, tournament_id: int):
@@ -540,7 +557,9 @@ def match_center(request, tournament_id: int):
                 token=token,
             )
             if update_result.ok:
-                messages.success(request, "Результат обновлён")
+                status = (update_result.data or {}).get("status")
+                extra = " Discord-уведомление отправлено." if status == "live" else ""
+                messages.success(request, f"Результат обновлён.{extra}")
             else:
                 messages.error(request, (update_result.error or {}).get("message", "Ошибка обновления"))
             return redirect("match_center", tournament_id=tournament_id)
@@ -561,30 +580,15 @@ def match_center(request, tournament_id: int):
         },
     )
 
-def verify_email_view(request):
-    user_id = request.GET.get('userId')
-    token = request.GET.get('token')
-
-    if not user_id or not token:
-        messages.error(request, "Неверная ссылка для подтверждения.")
-        return redirect('login')
-
-    result = api_client.confirm_email(user_id, token)
-
-    if result.ok:
-        messages.success(request, "🎉 Ваша почта успешно подтверждена!")
-    else:
-        messages.error(request, result.error.get("message", "Ссылка недействительна или устарела."))
-        
-    if request.session.get('auth_token'):
-        return redirect('profile')
-    return redirect('login')
 
 def voting(request):
     nominees_result = api_client.get_nominees()
     nominees = nominees_result.data if nominees_result.ok and nominees_result.data else []
 
+    if not request.session.session_key:
+        request.session.create()
     session_id = request.session.session_key
+
     has_voted = False
     if session_id:
         voted_data = api_client.has_voted(session_id)
@@ -594,7 +598,7 @@ def voting(request):
         if has_voted:
             messages.info(request, "Вы уже голосовали в этой сессии")
             return redirect("voting")
-        nominee_id = int(request.POST.get("nominee_id", "0"))
+        nominee_id = int(request.POST.get("nominee_id", "0") or 0)
         vote_result = api_client.vote(nominee_id, session_id, request.META.get("REMOTE_ADDR", ""))
         if vote_result.ok and (vote_result.data or {}).get("success"):
             messages.success(request, (vote_result.data or {}).get("message", "Голос засчитан"))
@@ -609,45 +613,13 @@ def mvp(request, tournament_id: int):
     roles = _role_flags(_read_current_user(request))
 
     if request.method == "POST":
-        player_id = int(request.POST.get("player_id", "0"))
+        player_id = int(request.POST.get("player_id", "0") or 0)
         vote_result = api_client.vote_mvp(tournament_id, player_id, token=token)
-        if vote_result.ok:
-            messages.success(request, "Голос за MVP принят")
-        else:
-            messages.error(request, (vote_result.error or {}).get("message", "Ошибка голосования"))
+        messages.success(request, "Голос за MVP принят") if vote_result.ok else messages.error(request, (vote_result.error or {}).get("message", "Ошибка голосования"))
 
     mvp_result = api_client.get_mvp(tournament_id, token=token)
     payload = mvp_result.data if mvp_result.ok else {"isOpen": False, "candidates": [], "results": []}
     return render(request, "mvp.html", {"mvp": payload, "tournament_id": tournament_id, **roles})
-
-
-def registration(request):
-    if request.method == "POST":
-        form = RegistrationForm(request.POST)
-        if form.is_valid():
-            register_result = api_client.register(
-                form.cleaned_data["email"],
-                form.cleaned_data["password"],
-                form.cleaned_data["nickname"],
-                form.cleaned_data["role"],
-            )
-            if register_result.ok:
-                login_result = api_client.login(form.cleaned_data["email"], form.cleaned_data["password"])
-                if login_result.ok:
-                    token = (login_result.data or {}).get("token")
-                    if token:
-                        request.session["api_token"] = token
-                        me_result = api_client.me(token)
-                        request.session["current_user"] = me_result.data if me_result.ok else (login_result.data or {}).get("user", {})
-                    messages.success(request, "Регистрация успешна. Вы вошли в систему.")
-                    return redirect("tournaments")
-                messages.success(request, "Регистрация успешна. Теперь войдите в систему.")
-                return redirect("login")
-            form.add_error(None, (register_result.error or {}).get("message", "Ошибка регистрации"))
-    else:
-        form = RegistrationForm()
-
-    return render(request, "registration.html", {"form": form, **_role_flags(_read_current_user(request))})
 
 
 def profile(request):
@@ -660,10 +632,7 @@ def profile(request):
     roles = _role_flags(user)
     user_id = user.get("id")
 
-    edit_form = ProfileEditForm(initial={
-        "nickname": user.get("nickname", ""), 
-        "bio": user.get("bio", "")
-    })
+    edit_form = ProfileEditForm(initial={"nickname": user.get("nickname", ""), "bio": user.get("bio", "")})
     faceit_form = FaceitVerifyForm()
 
     if request.method == "POST":
@@ -672,17 +641,12 @@ def profile(request):
         if action == "save_profile":
             edit_form = ProfileEditForm(request.POST)
             if edit_form.is_valid():
-                result = api_client.update_profile(
-                    edit_form.cleaned_data["nickname"],
-                    edit_form.cleaned_data.get("bio") or "",
-                    token=token,
-                )
+                result = api_client.update_profile(edit_form.cleaned_data["nickname"], edit_form.cleaned_data.get("bio") or "", token=token)
                 if result.ok:
                     request.session["current_user"] = result.data
                     messages.success(request, "Профиль обновлён")
                     return redirect("profile")
-                else:
-                    messages.error(request, (result.error or {}).get("message", "Не удалось обновить профиль"))
+                messages.error(request, (result.error or {}).get("message", "Не удалось обновить профиль"))
 
         elif action == "verify_faceit":
             faceit_form = FaceitVerifyForm(request.POST)
@@ -693,13 +657,12 @@ def profile(request):
                     me_res = api_client.me(token)
                     if me_res.ok:
                         request.session["current_user"] = me_res.data
-                    
-                    elo = result.data.get('elo')
-                    messages.success(request, f"Faceit привязан! Ваш рейтинг: {elo} ELO")
+                    faceit = (result.data or {}).get("faceit") or {}
+                    elo = faceit.get("elo", "—")
+                    level = faceit.get("level", "—")
+                    messages.success(request, f"Faceit привязан! Уровень: {level}, ELO: {elo}")
                     return redirect("profile")
-                else:
-                    err = (result.error or {}).get("message", "Ошибка Faceit API")
-                    messages.error(request, f"Ошибка: {err}")
+                messages.error(request, (result.error or {}).get("message", "Ошибка Faceit API"))
 
         elif action == "unlink_faceit":
             result = api_client.unlink_faceit(user_id, token=token)
@@ -709,15 +672,11 @@ def profile(request):
                     request.session["current_user"] = me_res.data
                 messages.success(request, "Faceit-аккаунт отвязан")
                 return redirect("profile")
-            else:
-                messages.error(request, "Не удалось отвязать аккаунт")
+            messages.error(request, "Не удалось отвязать аккаунт")
 
         elif action == "send_verification_email":
             res = api_client.send_email_verification(user_id, token)
-            if res.ok:
-                messages.success(request, "Письмо со ссылкой отправлено! Проверьте почту (и папку Спам).")
-            else:
-                messages.error(request, (res.error or {}).get("message", "Ошибка отправки письма"))
+            messages.success(request, "Письмо со ссылкой отправлено! Проверьте почту или ссылку в логах backend-контейнера.") if res.ok else messages.error(request, (res.error or {}).get("message", "Ошибка отправки письма"))
             return redirect("profile")
 
     selected_game = (request.GET.get("game") or "counterstrike").strip() or "counterstrike"
@@ -771,13 +730,15 @@ def streams(request):
                     for stream in payload.get("streams", []) or []:
                         url = stream.get("url") or ""
                         provider = stream.get("provider") or _detect_stream_provider(url)
-                        streams_prepared.append({
-                            "provider": provider,
-                            "url": url,
-                            "channel": stream.get("channel") or (_extract_twitch_channel(url) if provider == "twitch" else ""),
-                            "embed_url": _build_youtube_embed(url) if provider == "youtube" else url,
-                            "matchName": stream.get("matchName") or "",
-                        })
+                        streams_prepared.append(
+                            {
+                                "provider": provider,
+                                "url": url,
+                                "channel": stream.get("channel") or (_extract_twitch_channel(url) if provider == "twitch" else ""),
+                                "embed_url": _build_youtube_embed(url) if provider == "youtube" else url,
+                                "matchName": stream.get("matchName") or "",
+                            }
+                        )
                     payload["streams_prepared"] = streams_prepared
                     tournament_payload = payload
                 else:
@@ -797,7 +758,19 @@ def streams(request):
             else:
                 messages.error(request, "Введите ник игрока")
 
-    return render(request, "streams.html", {"tournament_payload": tournament_payload, "player_payload": player_payload, "tournament_query": tournament_query, "player_query": player_query, "twitch_parent": host, "diagnostics": diagnostics, **roles})
+    return render(
+        request,
+        "streams.html",
+        {
+            "tournament_payload": tournament_payload,
+            "player_payload": player_payload,
+            "tournament_query": tournament_query,
+            "player_query": player_query,
+            "twitch_parent": host,
+            "diagnostics": diagnostics,
+            **roles,
+        },
+    )
 
 
 def analytics(request):

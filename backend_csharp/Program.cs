@@ -2,13 +2,11 @@ using Data;
 using Hubs;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using EsportsBackend.Services; // Для нашего EmailService и новых провайдеров
-using Polly;
-using System.Threading.RateLimiting;
+using Services;
+using EsportsBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- 1. Настройка контроллеров и валидации ---
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -28,58 +26,67 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
 builder.Services.AddMemoryCache();
 
-// --- 2. Конфигурация HTTP клиентов (Faceit и Liquipedia) ---
+builder.Services.AddHttpClient("pandascore", client =>
+{
+    var baseUrl = builder.Configuration["PANDASCORE_BASE_URL"]
+                  ?? builder.Configuration["PandaScore:BaseUrl"]
+                  ?? "https://api.pandascore.co";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/'));
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 
-// Faceit Client
+builder.Services.AddHttpClient("faceit", client =>
+{
+    client.BaseAddress = new Uri("https://open.faceit.com/data/v4/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
 builder.Services.AddHttpClient<FaceitTournamentService>(client =>
 {
     client.BaseAddress = new Uri("https://open.faceit.com/data/v4/");
-    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["FACEIT_API_KEY"]}");
+    client.Timeout = TimeSpan.FromSeconds(15);
 });
 
-// Liquipedia Client + Защита от бана (Rate Limiting)
 builder.Services.AddHttpClient<LiquipediaService>(client =>
 {
     client.BaseAddress = new Uri("https://liquipedia.net/counterstrike/api.php");
-    // ОБЯЗАТЕЛЬНО: без User-Agent забанят сразу
-    client.DefaultRequestHeaders.Add("User-Agent", builder.Configuration["LIQUIPEDIA_USER_AGENT"] ?? "EsportsApp/1.0");
-})
-.AddPolicyHandler(Policy.RateLimitAsync<HttpResponseMessage>(1, TimeSpan.FromSeconds(2.5))); // 1 запрос в 2.5 сек
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(builder.Configuration["LIQUIPEDIA_USER_AGENT"] ?? "EsportsTournamentsStudyProject/1.0");
+});
 
-// --- 3. База данных и Сервисы ---
+builder.Services.AddHttpClient<DiscordWebhookService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
-// Регистрация всех сервисов
 builder.Services.AddScoped<TournamentService>();
-builder.Services.AddScoped<EsportsBackend.Services.EmailService>(); // Тот самый фикс пути
+builder.Services.AddScoped<PandaScoreService>();
+builder.Services.AddScoped<FaceitApiService>();
+builder.Services.AddScoped<EsportsBackend.Services.EmailService>();
 builder.Services.AddScoped<ExternalTournamentSyncService>();
 builder.Services.AddScoped<TournamentPlanningService>();
 
-// Регистрация новых провайдеров турниров
-builder.Services.AddScoped<ITournamentProvider, FaceitTournamentService>();
-builder.Services.AddScoped<ITournamentProvider, LiquipediaService>();
-
 var app = builder.Build();
 
-// --- 4. Авто-миграции и "Лечение" базы при старте ---
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-        
         if (context.Database.GetMigrations().Any())
         {
             context.Database.Migrate();
-            Console.WriteLine(">>> УСПЕХ: Миграции применены.");
+            Console.WriteLine(">>> УСПЕХ: миграции применены.");
         }
         else
         {
             context.Database.EnsureCreated();
-            EnsureDbSchema(context); // Доп. проверка колонок
-            Console.WriteLine(">>> УСПЕХ: База готова (EnsureCreated).");
+            EnsureDbSchema(context);
+            Console.WriteLine(">>> УСПЕХ: база готова через EnsureCreated.");
         }
     }
     catch (Exception ex)
@@ -99,7 +106,6 @@ app.MapControllers();
 app.MapHub<MatchesHub>("/hubs/matches");
 app.Run();
 
-// Метод для "самолечения" схемы (если миграции не используются)
 static void EnsureDbSchema(AppDbContext context)
 {
     try
@@ -111,7 +117,44 @@ static void EnsureDbSchema(AppDbContext context)
             ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""Format"" text NOT NULL DEFAULT 'single_elimination';
             ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""StageType"" text NOT NULL DEFAULT 'single';
             ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""PrizeDistributionJson"" text NOT NULL DEFAULT '[{""place"":""1 место"",""percent"":50},{""place"":""2 место"",""percent"":30},{""place"":""3 место"",""percent"":20}]';
+            ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""CurrentStage"" text NOT NULL DEFAULT 'registration';
+            ALTER TABLE IF EXISTS ""Tournaments"" ADD COLUMN IF NOT EXISTS ""MvpVotingOpen"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""GroupName"" text NOT NULL DEFAULT '';
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""ScoreA"" integer NOT NULL DEFAULT 0;
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""ScoreB"" integer NOT NULL DEFAULT 0;
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""Status"" text NOT NULL DEFAULT 'planned';
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""StreamUrl"" text NULL;
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""StreamProvider"" text NULL;
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""StreamStatus"" text NOT NULL DEFAULT 'offline';
+            ALTER TABLE IF EXISTS ""Matches"" ADD COLUMN IF NOT EXISTS ""ScheduledAtUtc"" timestamp with time zone NULL;
+            ALTER TABLE IF EXISTS ""Users"" ADD COLUMN IF NOT EXISTS ""IsEmailVerified"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE IF EXISTS ""Users"" ADD COLUMN IF NOT EXISTS ""EmailVerificationToken"" text NULL;
+            ALTER TABLE IF EXISTS ""Users"" ADD COLUMN IF NOT EXISTS ""EmailVerificationTokenExpiry"" timestamp with time zone NULL;
+            CREATE TABLE IF NOT EXISTS ""MvpVotes"" (
+                ""Id"" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                ""TournamentId"" integer NOT NULL,
+                ""PlayerId"" integer NOT NULL,
+                ""UserId"" integer NULL,
+                ""VoterSession"" text NOT NULL DEFAULT '',
+                ""VoterIp"" text NOT NULL DEFAULT '',
+                ""CreatedAtUtc"" timestamp with time zone NOT NULL DEFAULT NOW()
+            );
+            CREATE TABLE IF NOT EXISTS ""PrizePayouts"" (
+                ""Id"" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                ""TournamentId"" integer NOT NULL,
+                ""Place"" integer NOT NULL,
+                ""PlaceTitle"" text NOT NULL DEFAULT '',
+                ""TeamId"" integer NULL,
+                ""Percent"" numeric NOT NULL DEFAULT 0,
+                ""Amount"" numeric NOT NULL DEFAULT 0,
+                ""Status"" text NOT NULL DEFAULT 'pending',
+                ""CreatedAtUtc"" timestamp with time zone NOT NULL DEFAULT NOW(),
+                ""PaidAtUtc"" timestamp with time zone NULL
+            );
         ");
     }
-    catch { /* Игнорируем ошибки при проверке схемы */ }
+    catch (Exception ex)
+    {
+        Console.WriteLine($">>> WARNING: проверка схемы не выполнена: {ex.Message}");
+    }
 }

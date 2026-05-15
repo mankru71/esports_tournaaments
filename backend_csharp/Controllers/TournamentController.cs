@@ -11,11 +11,13 @@ public class TournamentController : ControllerBase
 {
     private readonly TournamentService _tournamentService;
     private readonly ExternalTournamentSyncService _sync;
+    private readonly DiscordWebhookService _discord;
 
-    public TournamentController(TournamentService tournamentService, ExternalTournamentSyncService sync)
+    public TournamentController(TournamentService tournamentService, ExternalTournamentSyncService sync, DiscordWebhookService discord)
     {
         _tournamentService = tournamentService;
         _sync = sync;
+        _discord = discord;
     }
 
     [HttpGet]
@@ -27,7 +29,7 @@ public class TournamentController : ControllerBase
     }
 
     [HttpPost]
-    public IActionResult Create([FromBody] CreateTournamentRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateTournamentRequest request, CancellationToken ct)
     {
         if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin"))
             return StatusCode(403, new { message = "Создавать турниры может только администратор" });
@@ -46,6 +48,7 @@ public class TournamentController : ControllerBase
         };
 
         _tournamentService.CreateTournament(tournament);
+        await _discord.NotifyTournamentCreatedAsync(tournament, ct);
         return Created($"/api/tournament/{tournament.Id}", ToDto(tournament));
     }
 
@@ -59,6 +62,14 @@ public class TournamentController : ControllerBase
         if (tournament == null)
             return NotFound(new { message = "Турнир не найден" });
 
+        var matches = await db.Matches.Where(m => m.TournamentId == id).ToListAsync();
+        var applications = await db.TournamentApplications.Where(a => a.TournamentId == id).ToListAsync();
+        var mvpVotes = await db.MvpVotes.Where(v => v.TournamentId == id).ToListAsync();
+        var payouts = await db.PrizePayouts.Where(p => p.TournamentId == id).ToListAsync();
+        db.Matches.RemoveRange(matches);
+        db.TournamentApplications.RemoveRange(applications);
+        db.MvpVotes.RemoveRange(mvpVotes);
+        db.PrizePayouts.RemoveRange(payouts);
         db.Tournaments.Remove(tournament);
         await db.SaveChangesAsync();
         return Ok(new { message = "Турнир успешно удален" });
@@ -122,6 +133,8 @@ public class TournamentController : ControllerBase
             format = t.Format,
             stageType = t.StageType,
             status = t.Status,
+            currentStage = t.CurrentStage,
+            mvpVotingOpen = t.MvpVotingOpen,
             startDate = t.StartDate,
             prizePool = t.PrizePool,
             totalAmount = t.PrizePool,

@@ -128,53 +128,6 @@
         {% endif %}
       </div>
     </div>
-    <div class="card mb-4">
-    <div class="card-header bg-dark text-white">
-        <h5 class="mb-0">Игровой профиль Faceit</h5>
-    </div>
-    <div class="card-body">
-        {% if current_user.faceitNickname %}
-            <div class="d-flex align-items-center bg-light p-3 rounded border">
-                {% if current_user.faceitAvatar %}
-                    <img src="{{ current_user.faceitAvatar }}" alt="Avatar" class="rounded-circle me-3" width="64" height="64" style="object-fit: cover;">
-                {% else %}
-                    <div class="rounded-circle bg-secondary me-3 d-flex align-items-center justify-content-center text-white fw-bold" style="width: 64px; height: 64px;">F</div>
-                {% endif %}
-                
-                <div class="flex-grow-1">
-                    <h4 class="mb-1 text-dark fw-bold">{{ current_user.faceitNickname }}</h4>
-                    <div class="d-flex gap-3 align-items-center">
-                        <span class="badge bg-warning text-dark fs-6" title="ELO">📈 {{ current_user.faceitElo }} ELO</span>
-                        <span class="badge bg-danger fs-6" title="Уровень">🏆 Lvl {{ current_user.faceitLevel }}</span>
-                    </div>
-                </div>
-                
-                <div class="text-end">
-                    <a href="{{ current_user.faceitProfileUrl }}" target="_blank" class="btn btn-sm btn-outline-dark mb-2 d-block">Открыть профиль</a>
-                    <form method="post" class="m-0">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="unlink_faceit">
-                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">Отвязать</button>
-                    </form>
-                </div>
-            </div>
-
-        {% else %}
-            <form method="post">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="verify_faceit">
-                <div class="mb-3">
-                    <label class="form-label">Никнейм на Faceit</label>
-                    <div class="input-group">
-                        {{ faceit_form.faceit_nickname }}
-                        <button type="submit" class="btn btn-warning">Привязать</button>
-                    </div>
-                    <div class="form-text">Введите ваш точный никнейм на платформе Faceit (регистр важен).</div>
-                </div>
-            </form>
-        {% endif %}
-    </div>
-</div>
 
     <!-- RIGHT: PandaScore data -->
     <div class="col-lg-7">

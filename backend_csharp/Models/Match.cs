@@ -8,6 +8,7 @@ public class Match
     public Tournament? Tournament { get; set; }
 
     public string Round { get; set; } = string.Empty; // "R1", "1/4", "1/2", "Final"
+    public string GroupName { get; set; } = string.Empty;
     public int RoundNumber { get; set; }
 
     // Самоссылающаяся связь для дерева сетки
@@ -28,5 +29,11 @@ public class Match
     public Team? Winner { get; set; }
 
     // Статусы: "planned", "live", "finished", "approved"
-    public string Status { get; set; } = "planned"; 
+    public string Status { get; set; } = "planned";
+
+    // Twitch/YouTube/custom stream integration fields
+    public string? StreamUrl { get; set; }
+    public string? StreamProvider { get; set; }
+    public string StreamStatus { get; set; } = "offline";
+    public DateTime? ScheduledAtUtc { get; set; }
 }
