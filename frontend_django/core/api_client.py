@@ -248,8 +248,5 @@ class CSharpApiClient:
 
     def esports_diagnostics(self) -> ApiResult:
         return self._request("GET", "esports/diagnostics")
-
-    def generate_bracket(self, tournament_id, token):
-        return self._post(f"/TournamentManagement/{tournament_id}/generate-bracket", token=tok
-
+        
 api_client = CSharpApiClient()

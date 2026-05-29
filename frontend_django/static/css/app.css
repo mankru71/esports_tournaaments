@@ -1,3 +1,5 @@
+
+
 :root {
   --bg: #101114;
   --surface: #17191d;
@@ -553,4 +555,130 @@ body {
     font-family: monospace;
     font-weight: 700;
     opacity: 0.8;
+}
+/* ==========================================================================
+   СИСТЕМНЫЕ ЭЛЕМЕНТЫ & БРАУЗЕРНЫЙ UI
+   ========================================================================== */
+
+/* 1. Глобальная цветовая схема.
+   ОДНА эта строчка заставляет браузер использовать темную тему 
+   для нативных календарей и контекстных меню! */
+:root {
+  color-scheme: dark;
+}
+
+/* 2. Кастомный скроллбар (Webkit-браузеры) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg, #101114);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-2, #1f2227);
+  border-radius: 6px;
+  border: 2px solid var(--bg, #101114); /* Создает иллюзию "отступа" от краев */
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted, #9c9a92);
+}
+
+/* 3. Красивое выделение текста при выделении мышкой */
+::selection {
+  background: rgba(200, 169, 106, 0.35); /* Полупрозрачный акцентный цвет */
+  color: #fff;
+}
+
+/* 4. Выпадающие списки (Select) */
+select.form-select, select.form-control, select {
+  appearance: none; /* Убиваем страшную системную стрелку */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--surface, #17191d);
+  color: var(--text, #f2f1ed);
+  border: 1px solid var(--border, rgba(255,255,255,0.09));
+  border-radius: 8px;
+  /* Добавляем кастомную аккуратную SVG-стрелочку */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239c9a92' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 16px 12px;
+  padding-right: 2.5rem; /* Отступ для стрелочки */
+  transition: all 0.2s ease;
+}
+
+select.form-select:focus, select.form-control:focus, select:focus {
+  border-color: var(--accent, #c8a96a);
+  box-shadow: 0 0 0 3px rgba(200, 169, 106, 0.15);
+  outline: none;
+}
+
+/* 5. Выбор даты и времени (Календари) */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  background-color: var(--surface, #17191d);
+  color: var(--text, #f2f1ed);
+  border: 1px solid var(--border, rgba(255,255,255,0.09));
+  border-radius: 8px;
+  padding: 0.375rem 1rem;
+  transition: all 0.2s ease;
+}
+
+input[type="date"]:focus,
+input[type="time"]:focus,
+input[type="datetime-local"]:focus {
+  border-color: var(--accent, #c8a96a);
+  box-shadow: 0 0 0 3px rgba(200, 169, 106, 0.15);
+  outline: none;
+}
+
+/* Стилизуем иконку календарика внутри инпута */
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* 6. Чекбоксы и Радио-кнопки (интеграция с Bootstrap) */
+input[type="checkbox"].form-check-input,
+input[type="radio"].form-check-input {
+  background-color: var(--surface-2, #1f2227);
+  border: 1px solid var(--border, rgba(255,255,255,0.09));
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="checkbox"].form-check-input:checked,
+input[type="radio"].form-check-input:checked {
+  background-color: var(--accent, #c8a96a);
+  border-color: var(--accent, #c8a96a);
+}
+
+input[type="checkbox"].form-check-input:focus,
+input[type="radio"].form-check-input:focus {
+  border-color: var(--accent, #c8a96a);
+  box-shadow: 0 0 0 3px rgba(200, 169, 106, 0.25);
+}
+
+/* 7. Загрузка файлов (File Input) */
+input[type="file"].form-control::file-selector-button {
+  background: var(--surface-2, #1f2227);
+  color: var(--text, #f2f1ed);
+  border: none;
+  border-right: 1px solid var(--border, rgba(255,255,255,0.09));
+  padding: 0.375rem 1rem;
+  margin-right: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+input[type="file"].form-control::file-selector-button:hover {
+  background: var(--accent, #c8a96a);
+  color: #000;
 }

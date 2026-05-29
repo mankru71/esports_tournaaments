@@ -77,16 +77,7 @@ public class TournamentManagementController : ControllerBase
             summary = plan.Summary
         });
     }
-[HttpPost("{id}/generate-bracket")]
-public async Task<IActionResult> GenerateBracket(int id)
-{
-    try
-    {
-        await _tournamentPlanningService.GenerateSingleEliminationBracketAsync(id);
-        return Ok(new { Message = "Сетка сгенерирована из подтвержденных заявок" });
-    }
-    catch (Exception ex) { return BadRequest(new { Error = ex.Message }); }
-}
+
     [HttpPost("planning")]
     public async Task<IActionResult> SavePlanning(int tournamentId, [FromBody] PlanningRequest request)
     {

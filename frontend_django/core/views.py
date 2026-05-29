@@ -150,7 +150,10 @@ def _read_current_user(request):
 
 
 def _role_flags(user):
-    role = ((user or {}).get("role") or "").lower()
+    is_verified = bool((user or {}).get("isEmailVerified", False))
+    
+    role = ((user or {}).get("role") or "").lower() if is_verified else ""
+    
     is_admin = role == "admin"
     is_judge = role == "judge"
     is_captain = role == "captain"
@@ -159,7 +162,7 @@ def _role_flags(user):
         "is_judge": is_judge,
         "is_captain": is_captain,
         "is_player": role == "player",
-        "is_viewer": role in ("", "viewer"),
+        "is_viewer": role in ("", "viewer") or not is_verified,
         "is_organizer": is_admin,
         "current_user": user,
     }
@@ -170,10 +173,17 @@ def _add_api_error(request, result, fallback="Ошибка выполнения 
 
 
 def _require_auth(request, token):
-    if token:
-        return None
-    messages.info(request, "Войдите в аккаунт")
-    return redirect("login")
+    if not token:
+        messages.info(request, "Войдите в аккаунт")
+        return redirect("login")
+        
+    user = request.session.get("current_user") or {}
+    
+    if user and not user.get("isEmailVerified") and getattr(request.resolver_match, "url_name", "") != "profile":
+        messages.warning(request, "Для этого действия необходимо подтвердить почту в профиле.")
+        return redirect("profile")
+        
+    return None
 
 
 def verify_email_view(request):
@@ -187,6 +197,9 @@ def verify_email_view(request):
     result = api_client.confirm_email(user_id, verify_token)
     if result.ok:
         messages.success(request, "Почта подтверждена")
+        # --- ИСПРАВЛЕНИЕ БАГА С КНОПКОЙ ---
+        # Удаляем кэш профиля, чтобы заставить Django обновить статус!
+        request.session.pop("current_user", None)
     else:
         _add_api_error(request, result, "Ссылка недействительна или устарела")
 
@@ -392,17 +405,6 @@ def tournament_detail(request, tournament_id: int):
     token = request.session.get("api_token")
     user = _read_current_user(request)
     roles = _role_flags(user)
-=    matches_resp = api_client.get_tournament_matches(tournament_id)
-    flat_matches = matches_resp.data if matches_resp.ok else []
-
-=    rounds_dict = {}
-    for m in flat_matches:
-        r = m.get('round', 1)
-        if r not in rounds_dict:
-            rounds_dict[r] = []
-        rounds_dict[r].append(m)
-
-=    bracket_rounds = [rounds_dict[k] for k in sorted(rounds_dict.keys())]
 
     # Добавляем bracket_rounds в context и возвращаем render()
     if request.method == "POST":

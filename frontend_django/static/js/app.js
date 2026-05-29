@@ -211,4 +211,29 @@
     initCopyButtons();
     initScrollAnimations(); // Запускаем наши красивые анимации!
   });
+  // --- СОХРАНЕНИЕ ПОЗИЦИИ СКРОЛЛА ПРИ ОТПРАВКЕ ФОРМ ---
+  document.addEventListener("DOMContentLoaded", () => {
+    const scrollKey = "pageScrollPos";
+    const urlKey = "pageScrollUrl";
+
+    // 1. Возвращаем скролл на место, если мы перезагрузили ту же самую страницу
+    const savedPos = sessionStorage.getItem(scrollKey);
+    const savedUrl = sessionStorage.getItem(urlKey);
+    const currentUrl = window.location.pathname + window.location.search;
+
+    if (savedPos && savedUrl === currentUrl) {
+      // setTimeout нужен, чтобы браузер успел отрисовать DOM перед прокруткой
+      setTimeout(() => window.scrollTo(0, parseInt(savedPos, 10)), 10);
+    }
+
+    // Очищаем кэш скролла, чтобы при переходе по обычным ссылкам страница открывалась сверху
+    sessionStorage.removeItem(scrollKey);
+    sessionStorage.removeItem(urlKey);
+  });
+
+  // 2. Сохраняем позицию прямо перед отправкой любой формы на сайте
+  document.addEventListener("submit", () => {
+    sessionStorage.setItem("pageScrollPos", window.scrollY);
+    sessionStorage.setItem("pageScrollUrl", window.location.pathname + window.location.search);
+  });
 })();
