@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load bracket_extras %}
 {% block title %}{{ tournament.name }}{% endblock %}
 {% block content %}
 <section>
@@ -10,7 +11,9 @@
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <button class="btn btn-ghost" type="button" data-copy-current-url>Скопировать ссылку</button>
-      <button class="btn btn-outline-accent" type="button" data-favorite-tournament="{{ tournament.id }}">В избранное</button>
+{% if current_user %}
+  <button class="btn btn-outline-accent" type="button" data-favorite-tournament="{{ tournament.id }}">В избранное</button>
+{% endif %}
       <span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span>
     </div>
   </div>
@@ -46,7 +49,31 @@
         </div>
       </div>
     {% endif %}
-
+      <div class="tournament-bracket-container animate-in">
+    <div class="tournament-bracket">
+        {% for round in bracket_rounds %}
+        <div class="bracket-round">
+            <h4 class="round-title">Раунд {{ forloop.counter }}</h4>
+            <div class="round-matches">
+                {% for match in round %}
+                <div class="bracket-match">
+                    <div class="match-team {% if match.winnerId and match.winnerId == match.teamAId %}winner{% endif %}">
+                        <span class="team-name">{{ match.teamAName|default:"TBD (Ожидание)" }}</span>
+                        <span class="team-score">{% if match.status == 'Completed' %}{{ match.teamAScore|default:"0" }}{% else %}-{% endif %}</span>
+                    </div>
+                    <div class="match-team {% if match.winnerId and match.winnerId == match.teamBId %}winner{% endif %}">
+                        <span class="team-name">{{ match.teamBName|default:"TBD (Ожидание)" }}</span>
+                        <span class="team-score">{% if match.status == 'Completed' %}{{ match.teamBScore|default:"0" }}{% else %}-{% endif %}</span>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-muted text-center">Матчи формируются...</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
     {% if is_captain and not tournament.isExternal %}
       <div class="section-panel p-3 p-md-4 mb-3">
         <h2 class="h5 mb-3">Заявка на участие</h2>
@@ -127,17 +154,30 @@
             </div>
           {% endif %}
 
+          {# Visual bracket (replaces the old boring table) #}
           {% if bracket.matches %}
-            <div class="table-responsive">
-              <table class="table table-striped align-middle mb-0">
-                <thead><tr><th>Этап</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
-                <tbody>
-                  {% for m in bracket.matches %}
-                    <tr><td>{{ m.round }}</td><td>{{ m.teamA }}</td><td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td><td>{{ m.teamB }}</td><td>{{ m.status }}</td></tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+            {# Pass bracket data to JS as JSON #}
+            <script id="bracket-data" type="application/json">
+              {{ bracket.matches|safe_json|default:"[]" }}
+            </script>
+            <div id="visual-bracket-wrap">
+              <div id="visual-bracket" class="vb-root"></div>
             </div>
+            {# Text-only fallback (hidden by default, shown if JS disabled) #}
+            <noscript>
+              <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                  <thead><tr><th>Этап</th><th>A</th><th class="text-center">Счёт</th><th>B</th><th>Статус</th></tr></thead>
+                  <tbody>
+                    {% for m in bracket.matches %}
+                      <tr><td>{{ m.round }}</td><td>{{ m.teamA }}</td>
+                          <td class="text-center fw-semibold">{{ m.scoreA }}:{{ m.scoreB }}</td>
+                          <td>{{ m.teamB }}</td><td>{{ m.status }}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </noscript>
           {% else %}
             <div class="empty-state">Сетка ещё не построена.</div>
           {% endif %}
@@ -331,4 +371,256 @@
     </div>
   {% endif %}
 </section>
+
+<style>
+/* ── Bracket root ─────────────────────────────────────────── */
+.vb-root            { overflow-x:auto; padding:.5rem 0 1rem; }
+.vb-stage-row       { display:flex; gap:0; align-items:stretch; min-width:600px; }
+
+/* Each round column */
+.vb-col             { display:flex; flex-direction:column; justify-content:space-around;
+                      flex:1; padding:0 .75rem; position:relative; }
+.vb-col-label       { text-align:center; font-size:.65rem; font-weight:700;
+                      letter-spacing:.12em; text-transform:uppercase; color:var(--accent);
+                      padding:.4rem 0 .8rem; }
+
+/* Single match card */
+.vb-match           { background:var(--surface); border:1px solid var(--border);
+                      border-radius:8px; overflow:hidden; margin:.35rem 0;
+                      transition:border-color .2s; cursor:default; position:relative; }
+.vb-match:hover     { border-color:var(--accent); }
+.vb-match.live      { border-color:var(--success);
+                      box-shadow:0 0 0 1px rgba(114,167,122,.35); }
+.vb-match.finished  { border-color:rgba(200,169,106,.3); }
+
+.vb-team            { display:flex; justify-content:space-between; align-items:center;
+                      padding:.4rem .75rem; gap:.5rem; }
+.vb-team:first-child{ border-bottom:1px solid var(--border); }
+.vb-team.winner     { background:var(--accent-soft); }
+.vb-team__name      { font-size:.8rem; font-weight:600; white-space:nowrap;
+                      overflow:hidden; text-overflow:ellipsis; max-width:9rem; }
+.vb-team__name.tbd  { color:var(--muted); font-weight:400; font-style:italic; }
+.vb-team__score     { font-size:.82rem; font-weight:700; min-width:1.2rem;
+                      text-align:center; color:var(--text); }
+.vb-team.winner .vb-team__score { color:var(--accent); }
+
+/* Status badge */
+.vb-status          { position:absolute; top:3px; right:5px;
+                      font-size:.58rem; font-weight:700; letter-spacing:.07em;
+                      text-transform:uppercase; color:var(--muted); }
+.vb-match.live .vb-status   { color:var(--success); }
+.vb-match.finished .vb-status { color:var(--accent); }
+
+/* Connector lines drawn by JS on a canvas overlay */
+#vb-canvas          { position:absolute; top:0; left:0; pointer-events:none; }
+
+/* Legend */
+.vb-legend          { display:flex; gap:1rem; flex-wrap:wrap; margin-top:.75rem;
+                      font-size:.72rem; color:var(--muted); padding:0 .75rem; }
+.vb-legend span     { display:flex; align-items:center; gap:.35rem; }
+.vb-legend i        { display:inline-block; width:10px; height:10px; border-radius:50%; }
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── Bracket data ────────────────────────────────────────────────
+  // Reads from the <script id="bracket-data"> tag injected by Django.
+  // Falls back to a hard-coded demo so the page is never empty.
+  function getBracketData() {
+    const tag = document.getElementById("bracket-data");
+    if (tag) {
+      try { return JSON.parse(tag.textContent); } catch (_) {}
+    }
+    // ── SAMPLE DATA ─── matches the C# API contract ───────────────
+    // C# endpoint: GET /api/tournaments/{id}/bracket
+    // Should return { matches: [...], groups: [...], summary: "..." }
+    // Each match:
+    //   { id, round, teamA, teamB, scoreA, scoreB, status }
+    return [
+      // Quarter-finals
+      { id:1, round:"Quarter-final", teamA:"Team Neon",    teamB:"Team Shadow",  scoreA:2, scoreB:1, status:"finished" },
+      { id:2, round:"Quarter-final", teamA:"Team Blaze",   teamB:"Team Frost",   scoreA:2, scoreB:0, status:"finished" },
+      { id:3, round:"Quarter-final", teamA:"Team Apex",    teamB:"Team Vortex",  scoreA:0, scoreB:2, status:"finished" },
+      { id:4, round:"Quarter-final", teamA:"Team Cipher",  teamB:"Team Storm",   scoreA:2, scoreB:1, status:"finished" },
+      // Semi-finals
+      { id:5, round:"Semi-final",    teamA:"Team Neon",    teamB:"Team Blaze",   scoreA:2, scoreB:1, status:"finished" },
+      { id:6, round:"Semi-final",    teamA:"Team Vortex",  teamB:"Team Cipher",  scoreA:1, scoreB:2, status:"live"     },
+      // Grand Final
+      { id:7, round:"Grand Final",   teamA:"Team Neon",    teamB:"TBD",          scoreA:0, scoreB:0, status:"upcoming" },
+    ];
+  }
+
+  // ── Round ordering ──────────────────────────────────────────────
+  const ROUND_ORDER = [
+    /round.of.64/i, /round.of.32/i, /round.of.16/i,
+    /quarter/i,     /semi/i,        /grand|final/i,
+  ];
+
+  function roundIndex(name) {
+    const n = String(name || "");
+    for (let i = 0; i < ROUND_ORDER.length; i++) {
+      if (ROUND_ORDER[i].test(n)) return i;
+    }
+    return 99;
+  }
+
+  // ── Group matches into rounds ────────────────────────────────────
+  function groupByRound(matches) {
+    const map = {};
+    matches.forEach(m => {
+      const r = String(m.round || "Round");
+      (map[r] = map[r] || []).push(m);
+    });
+    const rounds = Object.keys(map).sort(
+      (a, b) => roundIndex(a) - roundIndex(b)
+    );
+    return rounds.map(r => ({ label: r, matches: map[r] }));
+  }
+
+  // ── Render ───────────────────────────────────────────────────────
+  function render() {
+    const root = document.getElementById("visual-bracket");
+    if (!root) return;
+
+    const allMatches = getBracketData();
+    if (!allMatches || !allMatches.length) return;
+
+    const rounds = groupByRound(allMatches);
+
+    // Outer wrapper (relative for canvas overlay)
+    const wrap = document.createElement("div");
+    wrap.style.position = "relative";
+
+    const row = document.createElement("div");
+    row.className = "vb-stage-row";
+    wrap.appendChild(row);
+
+    rounds.forEach(({ label, matches }) => {
+      const col = document.createElement("div");
+      col.className = "vb-col";
+
+      const lbl = document.createElement("div");
+      lbl.className = "vb-col-label";
+      lbl.textContent = label;
+      col.appendChild(lbl);
+
+      matches.forEach(m => {
+        const card = buildMatchCard(m);
+        col.appendChild(card);
+      });
+
+      row.appendChild(col);
+    });
+
+    // Legend
+    const legend = document.createElement("div");
+    legend.className = "vb-legend";
+    legend.innerHTML = `
+      <span><i style="background:var(--success)"></i>Live</span>
+      <span><i style="background:var(--accent)"></i>Завершён</span>
+      <span><i style="background:var(--surface-2)"></i>Предстоит</span>
+    `;
+
+    root.appendChild(wrap);
+    root.appendChild(legend);
+
+    // Draw connector lines after DOM is painted
+    requestAnimationFrame(() => drawConnectors(wrap, row, rounds));
+  }
+
+  function buildMatchCard(m) {
+    const sA = parseInt(m.scoreA) || 0;
+    const sB = parseInt(m.scoreB) || 0;
+    const isFinished = /finish|complet|done/i.test(m.status) ||
+                       (m.status === "finished");
+    const isLive     = /live|ongoing/i.test(m.status);
+    const aWins = isFinished && sA > sB;
+    const bWins = isFinished && sB > sA;
+
+    const card = document.createElement("div");
+    card.className = "vb-match" +
+      (isLive ? " live" : "") + (isFinished ? " finished" : "");
+    card.setAttribute("data-match-id", m.id);
+
+    const statusLabel = isLive ? "LIVE" : isFinished ? "FIN" :
+                        (m.status || "").slice(0,8).toUpperCase();
+
+    card.innerHTML = `
+      <div class="vb-status">${esc(statusLabel)}</div>
+      ${teamHtml(m.teamA || "TBD", sA, aWins)}
+      ${teamHtml(m.teamB || "TBD", sB, bWins)}
+    `;
+    return card;
+  }
+
+  function teamHtml(name, score, winner) {
+    const isTbd = !name || name === "TBD" || name === "—";
+    return `
+      <div class="vb-team${winner ? " winner" : ""}">
+        <span class="vb-team__name${isTbd ? " tbd" : ""}">${esc(name || "TBD")}</span>
+        <span class="vb-team__score">${isTbd ? "—" : score}</span>
+      </div>`;
+  }
+
+  // ── Canvas connector lines ───────────────────────────────────────
+  function drawConnectors(wrap, row, rounds) {
+    const cols = row.querySelectorAll(".vb-col");
+    if (cols.length < 2) return;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const canvas   = document.createElement("canvas");
+    canvas.id = "vb-canvas";
+    canvas.width  = wrapRect.width;
+    canvas.height = wrapRect.height;
+    wrap.appendChild(canvas);
+
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "rgba(200,169,106,0.25)";
+    ctx.lineWidth   = 1.5;
+
+    // Connect each card's right edge mid-point to the next round's card
+    for (let ci = 0; ci < cols.length - 1; ci++) {
+      const leftCards  = cols[ci].querySelectorAll(".vb-match");
+      const rightCards = cols[ci + 1].querySelectorAll(".vb-match");
+
+      // Pair up: every 2 left matches feed 1 right match
+      for (let ri = 0; ri < rightCards.length; ri++) {
+        const paired = [leftCards[ri * 2], leftCards[ri * 2 + 1]];
+        const dest   = rightCards[ri];
+        if (!dest) continue;
+
+        const destRect = dest.getBoundingClientRect();
+        const destX    = destRect.left - wrapRect.left;
+        const destY    = destRect.top  - wrapRect.top + destRect.height / 2;
+
+        paired.forEach(src => {
+          if (!src) return;
+          const srcRect = src.getBoundingClientRect();
+          const srcX    = srcRect.right  - wrapRect.left;
+          const srcY    = srcRect.top    - wrapRect.top + srcRect.height / 2;
+          const mx      = (srcX + destX) / 2;
+
+          ctx.beginPath();
+          ctx.moveTo(srcX, srcY);
+          ctx.bezierCurveTo(mx, srcY, mx, destY, destX, destY);
+          ctx.stroke();
+        });
+      }
+    }
+  }
+
+  function esc(s) {
+    return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  // Run after page paints
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", render);
+  } else {
+    render();
+  }
+})();
+</script>
 {% endblock %}

@@ -17,7 +17,7 @@
           <div class="card p-3 mb-2">
             <div class="d-flex justify-content-between gap-2 align-items-center">
               <div class="fw-semibold">{{ c.displayName }}</div>
-              {% if mvp.isOpen %}
+              {% if mvp.isOpen and current_user %}
                 <form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="player_id" value="{{ c.id }}"><button class="btn btn-sm btn-outline-accent" type="submit">Голосовать</button></form>
               {% endif %}
             </div>

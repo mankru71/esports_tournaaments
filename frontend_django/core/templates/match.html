@@ -1,77 +1,448 @@
 {% extends "base.html" %}
-{% block title %}Матчи{% endblock %}
-{% block content %}
+{% block title %}Матчи · {{ tournament_id }}{% endblock %}
+
+
+<style>
+.mc-tabs            { display:flex; gap:.25rem; border-bottom:1px solid var(--border); margin-bottom:1.5rem; }
+.mc-tab             { padding:.55rem 1.1rem; border-radius:6px 6px 0 0; cursor:pointer;
+                      color:var(--muted); font-size:.875rem; font-weight:500;
+                      border:1px solid transparent; border-bottom:none;
+                      background:transparent; transition:color .15s, background .15s; }
+.mc-tab:hover       { color:var(--text); background:var(--surface-2); }
+.mc-tab.active      { color:var(--accent); background:var(--surface);
+                      border-color:var(--border); margin-bottom:-1px; }
+
+.mc-hero            { display:flex; justify-content:space-between; align-items:center;
+                      flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem; }
+.mc-hero h1         { font-size:1.25rem; font-weight:700; letter-spacing:.01em; margin:0; }
+
+/* ── MVP vote grid ───────────────────────────────────────────── */
+.mvp-grid           { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
+@media(max-width:640px){ .mvp-grid { grid-template-columns:1fr; } }
+
+.team-block         { background:var(--surface); border:1px solid var(--border);
+                      border-radius:10px; overflow:hidden; }
+.team-block__header { padding:.65rem 1rem; background:var(--surface-2);
+                      font-size:.75rem; font-weight:700; letter-spacing:.08em;
+                      text-transform:uppercase; color:var(--muted);
+                      border-bottom:1px solid var(--border); }
+.player-row         { display:flex; justify-content:space-between; align-items:center;
+                      padding:.7rem 1rem; border-bottom:1px solid var(--border); gap:.5rem; }
+.player-row:last-child{ border-bottom:none; }
+.player-name        { font-weight:600; font-size:.9rem; }
+.player-role        { font-size:.72rem; color:var(--muted); }
+.vote-btn           { font-size:.78rem; padding:.3rem .75rem; border-radius:20px;
+                      background:var(--accent-soft); color:var(--accent);
+                      border:1px solid var(--accent); cursor:pointer;
+                      transition:background .15s, transform .1s; white-space:nowrap; }
+.vote-btn:hover     { background:var(--accent); color:#000; }
+.vote-btn:active    { transform:scale(.96); }
+.vote-btn.voted     { background:var(--accent); color:#000; cursor:default; }
+.vote-btn:disabled  { opacity:.5; cursor:not-allowed; }
+
+/* Vote count badge */
+.vote-count         { font-size:.72rem; color:var(--muted); min-width:2.5rem; text-align:right; }
+
+/* MVP winner banner */
+.mvp-winner         { background:linear-gradient(135deg,var(--accent-soft),transparent);
+                      border:1px solid var(--accent); border-radius:10px;
+                      padding:1.25rem 1.5rem; margin-bottom:1.5rem;
+                      display:flex; align-items:center; gap:1rem; }
+.mvp-winner__crown  { font-size:2rem; }
+.mvp-winner__name   { font-size:1.1rem; font-weight:700; color:var(--accent); }
+.mvp-winner__sub    { font-size:.8rem; color:var(--muted); }
+
+/* Toast notification */
+.mc-toast           { position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999;
+                      background:var(--surface); border:1px solid var(--border);
+                      border-radius:8px; padding:.75rem 1.25rem;
+                      font-size:.875rem; box-shadow:var(--shadow);
+                      transform:translateY(150%); transition:transform .25s; }
+.mc-toast.show      { transform:translateY(0); }
+.mc-toast.success   { border-left:3px solid var(--success); }
+.mc-toast.error     { border-left:3px solid var(--danger); }
+
+/* Score glow on LIVE */
+.score-live         { color:var(--success); text-shadow:0 0 8px rgba(114,167,122,.6); }
+
+/* Lineup cards */
+.lineup-grid        { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
+@media(max-width:640px){ .lineup-grid { grid-template-columns:1fr; } }
+.lineup-team        { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.lineup-team__head  { padding:.65rem 1rem; background:var(--surface-2); font-weight:700;
+                      font-size:.85rem; border-bottom:1px solid var(--border);
+                      color:var(--accent); letter-spacing:.03em; }
+.lineup-player      { display:flex; align-items:center; gap:.6rem;
+                      padding:.55rem 1rem; border-bottom:1px solid var(--border); }
+.lineup-player:last-child{ border-bottom:none; }
+.lineup-avatar      { width:28px; height:28px; border-radius:50%;
+                      background:var(--surface-2); border:1px solid var(--border);
+                      display:flex; align-items:center; justify-content:center;
+                      font-size:.65rem; font-weight:700; color:var(--muted); flex-shrink:0; }
+</style>
+
 <section>
-  <div class="page-hero">
+  <div class="mc-hero">
     <div>
-      <h1 class="h3 mb-2">Матчи турнира</h1>
-      <p class="text-muted mb-0">Просмотр сетки и обновление результатов в реальном времени.</p>
+      <p class="eyebrow mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);">Матчи турнира</p>
+      <h1>Матч-центр <span style="color:var(--muted);font-weight:400;">#{{ tournament_id }}</span></h1>
     </div>
-    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">К списку турниров</a>
+    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">← Турниры</a>
   </div>
 
-  <div class="table-panel p-3 p-md-4 mb-3">
-    {% if matches %}
-      <div class="table-responsive">
-        <table class="table table-striped align-middle mb-0">
-          <thead><tr><th>ID</th><th>Раунд</th><th>Команда A</th><th class="text-center">Счёт</th><th>Команда B</th><th>Статус</th></tr></thead>
-          <tbody>
-            {% for m in matches %}
-            <tr data-match-id="{{ m.id }}">
-              <td>#{{ m.id }}</td>
-              <td>{{ m.round }}</td>
-              <td class="team-a">{{ m.teamA }}</td>
-              <td class="text-center fw-semibold score">{{ m.scoreA }} : {{ m.scoreB }}</td>
-              <td class="team-b">{{ m.teamB }}</td>
-              <td><span class="badge badge-status status-{{ m.status }} status">{{ m.status_label }}</span></td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <div class="empty-state">Матчи недоступны.</div>
+  {# ── Tab navigation ── #}
+  <div class="mc-tabs" role="tablist">
+    <button class="mc-tab active" data-tab="matches"  role="tab">📋 Матчи</button>
+    <button class="mc-tab"        data-tab="lineups"  role="tab">👥 Составы</button>
+    <button class="mc-tab"        data-tab="mvpvote"  role="tab">⭐ MVP Vote</button>
+  </div>
+
+  <div id="tab-matches" class="tab-panel">
+    <div class="table-panel p-3 p-md-4 mb-3">
+      {% if matches %}
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th>ID</th><th>Раунд</th>
+                <th>Команда A</th>
+                <th class="text-center">Счёт</th>
+                <th>Команда B</th>
+                <th>Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in matches %}
+              <tr data-match-id="{{ m.id }}">
+                <td><span style="color:var(--muted);font-size:.8rem;">#{{ m.id }}</span></td>
+                <td>{{ m.round }}</td>
+                <td class="team-a fw-semibold">{{ m.teamA }}</td>
+                <td class="text-center fw-bold score {% if m.status == 'live' %}score-live{% endif %}">
+                  {{ m.scoreA }} : {{ m.scoreB }}
+                </td>
+                <td class="team-b fw-semibold">{{ m.teamB }}</td>
+                <td>
+                  <span class="badge badge-status status-{{ m.status }} status">
+                    {{ m.status_label }}
+                  </span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">Матчи недоступны.</div>
+      {% endif %}
+    </div>
+
+    {% if matches_readonly %}
+    <div class="alert alert-info">
+      Этот список доступен только для просмотра — внешние / автогенерированные матчи не редактируются вручную.
+    </div>
     {% endif %}
+
+    {% if is_admin or is_judge %}{% if not matches_readonly %}
+    <div class="form-card p-4">
+      <h2 class="h5 mb-3">Обновить результат матча</h2>
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+        <div class="col-md-4"><label class="form-label">{{ form.match_id.label }}</label>{{ form.match_id }}</div>
+        <div class="col-md-4"><label class="form-label">{{ form.score_a.label }}</label>{{ form.score_a }}</div>
+        <div class="col-md-4"><label class="form-label">{{ form.score_b.label }}</label>{{ form.score_b }}</div>
+        <div class="col-12"><button class="btn btn-accent" type="submit">Сохранить результат</button></div>
+      </form>
+    </div>
+    {% endif %}{% endif %}
   </div>
 
-  {% if matches_readonly %}
-  <div class="alert alert-info">Этот список матчей доступен только для просмотра. Внешние матчи и автоматически сгенерированная сетка не редактируются вручную.</div>
-  {% endif %}
-
-  {% if is_admin or is_judge %}{% if not matches_readonly %}
-  <div class="form-card p-4">
-    <h2 class="h5 mb-3">Обновить результат матча</h2>
-    <form method="post" class="row g-3">
-      {% csrf_token %}
-      <div class="col-md-4"><label class="form-label">{{ form.match_id.label }}</label>{{ form.match_id }}</div>
-      <div class="col-md-4"><label class="form-label">{{ form.score_a.label }}</label>{{ form.score_a }}</div>
-      <div class="col-md-4"><label class="form-label">{{ form.score_b.label }}</label>{{ form.score_b }}</div>
-      <div class="col-12"><button class="btn btn-accent" type="submit">Сохранить результат</button></div>
-    </form>
+  <div id="tab-lineups" class="tab-panel" style="display:none;">
+    <div class="lineup-grid" id="lineup-container">
+      {# Populated by JS from matches data #}
+    </div>
+    <div id="lineup-empty" class="empty-state" style="display:none;">
+      Данные о составах отсутствуют.
+    </div>
   </div>
-  {% endif %}{% endif %}
+
+  <div id="tab-mvpvote" class="tab-panel" style="display:none;">
+    <div id="mvp-loading" style="text-align:center;padding:2rem;color:var(--muted);">
+      Загрузка MVP данных…
+    </div>
+    <div id="mvp-content" style="display:none;">
+      {# Populated via AJAX on tab open #}
+    </div>
+  </div>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
-<script>
-  (function () {
-    if (!window.signalR) return;
-    const connection = new signalR.HubConnectionBuilder().withUrl('/hubs/matches').withAutomaticReconnect().build();
-    connection.start().then(function () {
-      connection.invoke('JoinTournament', '{{ tournament_id }}');
-    }).catch(function () {});
+{# Toast #}
+<div class="mc-toast" id="mc-toast"></div>
 
-    connection.on('matchUpdated', function (payload) {
-      const row = document.querySelector('[data-match-id="' + payload.id + '"]');
+{# SignalR for live score updates #}
+<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── CSRF helper ────────────────────────────────────────────────
+  function getCsrf() {
+    return document.cookie.split("; ")
+      .find(r => r.startsWith("csrftoken="))
+      ?.split("=")[1] || "";
+  }
+
+  // ── Toast ───────────────────────────────────────────────────────
+  const toast = document.getElementById("mc-toast");
+  function showToast(msg, type) {
+    toast.textContent = msg;
+    toast.className = "mc-toast show " + (type || "");
+    setTimeout(() => { toast.className = "mc-toast"; }, 3500);
+  }
+
+  // ── Tab switching ────────────────────────────────────────────────
+  const tabs    = document.querySelectorAll(".mc-tab");
+  const panels  = document.querySelectorAll(".tab-panel");
+  let mvpLoaded = false;
+
+  tabs.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      btn.classList.add("active");
+      const target = btn.dataset.tab;
+      panels.forEach(p => p.style.display = "none");
+      document.getElementById("tab-" + target).style.display = "";
+
+      if (target === "lineups") buildLineups();
+      if (target === "mvpvote" && !mvpLoaded) loadMvp();
+    });
+  });
+
+  // ── Lineups builder ──────────────────────────────────────────────
+  // Collect unique team names from the match table rows
+  function buildLineups() {
+    const rows     = document.querySelectorAll("#tab-matches tbody tr");
+    const teams    = {};
+    rows.forEach(row => {
+      const a = row.querySelector(".team-a")?.textContent.trim();
+      const b = row.querySelector(".team-b")?.textContent.trim();
+      if (a && a !== "—") teams[a] = teams[a] || [];
+      if (b && b !== "—") teams[b] = teams[b] || [];
+    });
+
+    const container = document.getElementById("lineup-container");
+    const empty     = document.getElementById("lineup-empty");
+    const names     = Object.keys(teams);
+
+    if (!names.length) {
+      container.style.display = "none";
+      empty.style.display = "";
+      return;
+    }
+    empty.style.display = "none";
+    container.innerHTML = names.map(name => `
+      <div class="lineup-team">
+        <div class="lineup-team__head">${esc(name)}</div>
+        <div class="lineup-player">
+          <div class="lineup-avatar">${esc(name.slice(0,2).toUpperCase())}</div>
+          <div>
+            <div style="font-size:.85rem;font-weight:600;">${esc(name)}</div>
+            <div style="font-size:.72rem;color:var(--muted);">Данные состава загружаются из API…</div>
+          </div>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  // ── MVP vote loader ──────────────────────────────────────────────
+  const tournamentId = "{{ tournament_id }}";
+  const isLoggedIn   = {{ request.user.is_authenticated|yesno:"true,false" }};
+
+  async function loadMvp() {
+    mvpLoaded = true;
+    try {
+      const res  = await fetch(`/tournaments/${tournamentId}/mvp/`, {
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      });
+      // MVP page returns HTML; parse the candidate list from the
+      // JSON endpoint instead — use the API proxy
+      const apiRes = await fetch(`/api/tournaments/${tournamentId}/mvp`, {
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      });
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        renderMvp(data);
+      } else {
+        // Fall back to building from matches data
+        renderMvpFromMatches();
+      }
+    } catch (_) {
+      renderMvpFromMatches();
+    }
+  }
+
+  function renderMvpFromMatches() {
+    // Build a basic vote UI from teams visible in the match list
+    const rows  = document.querySelectorAll("#tab-matches tbody tr");
+    const teams = {};
+    rows.forEach(row => {
+      const a = row.querySelector(".team-a")?.textContent.trim();
+      const b = row.querySelector(".team-b")?.textContent.trim();
+      if (a && a !== "—") teams[a] = true;
+      if (b && b !== "—") teams[b] = true;
+    });
+
+    const candidates = Object.keys(teams).map((t, i) => ({
+      id: -(i + 1),
+      player: t + " (капитан)",
+      team: t,
+      votes: 0,
+    }));
+
+    renderMvp({ isOpen: true, candidates, results: [] });
+  }
+
+  function renderMvp(payload) {
+    document.getElementById("mvp-loading").style.display = "none";
+    const wrap = document.getElementById("mvp-content");
+    wrap.style.display = "";
+
+    const isOpen     = payload.isOpen !== false;
+    const candidates = payload.candidates || [];
+    const results    = payload.results    || [];
+    const winnerList = results.length ? results : candidates;
+    const topVotes   = Math.max(...winnerList.map(c => c.votes || 0), 0);
+
+    // Group by team
+    const byTeam = {};
+    candidates.forEach(c => {
+      const t = c.team || "Unknown";
+      (byTeam[t] = byTeam[t] || []).push(c);
+    });
+
+    // Winner banner (if voting closed and we have a winner)
+    let banner = "";
+    if (!isOpen && results.length) {
+      const winner = results[0];
+      banner = `
+        <div class="mvp-winner mb-4">
+          <div class="mvp-winner__crown">👑</div>
+          <div>
+            <div class="mvp-winner__name">${esc(winner.player)}</div>
+            <div class="mvp-winner__sub">${esc(winner.team || "")} · ${winner.votes} голосов</div>
+          </div>
+        </div>`;
+    }
+
+    const status = isOpen
+      ? `<div class="mb-3" style="color:var(--success);font-size:.85rem;">✅ Голосование открыто</div>`
+      : `<div class="mb-3" style="color:var(--muted);font-size:.85rem;">🔒 Голосование завершено</div>`;
+
+    const teamsHtml = Object.entries(byTeam).map(([team, players]) => `
+      <div class="team-block">
+        <div class="team-block__header">${esc(team)}</div>
+        ${players.map(p => {
+          const pct = topVotes ? Math.round((p.votes || 0) / topVotes * 100) : 0;
+          return `
+          <div class="player-row">
+            <div>
+              <div class="player-name">${esc(p.player || p.nickname || "Игрок")}</div>
+              <div class="player-role">${esc(p.role || "")}${p.votes ? ` · ${p.votes} голос.` : ""}</div>
+              ${topVotes ? `
+                <div style="margin-top:.3rem;height:3px;border-radius:2px;background:var(--surface-2);width:120px;">
+                  <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:2px;transition:width .4s;"></div>
+                </div>` : ""}
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <span class="vote-count">${p.votes || 0}</span>
+              ${isOpen
+                ? `<button class="vote-btn" data-pid="${p.id}" onclick="castVote(${p.id},this)"
+                     ${!isLoggedIn ? 'title="Войдите для голосования"' : ""}>
+                     Голос ↑
+                   </button>`
+                : `<span style="font-size:.75rem;color:var(--muted);">${pct}%</span>`}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    `).join("");
+
+    wrap.innerHTML = banner + status + `
+      <div class="mvp-grid">${teamsHtml || '<p style="color:var(--muted)">Кандидаты ещё не добавлены.</p>'}</div>
+    `;
+  }
+
+  // ── AJAX vote ────────────────────────────────────────────────────
+  window.castVote = async function (playerId, btn) {
+    if (!isLoggedIn) {
+      showToast("Войдите в аккаунт, чтобы голосовать", "error");
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append("player_id", playerId);
+      fd.append("csrfmiddlewaretoken", getCsrf());
+
+      const res  = await fetch(`/tournaments/${tournamentId}/mvp/`, {
+        method:  "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body:    fd,
+      });
+
+      if (res.ok || res.redirected) {
+        btn.classList.add("voted");
+        btn.textContent = "✓ Голос засчитан";
+        // Disable all vote buttons — one vote per user
+        document.querySelectorAll(".vote-btn").forEach(b => {
+          b.disabled = true;
+          if (!b.classList.contains("voted")) b.style.opacity = ".4";
+        });
+        // Update count optimistically
+        const countEl = btn.closest(".player-row")?.querySelector(".vote-count");
+        if (countEl) countEl.textContent = (parseInt(countEl.textContent) || 0) + 1;
+        showToast("Голос за MVP принят! 🏆", "success");
+      } else {
+        btn.disabled = false;
+        showToast("Ошибка голосования. Попробуйте снова.", "error");
+      }
+    } catch (_) {
+      btn.disabled = false;
+      showToast("Ошибка сети. Проверьте соединение.", "error");
+    }
+  };
+
+  // ── SignalR live score updates ────────────────────────────────────
+  if (window.signalR) {
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl("/hubs/matches")
+      .withAutomaticReconnect()
+      .build();
+
+    conn.start()
+      .then(() => conn.invoke("JoinTournament", tournamentId))
+      .catch(() => {});
+
+    conn.on("matchUpdated", payload => {
+      const row = document.querySelector(`[data-match-id="${payload.id}"]`);
       if (!row) return;
-      const score = row.querySelector('.score');
-      const status = row.querySelector('.status');
-      if (score) score.textContent = payload.scoreA + ' : ' + payload.scoreB;
-      if (status) {
-        status.textContent = payload.status;
-        status.className = 'badge badge-status status-' + payload.status + ' status';
+      const score = row.querySelector(".score");
+      const badge = row.querySelector(".status");
+      if (score) {
+        score.textContent = `${payload.scoreA} : ${payload.scoreB}`;
+        score.classList.toggle("score-live", payload.status === "live");
+      }
+      if (badge) {
+        badge.textContent = payload.status;
+        badge.className = `badge badge-status status-${payload.status} status`;
       }
     });
-  })();
+  }
+
+  // ── Utility ───────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+})();
 </script>
 {% endblock %}

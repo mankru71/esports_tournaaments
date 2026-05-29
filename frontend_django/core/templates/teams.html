@@ -84,7 +84,12 @@
                 <div class="text-muted small">Игроки пока не добавлены.</div>
               {% endif %}
             </div>
-
+              <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="generate_bracket">
+    <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
+    <button type="submit" class="btn btn-accent">Сгенерировать сетку матчей</button>
+</form> 
             {% if current_user and current_user.email == team.captainEmail %}
               <form method="post" class="row g-2 align-items-end">
                 {% csrf_token %}

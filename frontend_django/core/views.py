@@ -325,6 +325,16 @@ def teams(request):
                         messages.error(request, error)
             return redirect("teams")
 
+        if action == "generate_bracket":
+            tournament_id = int(request.POST.get("tournament_id", "0"))
+            if tournament_id > 0:
+                result = api_client.generate_bracket(tournament_id, token=token)
+                if result.ok:
+                    messages.success(request, "Сетка турнира успешно сгенерирована!")
+                else:
+                    _add_api_error(request, result, "Не удалось сгенерировать сетку")
+            return redirect("teams") 
+
         if action == "add_player":
             team_id = int(request.POST.get("team_id", "0") or 0)
             nickname = (request.POST.get("nickname") or "").strip()
@@ -382,7 +392,19 @@ def tournament_detail(request, tournament_id: int):
     token = request.session.get("api_token")
     user = _read_current_user(request)
     roles = _role_flags(user)
+=    matches_resp = api_client.get_tournament_matches(tournament_id)
+    flat_matches = matches_resp.data if matches_resp.ok else []
 
+=    rounds_dict = {}
+    for m in flat_matches:
+        r = m.get('round', 1)
+        if r not in rounds_dict:
+            rounds_dict[r] = []
+        rounds_dict[r].append(m)
+
+=    bracket_rounds = [rounds_dict[k] for k in sorted(rounds_dict.keys())]
+
+    # Добавляем bracket_rounds в context и возвращаем render()
     if request.method == "POST":
         action = request.POST.get("action")
 
@@ -637,6 +659,10 @@ def mvp(request, tournament_id: int):
     roles = _role_flags(_read_current_user(request))
 
     if request.method == "POST":
+        auth_redirect = _require_auth(request, token)
+        if auth_redirect:
+            return auth_redirect
+
         player_id = int(request.POST.get("player_id", "0"))
         vote_result = api_client.vote_mvp(tournament_id, player_id, token=token)
         if vote_result.ok:

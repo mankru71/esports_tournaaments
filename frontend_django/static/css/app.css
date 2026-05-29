@@ -243,3 +243,314 @@ textarea::placeholder { color: var(--muted); }
   .page-hero { flex-direction: column; align-items: start; }
   .stream-attach-form { grid-template-columns: 1fr; width: 100%; }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   TASK 2 & 3 ADDITIONS — Match Centre + Bracket
+   These supplement existing variables, not override them.
+════════════════════════════════════════════════════════════════ */
+
+/* Neon accent glow used in live scores and brackets */
+:root {
+  --neon-green:  #39ff78;
+  --neon-blue:   #00d4ff;
+  --neon-yellow: #ffd700;
+}
+
+/* Live score pulse animation */
+@keyframes pulse-live {
+  0%, 100% { opacity:1; }
+  50%       { opacity:.65; }
+}
+.score-live { animation: pulse-live 1.4s ease-in-out infinite; }
+
+/* Bracket container scrollbar */
+.vb-root::-webkit-scrollbar       { height:4px; }
+.vb-root::-webkit-scrollbar-track { background:var(--surface); }
+.vb-root::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+/* Empty state for bracket */
+.vb-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: .875rem;
+}
+
+/* Eyebrow text utility */
+.eyebrow {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted);
+}
+/* --- ОСНОВНЫЕ ПЕРЕМЕННЫЕ --- */
+/* Теперь мы используем цвета из вашего app.js: --bg, --surface, --text, --border, --accent */
+:root {
+  --success: #10B981;
+  --danger: #EF4444;
+  --radius: 12px;
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body {
+  /* Привязываемся к переменным из JS */
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
+  /* Плавная смена темы при нажатии на кнопку */
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* --- КАРТОЧКИ И ПАНЕЛИ --- */
+.card, .section-panel, .table-panel {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  transition: var(--transition);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  opacity: 0; /* Для анимации появления */
+}
+
+/* Эффект всплытия при наведении */
+.card:hover {
+  transform: translateY(-4px);
+  /* Используем тень из JS, она адаптирована под обе темы */
+  box-shadow: var(--shadow); 
+  border-color: var(--accent) !important;
+}
+
+/* --- ГЕРОЙ ЭКРАНА (Page Hero) --- */
+.page-hero {
+  /* Динамический градиент: от фона карточки к цвету акцента */
+  background: linear-gradient(135deg, var(--surface) 0%, var(--accent-soft) 100%) !important;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.5rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+/* --- КНОПКИ --- */
+.btn {
+  border-radius: 8px !important;
+  transition: var(--transition) !important;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.btn-accent, .btn-primary {
+  background: var(--accent) !important;
+  color: #fff !important; /* На акцентных цветах белый текст читается отлично в обеих темах */
+  border: none !important;
+  box-shadow: 0 4px 12px var(--accent-soft);
+}
+
+.btn-accent:hover, .btn-primary:hover {
+  background: var(--accent-2) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px var(--accent-soft);
+}
+
+.btn-outline-accent {
+  border: 1px solid var(--accent) !important;
+  color: var(--accent) !important;
+  background: transparent;
+}
+
+.btn-outline-accent:hover {
+  background: var(--accent) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px var(--accent-soft);
+}
+
+/* --- НАВИГАЦИОННЫЕ ВКЛАДКИ (Tabs) --- */
+.nav-tabs {
+  border-bottom: 2px solid var(--border) !important;
+  gap: 0.5rem;
+}
+
+.nav-tabs .nav-link {
+  color: var(--muted) !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  margin-bottom: -2px;
+  padding: 0.75rem 1.25rem;
+  transition: var(--transition);
+  font-weight: 500;
+  background: transparent !important;
+}
+
+.nav-tabs .nav-link:hover, .nav-tabs .nav-link.active {
+  color: var(--accent) !important;
+  border-bottom: 2px solid var(--accent) !important;
+}
+
+/* --- СТАТУСЫ И ПУСТЫЕ СОСТОЯНИЯ --- */
+.badge-status {
+  padding: 0.45em 0.8em;
+  border-radius: 6px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.badge-status.status-live { 
+  background: rgba(16, 185, 129, 0.15) !important; 
+  color: var(--success) !important; 
+  animation: pulse-glow 2s infinite;
+}
+
+.badge-status.status-finished { 
+  background: var(--surface-2) !important; 
+  color: var(--muted) !important; 
+  border: 1px solid var(--border);
+}
+
+.empty-state {
+  color: var(--muted);
+}
+
+/* --- ТАБЛИЦЫ --- */
+.table {
+  color: var(--text) !important;
+}
+.table-striped tbody tr:nth-of-type(odd) {
+  /* Переменная из JS для полосатых таблиц */
+  background-color: var(--table-striped-bg) !important;
+}
+.table td, .table th {
+  border-color: var(--border) !important;
+  background-color: transparent !important;
+}
+.table thead th {
+  color: var(--muted) !important;
+  font-weight: 600;
+}
+
+/* --- АНИМАЦИИ --- */
+@keyframes fadeInUp {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.animate-in {
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+/* --- ТУРНИРНАЯ СЕТКА --- */
+.tournament-bracket-container {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+}
+
+.tournament-bracket {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 3.5rem;
+    padding: 2rem 1.5rem;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    min-width: max-content; /* Чтобы сетка не сжималась на телефонах */
+}
+
+.bracket-round {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: 2.5rem;
+    flex: 1;
+    min-width: 240px;
+}
+
+.round-title {
+    text-align: center;
+    color: var(--accent);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.round-matches {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    justify-content: space-around;
+    height: 100%;
+}
+
+.bracket-match {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    transition: var(--transition);
+}
+
+.bracket-match:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+/* Линии-коннекторы между матчами */
+.bracket-round:not(:last-child) .bracket-match::after {
+    content: '';
+    position: absolute;
+    right: -1.75rem;
+    top: 50%;
+    width: 1.75rem;
+    height: 2px;
+    background: var(--border);
+}
+
+.match-team {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+    color: var(--text);
+}
+
+.match-team:last-child {
+    border-bottom: none;
+}
+
+.match-team.winner {
+    background: rgba(16, 185, 129, 0.08); /* Зеленоватый отсвет для победителя */
+    color: var(--success);
+}
+
+.team-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.team-score {
+    font-family: monospace;
+    font-weight: 700;
+    opacity: 0.8;
+}

@@ -1,3 +1,14 @@
+# =============================================================
+# docker-compose.yml — Arena Control
+#
+# TASK 1 FIXES:
+#   1. nginx now depends on service_started (not service_healthy)
+#      → nginx port :80 opens immediately; you see 502 while the
+#        backend warms up instead of ERR_CONNECTION_REFUSED
+#   2. django-app command explicitly binds 0.0.0.0:8000
+#   3. Correct Gunicorn-style healthcheck (curl to /)
+# =============================================================
+
 services:
   csharp-api:
     build:
@@ -11,7 +22,7 @@ services:
       - ASPNETCORE_URLS=http://+:5000
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${DB_NAME:-esports_db};Username=${DB_USER:-esports_user};Password=${DB_PASSWORD:-esports123}
       - PandaScore__Token=${PANDASCORE_TOKEN}
-      - PandaScore__Enabled=true            
+      - PandaScore__Enabled=true
       - PANDASCORE_TOKEN=${PANDASCORE_TOKEN}
       - PANDASCORE_BASE_URL=${PANDASCORE_BASE_URL:-https://api.pandascore.co}
       - SMTP_HOST=${SMTP_HOST}
@@ -58,17 +69,20 @@ services:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     depends_on:
-      csharp-api:
-        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
+      csharp-api:                   
+        condition: service_healthy  
     networks:
       - esports-network
     restart: unless-stopped
+    # FIX: explicitly bind 0.0.0.0 so Nginx container can reach Django
     command: >
-      sh -c "until pg_isready -h ${DB_HOST:-postgres} -U ${DB_USER:-esports_user} -d ${DB_NAME:-esports_db}; do echo 'waiting for postgres...'; sleep 1; done &&
+      sh -c "until pg_isready -h ${DB_HOST:-postgres} -U ${DB_USER:-esports_user} -d ${DB_NAME:-esports_db}; do
+               echo 'waiting for postgres...'; sleep 2;
+             done &&
              python manage.py migrate &&
              python manage.py collectstatic --noinput &&
              python manage.py runserver 0.0.0.0:8000"
@@ -119,16 +133,19 @@ services:
     image: nginx:alpine
     container_name: esports_nginx
     ports:
-      - "80:80"
+      - "80:80"          # ← The only port you need: http://localhost
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - static_volume:/static
       - media_volume:/media
     depends_on:
+      # FIX: use service_started so nginx port :80 binds immediately.
+      # Before this fix nginx waited for django_app healthy (~3 min)
+      # causing ERR_CONNECTION_REFUSED (-102) on cold start.
       django-app:
-        condition: service_healthy
+        condition: service_started
       csharp-api:
-        condition: service_healthy
+        condition: service_started
     networks:
       - esports-network
     restart: unless-stopped

@@ -4,6 +4,7 @@
   const THEME_KEY = "theme";
   const FAVORITES_KEY = "favoriteTournaments";
 
+  // Твои оригинальные цветовые палитры сохранены
   const PALETTES = {
     dark: {
       "--bg": "#101114",
@@ -135,7 +136,12 @@
           await navigator.clipboard.writeText(window.location.href);
           const oldText = button.textContent;
           button.textContent = "Ссылка скопирована";
-          setTimeout(() => { button.textContent = oldText; }, 1800);
+          button.classList.add("text-success", "border-success"); // Добавлен легкий визуальный эффект успеха
+          
+          setTimeout(() => { 
+            button.textContent = oldText; 
+            button.classList.remove("text-success", "border-success");
+          }, 1800);
         } catch {
           window.prompt("Скопируйте ссылку", window.location.href);
         }
@@ -143,9 +149,41 @@
     });
   }
 
+  // --- НОВАЯ ФУНКЦИЯ: Плавные анимации при скролле ---
+  function initScrollAnimations() {
+    const observerOptions = {
+      threshold: 0.05, // Элемент начнет появляться, когда хотя бы 5% его видно на экране
+      rootMargin: "0px 0px -40px 0px" // Небольшой отступ снизу для красоты
+    };
+
+    const observer = new IntersectionObserver((entries, observer) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('animate-in');
+          observer.unobserve(entry.target); // Отключаем наблюдение, чтобы не анимировать повторно
+        }
+      });
+    }, observerOptions);
+
+    // Находим все блоки, которые нужно анимировать
+    const animatedElements = document.querySelectorAll(
+      '.card, .section-panel, .table-panel, .page-hero, .empty-state'
+    );
+
+    // Задаем каждому элементу каскадную задержку, чтобы они выплывали друг за другом
+    animatedElements.forEach((el, index) => {
+      // Максимум 10 элементов в каскаде, чтобы анимация не затягивалась надолго
+      const delay = (index % 10) * 0.07; 
+      el.style.animationDelay = `${delay}s`;
+      observer.observe(el);
+    });
+  }
+
+  // Инициализация темы до полной загрузки DOM, чтобы избежать мерцания
   applyTheme(safeGetTheme());
 
   document.addEventListener("DOMContentLoaded", function () {
+    // Авто-скрытие уведомлений
     document.querySelectorAll("[data-auto-dismiss='true']").forEach((el) => {
       setTimeout(() => {
         el.classList.remove("show");
@@ -153,9 +191,11 @@
       }, 4500);
     });
 
+    // Год в футере
     const yearEl = document.getElementById("footer-year");
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
+    // Тумблер переключения темы
     syncToggleUi();
     const btn = document.getElementById("themeToggle");
     if (btn) {
@@ -166,7 +206,9 @@
       });
     }
 
+    // Запуск всех модулей
     initFavorites();
     initCopyButtons();
+    initScrollAnimations(); // Запускаем наши красивые анимации!
   });
 })();
