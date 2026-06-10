@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load bracket_extras %}
 {% block title %}Аналитика{% endblock %}
 {% block content %}
 <section>
@@ -44,6 +45,65 @@
     </div>
   </div>
 
+  <div class="section-panel p-3 mb-3">
+    <h2 class="h5 mb-1">Винрейт команд</h2>
+    <p class="text-muted small mb-3">
+      По завершённым матчам локальных турниров: группы vs плей-офф и «упорные» матчи (разница в счёте ≤ 2).
+    </p>
+    {% if team_winrates %}
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Команда</th>
+                <th class="text-center">Матчи</th>
+                <th style="min-width:160px;">Общий</th>
+                <th class="text-center">Группы</th>
+                <th class="text-center">Плей-офф</th>
+                <th class="text-center" title="Винрейт в матчах с разницей в счёте не более 2">Упорные</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in team_winrates %}
+              <tr>
+                <td class="fw-semibold">{{ t.teamName }}</td>
+                <td class="text-center">{{ t.totalMatches }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="progress flex-grow-1" style="height:8px;">
+                      <div class="progress-bar winrate-bar" role="progressbar" style="width: {{ t.winRate }}%"></div>
+                    </div>
+                    <span class="small fw-semibold">{{ t.winRate }}%</span>
+                  </div>
+                </td>
+                <td class="text-center">
+                  {% if t.groupMatches %}{{ t.groupWinRate }}% <span class="text-muted small">({{ t.groupWins }}/{{ t.groupMatches }})</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if t.playoffMatches %}{{ t.playoffWinRate }}% <span class="text-muted small">({{ t.playoffWins }}/{{ t.playoffMatches }})</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if t.closeMatches %}{{ t.closeWinRate }}% <span class="text-muted small">({{ t.closeWins }}/{{ t.closeMatches }})</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="card p-3 h-100">
+          <canvas id="winrateChart" height="260"></canvas>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">Завершённых матчей ещё нет — винрейты появятся после первых результатов.</div>
+    {% endif %}
+  </div>
+
   <div class="section-panel p-3">
     <h2 class="h5 mb-3">Призовые фонды</h2>
     {% for p in analytics.prizePools %}
@@ -59,4 +119,55 @@
     {% endfor %}
   </div>
 </section>
+
+{% if team_winrates %}
+<script id="winrates-data" type="application/json">{{ team_winrates|safe_json }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    var holder = document.getElementById('winrates-data');
+    var canvas = document.getElementById('winrateChart');
+    if (!holder || !canvas || typeof Chart === 'undefined') return;
+
+    var rows = [];
+    try { rows = JSON.parse(holder.textContent) || []; } catch (e) { return; }
+    rows = rows.slice(0, 8); // топ-8, иначе подписи не читаются
+
+    var styles = getComputedStyle(document.documentElement);
+    var accent = (styles.getPropertyValue('--accent') || '#c8a96a').trim();
+    var muted = (styles.getPropertyValue('--muted') || '#8a8f98').trim();
+
+    new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: rows.map(function (r) { return r.teamName; }),
+        datasets: [
+          {
+            label: 'Группы, %',
+            data: rows.map(function (r) { return r.groupMatches ? r.groupWinRate : null; }),
+            backgroundColor: muted
+          },
+          {
+            label: 'Плей-офф, %',
+            data: rows.map(function (r) { return r.playoffMatches ? r.playoffWinRate : null; }),
+            backgroundColor: accent
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, max: 100, ticks: { color: muted }, grid: { color: 'rgba(128,128,128,.15)' } },
+          x: { ticks: { color: muted }, grid: { display: false } }
+        },
+        plugins: {
+          legend: { labels: { color: muted } },
+          title: { display: true, text: 'Винрейт: группы vs плей-офф', color: muted }
+        }
+      }
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

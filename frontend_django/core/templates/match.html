@@ -131,6 +131,7 @@
                 <th>Команда A</th>
                 <th class="text-center">Счёт</th>
                 <th>Команда B</th>
+                <th class="text-center">Прогноз ИИ</th>
                 <th>Статус</th>
               </tr>
             </thead>
@@ -144,6 +145,15 @@
                   {{ m.scoreA }} : {{ m.scoreB }}
                 </td>
                 <td class="team-b fw-semibold">{{ m.teamB }}</td>
+                <td class="text-center">
+                  {% if m.prediction %}
+                  <span class="badge prediction-badge" title="Вероятность победы: {{ m.teamA }} {{ m.prediction.probA }}% — {{ m.teamB }} {{ m.prediction.probB }}%">
+                    <span {% if m.prediction.favorite == 'A' %}class="prediction-favorite"{% endif %}>{{ m.prediction.probA }}%</span>
+                    <span class="prediction-sep">/</span>
+                    <span {% if m.prediction.favorite == 'B' %}class="prediction-favorite"{% endif %}>{{ m.prediction.probB }}%</span>
+                  </span>
+                  {% else %}<span class="text-muted small">—</span>{% endif %}
+                </td>
                 <td>
                   <span class="badge badge-status status-{{ m.status }} status">
                     {{ m.status_label }}

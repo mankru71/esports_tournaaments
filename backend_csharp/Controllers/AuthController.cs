@@ -64,8 +64,13 @@ public class AuthController : ControllerBase
         public string ProfileUrl { get; set; } = string.Empty;
     }
 
+    public class LookingForTeamRequest
+    {
+        public bool Enabled { get; set; }
+    }
+
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request, [FromServices] EsportsBackend.Services.VerificationService verification)
     {
         _logger.LogInformation("Incoming /api/auth/register for {Email}", request.Email);
 
@@ -100,7 +105,26 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return Created("/api/auth/me", new { message = "registered", email = user.Email, nickname = user.Nickname, role = user.Role });
+        // Сразу шлём письмо подтверждения на реальный адрес. Сбой SMTP не валит
+        // регистрацию — пользователь запросит повторную отправку из профиля.
+        var emailSent = false;
+        try
+        {
+            emailSent = await verification.SendVerificationLinkAsync(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось отправить письмо подтверждения для {Email}", user.Email);
+        }
+
+        return Created("/api/auth/me", new
+        {
+            message = "registered",
+            email = user.Email,
+            nickname = user.Nickname,
+            role = user.Role,
+            verificationEmailSent = emailSent
+        });
     }
 
     [HttpPost("login")]
@@ -166,8 +190,73 @@ public class AuthController : ControllerBase
         return Ok(ToUserDto(user));
     }
 
+    /// <summary>
+    /// История рейтинга текущего пользователя для графика динамики в профиле.
+    /// Если снимков ещё нет, но текущий рейтинг есть — возвращаем одну точку,
+    /// чтобы график не был пустым.
+    /// </summary>
+    [HttpGet("profile/rating-history")]
+    public async Task<IActionResult> RatingHistory([FromServices] Services.RatingHistoryService history, CancellationToken ct)
+    {
+        var userId = AuthTokenHelper.GetUserId(Request);
+        if (userId is null)
+            return Unauthorized(new { message = "Требуется вход" });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value, ct);
+        if (user is null)
+            return Unauthorized(new { message = "Пользователь не найден" });
+
+        var records = await history.GetHistoryAsync(user.Id, ct);
+
+        if (records.Count == 0 && (user.FaceitElo.HasValue || user.Rating.HasValue))
+        {
+            var current = user.FaceitElo.HasValue ? user.FaceitElo.Value : user.Rating!.Value;
+            return Ok(new[]
+            {
+                new
+                {
+                    rating = current,
+                    source = user.FaceitElo.HasValue ? "faceit" : (user.RatingProvider ?? "manual"),
+                    recordedAtUtc = user.FaceitLinkedAt ?? user.RatingVerifiedAtUtc ?? DateTime.UtcNow
+                }
+            });
+        }
+
+        return Ok(records.Select(h => new
+        {
+            rating = h.Rating,
+            source = h.Source,
+            recordedAtUtc = h.RecordedAtUtc
+        }));
+    }
+
+    /// <summary>Переключатель «Ищу команду» — игрок попадает на доску скаутинга.</summary>
+    [HttpPost("profile/looking-for-team")]
+    public async Task<IActionResult> SetLookingForTeam([FromBody] LookingForTeamRequest request)
+    {
+        var userId = AuthTokenHelper.GetUserId(Request);
+        if (userId is null)
+            return Unauthorized(new { message = "Требуется вход" });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+        if (user is null)
+            return Unauthorized(new { message = "Пользователь не найден" });
+
+        user.IsLookingForTeam = request.Enabled;
+        user.LookingForTeamSinceUtc = request.Enabled ? DateTime.UtcNow : null;
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = request.Enabled
+                ? "Вы добавлены на доску скаутинга"
+                : "Вы убраны с доски скаутинга",
+            profile = ToUserDto(user)
+        });
+    }
+
     [HttpPost("profile/verify-rating")]
-    public async Task<IActionResult> VerifyRating([FromBody] VerifyRatingRequest request)
+    public async Task<IActionResult> VerifyRating([FromBody] VerifyRatingRequest request, [FromServices] Services.RatingHistoryService history)
     {
         var userId = AuthTokenHelper.GetUserId(Request);
         if (userId is null)
@@ -193,6 +282,9 @@ public class AuthController : ControllerBase
         user.RatingVerified = true;
         user.RatingVerifiedAtUtc = DateTime.UtcNow;
 
+        // Снимок в историю рейтинга — для графика динамики в профиле
+        await history.SnapshotAsync(user.Id, rating, provider);
+
         await _db.SaveChangesAsync();
 
         return Ok(new
@@ -211,6 +303,8 @@ public class AuthController : ControllerBase
         bio = user.Bio,
         
         isEmailVerified = user.IsEmailVerified,
+        isLookingForTeam = user.IsLookingForTeam,
+        lookingForTeamSinceUtc = user.LookingForTeamSinceUtc,
         faceitNickname = user.FaceitNickname,
         faceitElo = user.FaceitElo,
         faceitLevel = user.FaceitLevel,

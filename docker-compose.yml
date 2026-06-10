@@ -32,9 +32,12 @@ services:
       - PUBLIC_FRONTEND_URL=${PUBLIC_FRONTEND_URL}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - DISCORD_BOT_NAME=${DISCORD_BOT_NAME:-Arena Control}
+      - ML_SERVICE_URL=${ML_SERVICE_URL:-http://ml-service:8001}
     depends_on:
       postgres:
         condition: service_healthy
+      ml-service:
+        condition: service_started
     networks:
       - esports-network
     restart: unless-stopped
@@ -75,17 +78,18 @@ services:
         condition: service_started
       csharp-api:                   
         condition: service_healthy  
+
     networks:
       - esports-network
     restart: unless-stopped
     # FIX: explicitly bind 0.0.0.0 so Nginx container can reach Django
     command: >
-      sh -c "until pg_isready -h ${DB_HOST:-postgres} -U ${DB_USER:-esports_user} -d ${DB_NAME:-esports_db}; do
+      sh -c "until pg_isready -h $${DB_HOST:-postgres} -U $${DB_USER:-esports_user} -d $${DB_NAME:-esports_db}; do
                echo 'waiting for postgres...'; sleep 2;
              done &&
              python manage.py migrate &&
              python manage.py collectstatic --noinput &&
-             python manage.py runserver 0.0.0.0:8000"
+             gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 esports_tournament.wsgi:application"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ >/dev/null || exit 1"]
       interval: 15s
@@ -113,6 +117,23 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ML-сервис прогнозов матчей (Elo-модель): внутренний контейнер без
+  # публичного порта, C#-бэкенд ходит сюда по Docker DNS (см. ML_SERVICE_URL выше).
+  ml-service:
+    build:
+      context: ./ml_service
+      dockerfile: Dockerfile
+    container_name: esports_ml_service
+    networks:
+      - esports-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
       timeout: 5s
       retries: 10
       start_period: 20s

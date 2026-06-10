@@ -25,6 +25,8 @@ public class TournamentPlanningService
 
     public async Task<TournamentPlanVm> BuildPlanAsync(Tournament tournament, CancellationToken ct = default)
     {
+        if (tournament.IsExternal)
+            return await BuildExternalPlanAsync(tournament, ct);
         var approvedTeams = await LoadApprovedTeamsAsync(tournament.Id, ct);
         var stageType = NormalizeStageType(tournament);
         var groups = stageType == "groups" ? BuildGroupPreviews(approvedTeams) : new List<PlannedGroup>();
@@ -55,6 +57,54 @@ public class TournamentPlanningService
 
         return new TournamentPlanVm(stageType, groups, plannedMatches, summary);
     }
+
+    private async Task<TournamentPlanVm> BuildExternalPlanAsync(Tournament tournament, CancellationToken ct)
+{
+    var matches = await _db.Matches
+        .Include(m => m.TeamA)
+        .Include(m => m.TeamB)
+        .Where(m => m.TournamentId == tournament.Id)
+        .OrderBy(m => m.RoundNumber)
+        .ThenBy(m => m.Id)
+        .ToListAsync(ct);
+
+    var stageType = NormalizeStageType(tournament);
+    var distinctTeams = matches
+        .SelectMany(m => new[] { m.TeamA, m.TeamB })
+        .Where(t => t != null)
+        .DistinctBy(t => t!.Id)
+        .Select((t, idx) => new PlannedTeam(t!.Id, t.Name, idx + 1, 0m))
+        .ToList();
+
+    var groups = stageType == "groups" ? BuildGroupPreviews(distinctTeams) : new List<PlannedGroup>();
+
+    var plannedMatches = matches
+        .Select(m => new PlannedMatch(
+            NormalizeExternalRoundLabel(m.Round, m.RoundNumber),
+            m.TeamA?.Name ?? "TBD",
+            m.TeamB?.Name ?? "TBD",
+            m.ScoreA,
+            m.ScoreB,
+            m.Status))
+        .ToList();
+
+    var provider = tournament.Provider ?? "external";
+    var summary = plannedMatches.Any()
+        ? $"Данные загружены из {provider}. Редактирование недоступно."
+        : $"Матчи ещё не синхронизированы из {provider}.";
+
+    return new TournamentPlanVm(stageType, groups, plannedMatches, summary);
+}
+    private static string NormalizeExternalRoundLabel(string round, int roundNumber)
+{
+    if (string.IsNullOrWhiteSpace(round)) return $"Round {roundNumber}";
+    var lower = round.Trim().ToLowerInvariant();
+    if (lower.Contains("final") && !lower.Contains("semi") && !lower.Contains("quarter")) return "Final";
+    if (lower.Contains("semi")) return "Semifinal";
+    if (lower.Contains("quarter")) return "Quarterfinal";
+    if (lower.Contains("group")) return round.Trim();
+    return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(lower);
+}
 
     public async Task<bool> GenerateAndSaveBracketAsync(int tournamentId, CancellationToken ct = default)
     {

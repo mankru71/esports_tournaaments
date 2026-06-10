@@ -14,8 +14,20 @@
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <button class="btn btn-ghost" type="button" data-copy-current-url>Скопировать ссылку</button>
       {% if current_user %}
-      <button class="btn btn-outline-accent" type="button" data-favorite-tournament="{{ tournament.id }}">В избранное</button>
+      <form method="post" class="m-0">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="toggle_favorite">
+        <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
+        {% if is_favorited %}
+          <input type="hidden" name="favorited" value="1">
+          <button type="submit" class="btn btn-outline-accent active" aria-pressed="true">В избранном</button>
+        {% else %}
+          <input type="hidden" name="favorited" value="0">
+          <button type="submit" class="btn btn-outline-accent" aria-pressed="false">В избранное</button>
+        {% endif %}
+      </form>
       {% endif %}
+     
       <span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span>
     </div>
   </div>
@@ -91,7 +103,9 @@
             <h2 class="h5 mb-1">Сетка</h2>
             {% if bracket.summary %}<div class="text-muted small">{{ bracket.summary }}</div>{% endif %}
           </div>
-          {% if is_admin or is_judge %}
+          {% if tournament.isExternal %}
+          <span class="badge text-bg-secondary">Данные из {{ tournament.provider|default:"внешнего источника" }} · только просмотр</span>
+          {% elif is_admin or is_judge %}
           <div class="d-flex flex-column gap-2">
             <form method="post" class="d-flex gap-2 flex-wrap">
               {% csrf_token %}
@@ -115,6 +129,10 @@
           {% endif %}
         </div>
 
+        {# Визуальная сетка: JS-рендер из #bracket-data (работает и для внешних турниров) #}
+        <div id="visual-bracket" class="vb-root"></div>
+        <script id="bracket-data" type="application/json">{{ bracket.matches|safe_json }}</script>
+
         {% if bracket.groups %}
         <div class="row g-3 mb-3">
           {% for group in bracket.groups %}
@@ -132,42 +150,39 @@
         </div>
         {% endif %}
 
-        {% if bracket.matches %}
-        <script id="bracket-data" type="application/json">
-          {{ bracket.matches|safe_json|default:"[]" }}
-        </script>
-        <div id="visual-bracket-wrap">
-          <div id="visual-bracket" class="vb-root"></div>
-        </div>
-        <noscript>
-          <div class="table-responsive">
-            <table class="table table-striped align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Этап</th>
-                  <th>A</th>
-                  <th class="text-center">Счёт</th>
-                  <th>B</th>
-                  <th>Статус</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for m in bracket.matches %}
-                <tr>
-                  <td>{{ m.round }}</td>
-                  <td>{{ m.teamA }}</td>
-                  <td class="text-center fw-semibold">{{ m.scoreA }}:{{ m.scoreB }}</td>
-                  <td>{{ m.teamB }}</td>
-                  <td>{{ m.status }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </noscript>
-        {% else %}
-        <div class="empty-state">Сетка ещё не построена.</div>
-        {% endif %}
+        {% if bracket.bracket_rounds %}
+<div class="table-responsive mt-3">
+  {% for round in bracket.bracket_rounds %}
+  <h6 class="text-muted mt-3 mb-1">{{ round.label }}</h6>
+  <table class="table table-sm table-bordered">
+    <thead>
+      <tr><th>#</th><th>Team A</th><th>Score</th><th>Team B</th><th>Score</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for m in round.matches %}
+      <tr class="{% if m.isBye %}table-secondary{% endif %}">
+        <td>{{ m.id }}</td>
+        <td>
+          {% if m.teamA %}<span class="{% if m.winnerId == m.teamA.id %}fw-bold text-success{% endif %}">{{ m.teamA.name }}</span>{% else %}<span class="text-muted fst-italic">TBD</span>{% endif %}
+        </td>
+        <td>{% if not m.isBye %}{{ m.scoreA }}{% else %}—{% endif %}</td>
+        <td>
+          {% if m.isBye %}<span class="badge bg-secondary">BYE</span>{% elif m.teamB %}<span class="{% if m.winnerId == m.teamB.id %}fw-bold text-success{% endif %}">{{ m.teamB.name }}</span>{% else %}<span class="text-muted fst-italic">TBD</span>{% endif %}
+        </td>
+        <td>{% if not m.isBye %}{{ m.scoreB }}{% else %}—{% endif %}</td>
+        <td>
+          {% if m.isBye %}<span class="badge bg-secondary">Автопроход</span>
+          {% elif m.status == "approved" or m.status == "finished" %}<span class="badge bg-success">Завершён</span>
+          {% elif m.status == "live" %}<span class="badge bg-danger">Live</span>
+          {% else %}<span class="badge bg-secondary">Предстоит</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+</div>
+{% endif %}
       </div>
     </div>
     <div class="col-lg-5">
@@ -216,6 +231,7 @@
             <th>Команда A</th>
             <th class="text-center">Счёт</th>
             <th>Команда B</th>
+            <th class="text-center">Прогноз ИИ</th>
             <th>Статус</th>
           </tr>
         </thead>
@@ -225,6 +241,15 @@
             <td>{{ m.teamA }}</td>
             <td class="text-center fw-semibold">{{ m.scoreA }} : {{ m.scoreB }}</td>
             <td>{{ m.teamB }}</td>
+            <td class="text-center">
+              {% if m.prediction %}
+              <span class="badge prediction-badge" title="Вероятность победы: {{ m.teamA }} {{ m.prediction.probA }}% — {{ m.teamB }} {{ m.prediction.probB }}%">
+                <span {% if m.prediction.favorite == 'A' %}class="prediction-favorite"{% endif %}>{{ m.prediction.probA }}%</span>
+                <span class="prediction-sep">/</span>
+                <span {% if m.prediction.favorite == 'B' %}class="prediction-favorite"{% endif %}>{{ m.prediction.probB }}%</span>
+              </span>
+              {% else %}<span class="text-muted small">—</span>{% endif %}
+            </td>
             <td><span class="badge badge-status status-{{ m.status }}">{{ m.status_label }}</span></td>
           </tr>{% endfor %}</tbody>
       </table>
@@ -285,28 +310,67 @@
 
   {% elif active_tab == 'analytics' %}
   <div class="table-panel p-3 p-md-4">
-    <h2 class="h5 mb-3">Аналитика</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <h2 class="h5 mb-0">Аналитика турнира</h2>
+      {% if analytics_payload.isExternal %}
+      <span class="badge text-bg-secondary">Только данные этого турнира · {{ tournament.provider|default:"внешний источник" }}</span>
+      {% endif %}
+    </div>
     <div class="row g-3 mb-3">
-      <div class="col-md-4">
+      <div class="col-md-3 col-6">
         <div class="card p-3 h-100">
           <div class="text-muted small">Команд</div>
           <div class="display-6">{{ analytics_payload.summary.totalTeams|default:0 }}</div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3 col-6">
         <div class="card p-3 h-100">
-          <div class="text-muted small">Игроков</div>
-          <div class="display-6">{{ analytics_payload.summary.totalPlayers|default:0 }}</div>
+          <div class="text-muted small">Матчей</div>
+          <div class="display-6">{{ analytics_payload.summary.totalMatches|default:0 }}</div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3 col-6">
         <div class="card p-3 h-100">
-          <div class="text-muted small">Подтверждено рейтингов</div>
-          <div class="display-6">{{ analytics_payload.summary.confirmedRatings|default:0 }}</div>
+          <div class="text-muted small">Завершено</div>
+          <div class="display-6">{{ analytics_payload.summary.finishedMatches|default:0 }}</div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="card p-3 h-100">
+          <div class="text-muted small">{% if analytics_payload.isExternal %}Live{% else %}Игроков{% endif %}</div>
+          <div class="display-6">{% if analytics_payload.isExternal %}{{ analytics_payload.summary.liveMatches|default:0 }}{% else %}{{ analytics_payload.summary.totalPlayers|default:0 }}{% endif %}</div>
         </div>
       </div>
     </div>
-    {% if analytics_payload.playerStats %}
+
+    {% if analytics_payload.standings %}
+    <h3 class="h6 text-muted mb-2">Положение команд</h3>
+    <div class="table-responsive mb-3">
+      <table class="table table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Команда</th>
+            <th class="text-center">Победы</th>
+            <th class="text-center">Поражения</th>
+            <th class="text-center">Счёт</th>
+            <th class="text-center">Разница</th>
+          </tr>
+        </thead>
+        <tbody>{% for s in analytics_payload.standings %}<tr>
+            <td>{{ forloop.counter }}</td>
+            <td class="fw-semibold">{{ s.team }}</td>
+            <td class="text-center">{{ s.wins }}</td>
+            <td class="text-center">{{ s.losses }}</td>
+            <td class="text-center">{{ s.scoreFor }} : {{ s.scoreAgainst }}</td>
+            <td class="text-center {% if s.diff > 0 %}text-success{% elif s.diff < 0 %}text-danger{% endif %}">{{ s.diff }}</td>
+          </tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if not analytics_payload.isExternal and analytics_payload.playerStats %}
+    <h3 class="h6 text-muted mb-2">Игроки команд-участниц</h3>
     <div class="table-responsive">
       <table class="table table-striped align-middle mb-0">
         <thead>
@@ -325,7 +389,9 @@
           </tr>{% endfor %}</tbody>
       </table>
     </div>
-    {% else %}
+    {% endif %}
+
+    {% if not analytics_payload.standings and not analytics_payload.playerStats %}
     <div class="empty-state">Статистика пока не собрана.</div>
     {% endif %}
   </div>
@@ -427,10 +493,19 @@
         const r = String(m.round || "Round");
         (map[r] = map[r] || []).push(m);
       });
+      // Сначала по roundNumber из API (есть и у внешних турниров), затем эвристика по названию
+      const minRound = r => Math.min(...map[r].map(m => Number(m.roundNumber) || 999));
       const rounds = Object.keys(map).sort(
-        (a, b) => roundIndex(a) - roundIndex(b)
+        (a, b) => (minRound(a) - minRound(b)) || (roundIndex(a) - roundIndex(b))
       );
       return rounds.map(r => ({ label: r, matches: map[r] }));
+    }
+
+    // API сетки отдаёт команды объектами {id, name}; матч-центр — строками
+    function teamName(team) {
+      if (!team) return "TBD";
+      if (typeof team === "string") return team;
+      return team.name || "TBD";
     }
 
     function render() {
@@ -496,8 +571,8 @@
 
       card.innerHTML = `
       <div class="vb-status">${esc(statusLabel)}</div>
-      ${teamHtml(m.teamA || "TBD", sA, aWins)}
-      ${teamHtml(m.teamB || "TBD", sB, bWins)}
+      ${teamHtml(teamName(m.teamA), sA, aWins)}
+      ${teamHtml(teamName(m.teamB), sB, bWins)}
     `;
       return card;
     }

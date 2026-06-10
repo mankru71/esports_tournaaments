@@ -5,17 +5,191 @@
 <section>
   <div class="page-hero">
     <div>
-      <h1 class="h3 mb-2">Главная</h1>
-      <p class="text-muted mb-0">Оперативная сводка по активности платформы турниров.</p>
+      <p class="eyebrow mb-2">Arena Control</p>
+      <h1 class="h3 mb-2">Платформа киберспортивных турниров</h1>
+      <p class="text-muted mb-0">Live-матчи, открытые регистрации, зал славы и события платформы — на одном экране.</p>
     </div>
-    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">Открыть турниры</a>
+    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">Все турниры</a>
   </div>
 
-  <div class="row g-3">
+  {# ═══ 1. LIVE-БЛОК (первый экран) ═══════════════════════════════════ #}
+  {% if live_matches %}
+  <div class="section-panel p-3 p-md-4 mb-4">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <span class="badge badge-status status-live score-live">● LIVE</span>
+      <h2 class="h5 mb-0">Сейчас в эфире</h2>
+    </div>
+    <div class="row g-3">
+      {% if twitch_embed %}
+      <div class="col-lg-7">
+        <div class="ratio ratio-16x9" style="border-radius:12px;overflow:hidden;border:1px solid var(--border);">
+          <iframe
+            src="https://player.twitch.tv/?channel={{ twitch_embed.channel|urlencode }}&parent={{ twitch_parent }}&muted=true"
+            title="Twitch: {{ twitch_embed.channel }}"
+            allowfullscreen></iframe>
+        </div>
+        <div class="text-muted small mt-2">
+          Трансляция: {{ twitch_embed.match.teamA }} — {{ twitch_embed.match.teamB }} · {{ twitch_embed.match.tournamentName }}
+        </div>
+      </div>
+      <div class="col-lg-5">
+      {% else %}
+      <div class="col-12">
+      {% endif %}
+        <div class="d-flex flex-column gap-2">
+          {% for m in live_matches %}
+          <div class="card p-3" data-live-match="{{ m.id }}" data-live-tournament="{{ m.tournamentId }}">
+            <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+              <div class="flex-grow-1">
+                <div class="fw-semibold">
+                  {{ m.teamA }}
+                  <span class="badge text-bg-dark mx-1 score-live" data-live-score>{{ m.scoreA }} : {{ m.scoreB }}</span>
+                  {{ m.teamB }}
+                  {% if m.prediction %}
+                  <span class="badge prediction-badge ms-1" title="Прогноз ИИ: {{ m.teamA }} {{ m.prediction.probA }}% — {{ m.teamB }} {{ m.prediction.probB }}%">
+                    ИИ: {{ m.prediction.probA }}% / {{ m.prediction.probB }}%
+                  </span>
+                  {% endif %}
+                </div>
+                <div class="text-muted small">{{ m.tournamentName }}{% if m.round %} · {{ m.round }}{% endif %}</div>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                {% if m.streamUrl %}<a class="btn btn-sm btn-outline-accent" href="{{ m.streamUrl }}" target="_blank" rel="noopener">Стрим</a>{% endif %}
+                <a class="btn btn-sm btn-ghost" href="{% url 'match_center' m.tournamentId %}">Матч-центр</a>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ═══ Счётчики платформы ═════════════════════════════════════════════ #}
+  <div class="row g-3 mb-4">
     <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Игроков</div><div class="h4 mb-0">{{ stats.players }}</div></div></div>
     <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Турниров</div><div class="h4 mb-0">{{ stats.tournaments }}</div></div></div>
     <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Зрителей</div><div class="h4 mb-0">{{ stats.viewers }}</div></div></div>
     <div class="col-6 col-lg-3"><div class="card p-3 h-100"><div class="text-muted small">Событий сегодня</div><div class="h4 mb-0">{{ stats.events_today }}</div></div></div>
   </div>
+
+  {# ═══ 2. ОТКРЫТЫЕ РЕГИСТРАЦИИ ═══════════════════════════════════════ #}
+  {% if open_tournaments %}
+  <div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="h5 mb-0">Открыта регистрация</h2>
+      <a class="text-muted small" href="{% url 'tournaments' %}">Все турниры →</a>
+    </div>
+    <div class="row g-3">
+      {% for t in open_tournaments %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card p-3 h-100 d-flex flex-column">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="fw-semibold">{{ t.name }}</div>
+            <span class="badge badge-status status-planned">{{ t.status_label }}</span>
+          </div>
+          <div class="text-muted small mb-1">{{ t.discipline }} · старт {{ t.startDate }}</div>
+          <div class="text-muted small mb-3">
+            Призовой: <span class="fw-semibold" style="color:var(--accent);">{{ t.prizePool }}</span>
+            · Команды: {{ t.currentParticipants }}/{{ t.maxParticipants }}
+          </div>
+          <a class="btn btn-accent btn-sm mt-auto" href="{% url 'tournament_detail' t.id %}">Подать заявку</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ═══ 3. ЗАЛ СЛАВЫ + 4. ЛЕНТА СОБЫТИЙ ═══════════════════════════════ #}
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="table-panel p-3 p-md-4 h-100">
+        <h2 class="h5 mb-3">Зал славы · топ-10 по рейтингу</h2>
+        {% if hall_of_fame %}
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr><th>#</th><th>Игрок</th><th>Команда</th><th class="text-end">Рейтинг</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for p in hall_of_fame %}
+              <tr>
+                <td class="text-muted">{{ p.rank }}</td>
+                <td class="fw-semibold">{{ p.nickname }}</td>
+                <td class="text-muted">{{ p.team|default:"—" }}</td>
+                <td class="text-end fw-semibold" style="color:var(--accent);">{{ p.rating }}</td>
+                <td>
+                  {% if p.source == 'faceit' %}<span class="badge text-bg-dark">Faceit</span>{% endif %}
+                  {% if p.verified %}<span class="badge badge-status status-approved">✓</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state">Рейтинги игроков ещё не заполнены.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="table-panel p-3 p-md-4 h-100">
+        <h2 class="h5 mb-3">Лента событий</h2>
+        {% if activity %}
+        <div class="d-flex flex-column gap-2 activity-feed">
+          {% for a in activity %}
+          <div class="card p-2 px-3">
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+              <span class="badge badge-status {{ a.type_css }}">{{ a.type_label }}</span>
+              <span class="text-muted small">{{ a.time_label }}</span>
+            </div>
+            <div class="small mt-1">{{ a.message }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">Событий пока нет — создайте команду или турнир.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </section>
+
+{% if live_matches %}
+{# ── SignalR: живое обновление счёта live-матчей ───────────────────── #}
+<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+<script>
+  (function () {
+    "use strict";
+    if (!window.signalR) return;
+
+    const cards = Array.from(document.querySelectorAll("[data-live-match]"));
+    if (!cards.length) return;
+
+    const tournamentIds = Array.from(new Set(cards.map(c => c.getAttribute("data-live-tournament"))));
+
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl("/hubs/matches")
+      .withAutomaticReconnect()
+      .build();
+
+    conn.start()
+      .then(() => Promise.all(tournamentIds.map(id => conn.invoke("JoinTournament", String(id)))))
+      .catch(() => {});
+
+    conn.on("matchUpdated", (payload) => {
+      const card = document.querySelector(`[data-live-match="${payload.id}"]`);
+      if (!card) return;
+      const score = card.querySelector("[data-live-score]");
+      if (score) score.textContent = `${payload.scoreA} : ${payload.scoreB}`;
+      if (payload.status && payload.status !== "live") {
+        if (score) score.classList.remove("score-live");
+        card.classList.add("opacity-75");
+      }
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

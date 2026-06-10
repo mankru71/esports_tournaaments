@@ -14,14 +14,14 @@ namespace Controllers;
 public class MatchesController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly PandaScoreService _pandascore;
+    private readonly ExternalTournamentSyncService _sync;
     private readonly IHubContext<MatchesHub> _hub;
     private readonly DiscordWebhookService _discord;
 
-    public MatchesController(AppDbContext db, PandaScoreService pandascore, IHubContext<MatchesHub> hub, DiscordWebhookService discord)
+    public MatchesController(AppDbContext db, ExternalTournamentSyncService sync, IHubContext<MatchesHub> hub, DiscordWebhookService discord)
     {
         _db = db;
-        _pandascore = pandascore;
+        _sync = sync;
         _hub = hub;
         _discord = discord;
     }
@@ -37,41 +37,86 @@ public class MatchesController : ControllerBase
         [Required] public string StreamUrl { get; set; } = string.Empty;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] int tournamentId, CancellationToken ct)
+    /// <summary>Live-матчи всех турниров для главной страницы (сначала — со стримом).</summary>
+    [HttpGet("live")]
+    public async Task<IActionResult> Live([FromServices] MatchPredictionService predictions, CancellationToken ct)
     {
-        var tournament = await _db.Tournaments.FindAsync(new object[] { tournamentId }, ct);
-        
-        // Внешние турниры
-        if (tournament != null && tournament.IsExternal && !string.IsNullOrWhiteSpace(tournament.ProviderTournamentId) && _pandascore.Enabled)
+        var matches = await _db.Matches
+            .Include(m => m.TeamA)!.ThenInclude(t => t!.Players)
+            .Include(m => m.TeamB)!.ThenInclude(t => t!.Players)
+            .Include(m => m.Tournament)
+            .Where(m => m.Status == "live")
+            .OrderByDescending(m => m.StreamUrl != "")
+            .ThenByDescending(m => m.Id)
+            .Take(10)
+            .ToListAsync(ct);
+
+        // Прогнозы Elo-модели для live-матчей (результаты кэшируются)
+        var predicted = new Dictionary<int, MatchPredictionService.MatchPrediction?>();
+        if (predictions.Enabled)
         {
-            var matches = await _pandascore.GetMatchesForTournamentAsync(tournament.ProviderTournamentId!, 50, tournament.Game, ct);
-            var payload = matches.Select(m => new
-            {
-                id = m.Id,
-                tournamentId,
-                teamA = m.OpponentA ?? "TBD",
-                teamB = m.OpponentB ?? "TBD",
-                scoreA = m.ScoreA,
-                scoreB = m.ScoreB,
-                status = NormalizeMatchStatus(m.Status),
-                round = string.IsNullOrWhiteSpace(m.Name) ? "Match" : m.Name!,
-                groupName = string.Empty,
-                streamUrl = m.StreamUrl ?? string.Empty
-            });
-            return Ok(payload);
+            var candidates = matches
+                .Where(m => m.TeamA != null && m.TeamB != null)
+                .ToList();
+            var results = await Task.WhenAll(candidates.Select(m => predictions.PredictAsync(m, ct)));
+            for (var i = 0; i < candidates.Count; i++)
+                predicted[candidates[i].Id] = results[i];
         }
 
-        // Локальные турниры
+        var payload = matches.Select(m => new
+        {
+            id = m.Id,
+            tournamentId = m.TournamentId,
+            tournamentName = m.Tournament?.Name ?? $"Турнир #{m.TournamentId}",
+            isExternal = m.Tournament?.IsExternal ?? false,
+            round = m.Round,
+            teamA = m.TeamA?.Name ?? "TBD",
+            teamB = m.TeamB?.Name ?? "TBD",
+            scoreA = m.ScoreA,
+            scoreB = m.ScoreB,
+            status = m.Status,
+            streamUrl = m.StreamUrl,
+            prediction = predicted.TryGetValue(m.Id, out var p) && p != null
+                ? new { teamAWinProbability = p.TeamAWinProbability, teamBWinProbability = p.TeamBWinProbability }
+                : (object?)null
+        });
+
+        return Ok(payload);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get([FromQuery] int tournamentId, [FromServices] MatchPredictionService predictions, CancellationToken ct)
+    {
+        var tournament = await _db.Tournaments.FindAsync(new object[] { tournamentId }, ct);
+
+        // Внешние турниры: лениво синхронизируем матчи из Liquipedia в БД,
+        // дальше читаем их так же, как локальные
+        if (tournament != null && tournament.IsExternal)
+            await _sync.SyncMatchesAsync(tournament, ct);
+
         var matchesFromDb = await _db.Matches
-            .Include(m => m.TeamA)
-            .Include(m => m.TeamB)
+            .Include(m => m.TeamA)!.ThenInclude(t => t!.Players)
+            .Include(m => m.TeamB)!.ThenInclude(t => t!.Players)
+            .Include(m => m.Tournament)
             .Where(m => m.TournamentId == tournamentId)
             .OrderBy(m => m.RoundNumber)
             .ToListAsync(ct);
 
         if (matchesFromDb.Any())
         {
+            // Прогнозы Elo-модели (незавершённые матчи с обеими командами);
+            // сервис недоступен/выключен → prediction = null
+            var predicted = new Dictionary<int, MatchPredictionService.MatchPrediction?>();
+            if (predictions.Enabled)
+            {
+                var candidates = matchesFromDb
+                    .Where(m => m.Status != "finished" && m.TeamA != null && m.TeamB != null)
+                    .ToList();
+                var results = await Task.WhenAll(candidates.Select(m => predictions.PredictAsync(m, ct)));
+                for (var i = 0; i < candidates.Count; i++)
+                    predicted[candidates[i].Id] = results[i];
+            }
+
             var payload = matchesFromDb.Select(m => new
             {
                 id = m.Id,
@@ -83,7 +128,10 @@ public class MatchesController : ControllerBase
                 status = m.Status,
                 round = m.Round,
                 groupName = string.Empty,
-                streamUrl = m.StreamUrl
+                streamUrl = m.StreamUrl,
+                prediction = predicted.TryGetValue(m.Id, out var p) && p != null
+                    ? new { teamAWinProbability = p.TeamAWinProbability, teamBWinProbability = p.TeamBWinProbability }
+                    : (object?)null
             });
             return Ok(payload);
         }
@@ -92,7 +140,7 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPut("{id:int}/result")]
-    public async Task<IActionResult> SetMatchResult(int id, [FromBody] MatchResultRequest request)
+    public async Task<IActionResult> SetMatchResult(int id, [FromBody] MatchResultRequest request, [FromServices] ActivityLogService activity, [FromServices] MatchPredictionService predictions)
     {
         if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
             return StatusCode(403, new { message = "Только администратор или судья может изменять результаты" });
@@ -106,6 +154,9 @@ public class MatchesController : ControllerBase
 
         if (match == null)
             return NotFound(new { message = "Матч не найден" });
+
+        if (match.Tournament?.IsExternal == true)
+            return BadRequest(new { message = "Матчи внешнего турнира доступны только для просмотра" });
 
         match.ScoreA = request.ScoreA;
         match.ScoreB = request.ScoreB;
@@ -134,6 +185,9 @@ public class MatchesController : ControllerBase
 
         await _db.SaveChangesAsync();
 
+        // Счёт изменился — закэшированный прогноз нейросети устарел
+        predictions.Invalidate(match);
+
         var payload = new
         {
             id = match.Id,
@@ -147,6 +201,9 @@ public class MatchesController : ControllerBase
         await _hub.Clients.Group($"tournament:{match.TournamentId}").SendAsync("matchUpdated", payload);
         if (match.Status == "live")
             await _discord.NotifyMatchLiveAsync(match);
+        if (match.Status == "finished")
+            await activity.LogAsync("match_finished",
+                $"Матч {match.TeamA?.Name ?? "TBD"} — {match.TeamB?.Name ?? "TBD"} завершён со счётом {match.ScoreA}:{match.ScoreB}");
 
         return Ok(payload);
     }
@@ -172,17 +229,4 @@ public class MatchesController : ControllerBase
         return Ok(new { match.Id, match.TournamentId, match.StreamUrl });
     }
 
-    private static string NormalizeMatchStatus(string? status)
-    {
-        var s = (status ?? string.Empty).Trim().ToLowerInvariant();
-        return s switch
-        {
-            "running" => "live",
-            "finished" => "finished",
-            "canceled" => "finished",
-            "postponed" => "planned",
-            "not_started" => "planned",
-            _ => "planned",
-        };
-    }
 }

@@ -29,7 +29,7 @@ public class TournamentController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateTournamentRequest request, CancellationToken ct)
+    public async Task<IActionResult> Create([FromBody] CreateTournamentRequest request, [FromServices] ActivityLogService activity, CancellationToken ct)
     {
         if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin"))
             return StatusCode(403, new { message = "Создавать турниры может только администратор" });
@@ -49,6 +49,7 @@ public class TournamentController : ControllerBase
 
         _tournamentService.CreateTournament(tournament);
         await _discord.NotifyTournamentCreatedAsync(tournament, ct);
+        await activity.LogAsync("tournament_created", $"Анонсирован турнир «{tournament.Name}» ({tournament.Game})", ct);
         return Created($"/api/tournament/{tournament.Id}", ToDto(tournament));
     }
 

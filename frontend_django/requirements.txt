@@ -6,3 +6,5 @@ python-dotenv==1.0.0
 gunicorn==21.2.0
 whitenoise==6.5.0
 django-redis==5.4.0
+gunicorn==21.2.0
+gevent==24.2.1

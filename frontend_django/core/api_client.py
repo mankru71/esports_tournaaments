@@ -182,12 +182,39 @@ class CSharpApiClient:
 
     def get_analytics(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "analytics", token=token)
+
+    def get_tournament_analytics(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", f"tournament/{tournament_id}/analytics", token=token)
+
+    def get_team_winrates(self, token: str | None = None) -> ApiResult:
+        return self._request("GET", "analytics/team-winrates", token=token)
+
+    def get_rating_history(self, token: str) -> ApiResult:
+        return self._request("GET", "auth/profile/rating-history", token=token)
+
+    def get_free_agents(self, token: str | None = None) -> ApiResult:
+        return self._request("GET", "scouting/free-agents", token=token)
+
+    def set_looking_for_team(self, enabled: bool, token: str) -> ApiResult:
+        return self._request("POST", "auth/profile/looking-for-team", data={"enabled": enabled}, token=token)
+
+    def get_live_matches(self) -> ApiResult:
+        return self._request("GET", "matches/live")
+
+    def get_hall_of_fame(self) -> ApiResult:
+        return self._request("GET", "analytics/hall-of-fame")
+
+    def get_activity(self, limit: int = 10) -> ApiResult:
+        return self._request("GET", "activity", params={"limit": limit})
     
     def send_email_verification(self, user_id: int, token: str) -> ApiResult:
         return self._request("POST", f"verification/send/{user_id}", token=token)
 
     def confirm_email(self, user_id: int, verify_token: str) -> ApiResult:
         return self._request("POST", f"verification/confirm/{user_id}", data={"token": verify_token})
+
+    def confirm_email_by_token(self, verify_token: str) -> ApiResult:
+        return self._request("POST", "verification/confirm", data={"token": verify_token})
     
     def get_analytics_csv(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "analytics/export/csv", token=token)
@@ -248,5 +275,14 @@ class CSharpApiClient:
 
     def esports_diagnostics(self) -> ApiResult:
         return self._request("GET", "esports/diagnostics")
+
+    def get_favorites(self, token: str) -> ApiResult:
+        return self._request("GET", "favorites", token=token)
+
+    def add_favorite(self, tournament_id: int, token: str) -> ApiResult:
+        return self._request("POST", "favorites", data={"tournamentId": tournament_id}, token=token)
+
+    def remove_favorite(self, tournament_id: int, token: str) -> ApiResult:
+        return self._request("DELETE", f"favorites/{tournament_id}", token=token)
         
 api_client = CSharpApiClient()

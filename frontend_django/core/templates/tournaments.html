@@ -8,10 +8,12 @@
       <h1 class="h2 mb-2">Управление соревнованиями</h1>
       <p class="text-muted mb-0">Создавайте турниры, принимайте заявки, ведите сетку и отслеживайте результаты.</p>
     </div>
+    {% if current_user %}
     <div class="d-flex gap-2 flex-wrap">
-      <button class="btn btn-outline-accent" type="button" data-show-favorites="all">Все</button>
+      <button class="btn btn-outline-accent active" type="button" data-show-favorites="all">Все</button>
       <button class="btn btn-outline-accent" type="button" data-show-favorites="only">Избранные</button>
     </div>
+    {% endif %}
   </div>
 
   {% if is_admin %}
@@ -51,7 +53,7 @@
           </thead>
           <tbody>
             {% for tournament in tournaments %}
-              <tr data-tournament-row="{{ tournament.id }}">
+              <tr data-tournament-row="{{ tournament.id }}" data-favorited="{% if tournament.id in favorite_ids %}1{% else %}0{% endif %}">
                 <td>
                   <div class="fw-semibold">{{ tournament.name }}</div>
                   <div class="text-muted small">Старт: {{ tournament.startDate }}</div>
@@ -62,7 +64,20 @@
                 <td><span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span></td>
                 <td>
                   <div class="d-flex justify-content-end gap-2 flex-wrap">
-                    <button class="btn btn-sm btn-ghost" type="button" data-favorite-tournament="{{ tournament.id }}">В избранное</button>
+                    {% if current_user %}
+                      <form method="post" class="m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="toggle_favorite">
+                        <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
+                        {% if tournament.id in favorite_ids %}
+                          <input type="hidden" name="favorited" value="1">
+                          <button type="submit" class="btn btn-sm btn-ghost active" aria-pressed="true">В избранном</button>
+                        {% else %}
+                          <input type="hidden" name="favorited" value="0">
+                          <button type="submit" class="btn btn-sm btn-ghost" aria-pressed="false">В избранное</button>
+                        {% endif %}
+                      </form>
+                    {% endif %}
                     <a class="btn btn-sm btn-outline-accent" href="{% url 'tournament_detail' tournament.id %}">Открыть</a>
                     {% if is_admin and not tournament.isExternal %}
                       <form method="post" class="m-0" onsubmit="return confirm('Удалить турнир?');">

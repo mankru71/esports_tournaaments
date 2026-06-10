@@ -1,7 +1,7 @@
 using Data;
 using EsportsBackend.Services;
 using Microsoft.AspNetCore.Mvc;
-using System.Net;
+using Microsoft.EntityFrameworkCore;
 
 namespace Controllers;
 
@@ -10,14 +10,12 @@ namespace Controllers;
 public class VerificationController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly EmailService _emailService;
-    private readonly IConfiguration _config;
+    private readonly VerificationService _verification;
 
-    public VerificationController(AppDbContext db, EmailService emailService, IConfiguration config)
+    public VerificationController(AppDbContext db, VerificationService verification)
     {
         _db = db;
-        _emailService = emailService;
-        _config = config;
+        _verification = verification;
     }
 
     public class ConfirmRequest
@@ -34,23 +32,39 @@ public class VerificationController : ControllerBase
         if (user.IsEmailVerified)
             return BadRequest(new { message = "Почта уже подтверждена" });
 
-        user.EmailVerificationToken = Guid.NewGuid().ToString("N");
-        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+        var sent = await _verification.SendVerificationLinkAsync(user);
+        // Раньше при сбое SMTP пользователю всё равно говорили «отправлено» —
+        // теперь честно сообщаем, что ссылку нужно искать в логах (демо-режим)
+        return sent
+            ? Ok(new { message = "Письмо отправлено" })
+            : Ok(new { message = "SMTP недоступен: ссылка подтверждения выведена в лог сервера" });
+    }
+
+    /// <summary>
+    /// Подтверждение по одному токену (ссылка из письма /verify-email/?token=XYZ).
+    /// Пользователь находится по самому токену — userId в ссылке не нужен.
+    /// </summary>
+    [HttpPost("confirm")]
+    public async Task<IActionResult> ConfirmByToken([FromBody] ConfirmRequest request)
+    {
+        var token = request.Token?.Trim();
+        if (string.IsNullOrWhiteSpace(token))
+            return BadRequest(new { message = "Токен недействителен или устарел" });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
+        if (user is null
+            || user.EmailVerificationTokenExpiry is null
+            || user.EmailVerificationTokenExpiry < DateTime.UtcNow)
+        {
+            return BadRequest(new { message = "Токен недействителен или устарел" });
+        }
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiry = null;
         await _db.SaveChangesAsync();
 
-        var frontendUrl = (_config["PUBLIC_FRONTEND_URL"] ?? "http://localhost").TrimEnd('/');
-        var link = $"{frontendUrl}/verify-email?userId={user.Id}&token={Uri.EscapeDataString(user.EmailVerificationToken)}";
-        var nickname = WebUtility.HtmlEncode(user.Nickname ?? user.Email);
-
-        var emailBody = $@"
-<h3>Подтверждение почты</h3>
-<p>Привет, {nickname}!</p>
-<p>Для подтверждения почты перейдите по ссылке ниже:</p>
-<p><a href='{link}' style='display:inline-block;padding:10px 18px;background:#15181d;color:#ffffff;text-decoration:none;border-radius:8px;'>Подтвердить email</a></p>
-<p>Ссылка действительна 24 часа.</p>";
-
-        await _emailService.SendEmailAsync(user.Email, "Подтверждение регистрации", emailBody);
-        return Ok(new { message = "Письмо отправлено" });
+        return Ok(new { message = "Email подтверждён", email = user.Email });
     }
 
     [HttpPost("confirm/{userId:int}")]

@@ -34,7 +34,7 @@ public class IntegrationsController : ControllerBase
     /// The caller must be the user themselves (userId must match token).
     /// </summary>
     [HttpPost("faceit/verify/{userId:int}")]
-    public async Task<IActionResult> VerifyFaceit(int userId, [FromBody] FaceitVerifyRequest request, CancellationToken ct)
+    public async Task<IActionResult> VerifyFaceit(int userId, [FromBody] FaceitVerifyRequest request, [FromServices] RatingHistoryService history, CancellationToken ct)
     {
         // Auth check — token owner must match the userId in the route
         var tokenUserId = AuthTokenHelper.GetUserId(Request);
@@ -85,6 +85,10 @@ public class IntegrationsController : ControllerBase
         user.Rating = playerInfo.Elo;
         user.RatingVerified = true;
         user.RatingVerifiedAtUtc = DateTime.UtcNow;
+
+        // Снимок Elo в историю рейтинга — для графика динамики в профиле
+        if (playerInfo.Elo > 0)
+            await history.SnapshotAsync(user.Id, playerInfo.Elo, "faceit", ct);
 
         await _db.SaveChangesAsync(ct);
 

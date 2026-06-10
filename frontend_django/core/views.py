@@ -23,7 +23,19 @@ STATUS_LABELS = {
     "pending": "На рассмотрении",
     "rejected": "Отклонена",
 }
+def _group_bracket_rounds(matches: list[dict]) -> list[dict]:
+    buckets = {}
+    for m in matches:
+        label = m.get("round") or "Round"
+        if label not in buckets:
+            buckets[label] = {
+                "label": label,
+                "roundNumber": m.get("roundNumber", 0),
+                "matches": [],
+            }
+        buckets[label]["matches"].append(m)
 
+    return sorted(buckets.values(), key=lambda r: r["roundNumber"])
 
 def _normalize_status(value):
     key = (value or "planned").lower()
@@ -93,6 +105,27 @@ def _normalize_match(item):
         "round": item.get("round", "н/д"),
         "groupName": item.get("groupName", ""),
         "streamUrl": item.get("streamUrl", "") or "",
+        "prediction": _normalize_prediction(item.get("prediction")),
+    }
+
+
+def _normalize_prediction(raw):
+    """Прогноз нейросети (Dota 2): {probA, probB} в процентах или None."""
+    if not isinstance(raw, dict):
+        return None
+    prob_a = raw.get("teamAWinProbability")
+    prob_b = raw.get("teamBWinProbability")
+    if prob_a is None or prob_b is None:
+        return None
+    try:
+        prob_a = round(float(prob_a), 1)
+        prob_b = round(float(prob_b), 1)
+    except (TypeError, ValueError):
+        return None
+    return {
+        "probA": prob_a,
+        "probB": prob_b,
+        "favorite": "A" if prob_a >= prob_b else "B",
     }
 
 
@@ -172,6 +205,38 @@ def _add_api_error(request, result, fallback="Ошибка выполнения 
     messages.error(request, (result.error or {}).get("message", fallback))
 
 
+def _load_favorite_ids(token) -> set[int]:
+    """ID турниров в избранном текущего пользователя (пустое множество для гостей)."""
+    if not token:
+        return set()
+    result = api_client.get_favorites(token)
+    if not result.ok:
+        return set()
+    ids = (result.data or {}).get("tournamentIds") or []
+    favorite_ids = set()
+    for raw in ids:
+        try:
+            favorite_ids.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    return favorite_ids
+
+
+def _handle_toggle_favorite(request, token):
+    """Общий обработчик action=toggle_favorite: добавляет/убирает турнир из избранного."""
+    tournament_id = int(request.POST.get("tournament_id", "0") or 0)
+    currently_favorited = (request.POST.get("favorited") or "0") == "1"
+    result = (
+        api_client.remove_favorite(tournament_id, token=token)
+        if currently_favorited
+        else api_client.add_favorite(tournament_id, token=token)
+    )
+    if result.ok:
+        messages.success(request, "Удалено из избранного" if currently_favorited else "Добавлено в избранное")
+    else:
+        _add_api_error(request, result, "Не удалось обновить избранное")
+
+
 def _require_auth(request, token):
     if not token:
         messages.info(request, "Войдите в аккаунт")
@@ -190,20 +255,59 @@ def verify_email_view(request):
     user_id = request.GET.get("userId")
     verify_token = request.GET.get("token")
 
-    if not user_id or not verify_token:
+    if not verify_token:
         messages.error(request, "Ссылка подтверждения некорректна")
         return redirect("login")
 
-    result = api_client.confirm_email(user_id, verify_token)
+    # Новый формат ссылки — только токен (пользователь ищется по нему);
+    # старый формат userId+token поддерживаем для уже отправленных писем
+    result = (
+        api_client.confirm_email(user_id, verify_token)
+        if user_id
+        else api_client.confirm_email_by_token(verify_token)
+    )
     if result.ok:
-        messages.success(request, "Почта подтверждена")
-        # --- ИСПРАВЛЕНИЕ БАГА С КНОПКОЙ ---
-        # Удаляем кэш профиля, чтобы заставить Django обновить статус!
+        messages.success(request, "Почта подтверждена! Войдите в аккаунт.")
+        # Удаляем кэш профиля, чтобы Django обновил статус верификации
         request.session.pop("current_user", None)
     else:
         _add_api_error(request, result, "Ссылка недействительна или устарела")
 
     return redirect("profile" if request.session.get("api_token") else "login")
+
+
+ACTIVITY_META = {
+    "tournament_created": ("Турнир", "status-finished"),
+    "team_created": ("Команда", "status-live"),
+    "team_deleted": ("Команда", "status-rejected"),
+    "player_joined": ("Трансфер", "status-live"),
+    "player_left": ("Трансфер", "status-paused"),
+    "application_approved": ("Заявка", "status-approved"),
+    "match_finished": ("Матч", "status-finished"),
+    "external_sync": ("Liquipedia", "status-planned"),
+}
+
+
+def _humanize_time(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        from datetime import datetime, timezone
+        raw = value.replace("Z", "+00:00")
+        moment = datetime.fromisoformat(raw)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - moment
+        seconds = max(0, int(delta.total_seconds()))
+        if seconds < 60:
+            return "только что"
+        if seconds < 3600:
+            return f"{seconds // 60} мин назад"
+        if seconds < 86400:
+            return f"{seconds // 3600} ч назад"
+        return f"{seconds // 86400} дн назад"
+    except (ValueError, TypeError):
+        return ""
 
 
 def dashboard(request):
@@ -219,7 +323,66 @@ def dashboard(request):
     }
     if not stats_result.ok:
         messages.info(request, (stats_result.error or {}).get("message", "Сводка временно недоступна"))
-    return render(request, "dashboard.html", {"stats": stats, **_role_flags(_read_current_user(request))})
+
+    # ── Live-матчи (+ Twitch-эмбед первого матча со стримом) ────────────
+    live_result = api_client.get_live_matches()
+    live_matches = []
+    twitch_embed = None
+    if live_result.ok:
+        for item in live_result.data or []:
+            item = dict(item or {})
+            item["streamUrl"] = item.get("streamUrl") or ""
+            item["prediction"] = _normalize_prediction(item.get("prediction"))
+            live_matches.append(item)
+        for m in live_matches:
+            if "twitch.tv" in m["streamUrl"].lower():
+                channel = _extract_twitch_channel(m["streamUrl"])
+                if channel:
+                    twitch_embed = {"channel": channel, "match": m}
+                    break
+
+    # ── Открытые регистрации: запланированные ЛОКАЛЬНЫЕ турниры ────────
+    tournaments_result = api_client.get_tournaments()
+    open_tournaments = []
+    if tournaments_result.ok:
+        open_tournaments = [
+            _normalize_tournament(item)
+            for item in (tournaments_result.data or [])
+            if (item or {}).get("status") == "planned" and not (item or {}).get("isExternal")
+        ][:6]
+
+    # ── Зал славы ───────────────────────────────────────────────────────
+    hof_result = api_client.get_hall_of_fame()
+    hall_of_fame = (hof_result.data or []) if hof_result.ok else []
+
+    # ── Лента событий ───────────────────────────────────────────────────
+    activity_result = api_client.get_activity(limit=10)
+    activity = []
+    if activity_result.ok:
+        for item in activity_result.data or []:
+            item = dict(item or {})
+            label, css = ACTIVITY_META.get(item.get("actionType", ""), ("Событие", "status-planned"))
+            item["type_label"] = label
+            item["type_css"] = css
+            item["time_label"] = _humanize_time(item.get("timestampUtc"))
+            activity.append(item)
+
+    twitch_parent = (request.get_host() or "localhost").split(":")[0]
+
+    return render(
+        request,
+        "dashboard.html",
+        {
+            "stats": stats,
+            "live_matches": live_matches,
+            "twitch_embed": twitch_embed,
+            "twitch_parent": twitch_parent,
+            "open_tournaments": open_tournaments,
+            "hall_of_fame": hall_of_fame,
+            "activity": activity,
+            **_role_flags(_read_current_user(request)),
+        },
+    )
 
 
 def login_view(request):
@@ -257,6 +420,16 @@ def tournaments(request):
 
     if request.method == "POST":
         action = request.POST.get("action")
+
+        # Избранное требует только входа (без подтверждённой почты),
+        # поэтому обрабатываем его до общего _require_auth.
+        if action == "toggle_favorite":
+            if not token:
+                messages.info(request, "Войдите в аккаунт")
+                return redirect("login")
+            _handle_toggle_favorite(request, token)
+            return redirect("tournaments")
+
         auth_redirect = _require_auth(request, token)
         if auth_redirect:
             return auth_redirect
@@ -306,10 +479,17 @@ def tournaments(request):
     if not tournaments_result.ok:
         _add_api_error(request, tournaments_result, "Не удалось получить турниры")
 
+    favorite_ids = _load_favorite_ids(token) if user else set()
+
     return render(
         request,
         "tournaments.html",
-        {"tournaments": tournaments_list, "create_tournament_form": TournamentCreateForm(), **roles},
+        {
+            "tournaments": tournaments_list,
+            "favorite_ids": favorite_ids,
+            "create_tournament_form": TournamentCreateForm(),
+            **roles,
+        },
     )
 
 
@@ -341,7 +521,7 @@ def teams(request):
         if action == "generate_bracket":
             tournament_id = int(request.POST.get("tournament_id", "0"))
             if tournament_id > 0:
-                result = api_client.generate_bracket(tournament_id, token=token)
+                result = api_client.generate_tournament_bracket(tournament_id, token=token)
                 if result.ok:
                     messages.success(request, "Сетка турнира успешно сгенерирована!")
                 else:
@@ -425,6 +605,14 @@ def tournament_detail(request, tournament_id: int):
                 _add_api_error(request, result, "Не удалось отправить заявку")
             return redirect("tournament_detail", tournament_id=tournament_id)
 
+        if action == "toggle_favorite":
+            # Только вход, без проверки почты — в отличие от остальных действий
+            if not token:
+                messages.info(request, "Войдите в аккаунт")
+                return redirect("login")
+            _handle_toggle_favorite(request, token)
+            return redirect("tournament_detail", tournament_id=tournament_id)
+
         if action in {"approve_application", "reject_application", "save_planning", "generate_bracket", "save_payouts", "set_status", "attach_stream", "distribute_prizes"}:
             auth_redirect = _require_auth(request, token)
             if auth_redirect:
@@ -457,14 +645,6 @@ def tournament_detail(request, tournament_id: int):
                 messages.success(request, "Параметры сетки сохранены")
             else:
                 _add_api_error(request, result, "Не удалось сохранить настройки сетки")
-            return redirect("tournament_detail", tournament_id=tournament_id)
-
-        if action == "generate_bracket":
-            result = api_client.generate_tournament_bracket(tournament_id, token=token)
-            if result.ok:
-                messages.success(request, "Сетка сгенерирована")
-            else:
-                _add_api_error(request, result, "Не удалось сгенерировать сетку")
             return redirect("tournament_detail", tournament_id=tournament_id)
 
         if action == "save_payouts":
@@ -512,6 +692,19 @@ def tournament_detail(request, tournament_id: int):
                 _add_api_error(request, result, "Не удалось распределить призовые")
             return redirect(f"/tournaments/{tournament_id}/?tab=prize")
 
+        if action == "generate_bracket":
+            auth_redirect = _require_auth(request, token)
+            if auth_redirect:
+                return auth_redirect
+
+            result = api_client.generate_tournament_bracket(tournament_id, token=token)
+            if result.ok:
+                messages.success(request, "Сетка турнира успешно сгенерирована!")
+            else:
+                _add_api_error(request, result, "Не удалось сгенерировать сетку. Проверьте, есть ли подтвержденные команды.")
+            
+            return redirect("tournament_detail", tournament_id=tournament_id)
+            
         if action == "vote_mvp":
             auth_redirect = _require_auth(request, token)
             if auth_redirect:
@@ -551,6 +744,9 @@ def tournament_detail(request, tournament_id: int):
 
     bracket_result = api_client.get_tournament_bracket(tournament_id, token=token)
     bracket = bracket_result.data if bracket_result.ok else {"groups": [], "matches": [], "summary": ""}
+    # Группировка матчей по раундам для табличного рендера — без неё шаблон
+    # никогда не показывал сетку (bracket_rounds в API-ответе нет)
+    bracket["bracket_rounds"] = _group_bracket_rounds(bracket.get("matches") or [])
 
     prize_result = api_client.get_prize_pool(tournament_id, token=token)
     prize_pool = prize_result.data if prize_result.ok else {"totalAmount": tournament["prizePool"], "payouts": tournament.get("prizePayouts", [])}
@@ -558,18 +754,28 @@ def tournament_detail(request, tournament_id: int):
     mvp_result = api_client.get_mvp(tournament_id, token=token)
     mvp_payload = _normalize_mvp_payload(mvp_result.data if mvp_result.ok else {"isOpen": False, "candidates": [], "results": []})
 
-    analytics_result = api_client.get_analytics(token=token)
-    analytics_payload = analytics_result.data if analytics_result.ok else {"summary": {}, "playerStats": [], "disciplinePopularity": [], "prizePools": []}
+    # Аналитика строго по этому турниру (изоляция внешних данных от локальных)
+    analytics_result = api_client.get_tournament_analytics(tournament_id, token=token)
+    analytics_payload = analytics_result.data if analytics_result.ok else {
+        "summary": {},
+        "standings": [],
+        "playerStats": [],
+        "prizePools": [],
+        "isExternal": tournament.get("isExternal", False),
+    }
 
     streams_result = api_client.get_streams(token=token)
     streams_payload = streams_result.data if streams_result.ok else []
     active_tab = (request.GET.get("tab") or "overview").strip() or "overview"
+
+    is_favorited = bool(user) and tournament_id in _load_favorite_ids(token)
 
     return render(
         request,
         "tournament_detail.html",
         {
             "tournament": tournament,
+            "is_favorited": is_favorited,
             "matches": matches,
             "my_teams": my_teams,
             "my_apps": my_apps,
@@ -688,6 +894,15 @@ def registration(request):
                 form.cleaned_data["role"],
             )
             if register_result.ok:
+                # Бэкенд при регистрации сам шлёт письмо подтверждения
+                email_sent = bool((register_result.data or {}).get("verificationEmailSent"))
+                if email_sent:
+                    messages.success(
+                        request,
+                        f"Письмо с подтверждением отправлено на {form.cleaned_data['email']} — проверьте почту (и папку «Спам»).",
+                    )
+                else:
+                    messages.warning(request, "Письмо не отправлено (SMTP не настроен) — запросите ссылку из профиля.")
                 login_result = api_client.login(form.cleaned_data["email"], form.cleaned_data["password"])
                 if login_result.ok:
                     token = (login_result.data or {}).get("token")
@@ -763,6 +978,17 @@ def profile(request):
                 _add_api_error(request, result, "Ошибка отправки письма")
             return redirect("profile")
 
+        elif action == "toggle_lft":
+            enabled = (request.POST.get("enabled") or "0") == "1"
+            result = api_client.set_looking_for_team(enabled, token=token)
+            if result.ok:
+                # Сбрасываем кэш профиля — изменился флаг isLookingForTeam
+                request.session.pop("current_user", None)
+                messages.success(request, (result.data or {}).get("message", "Статус обновлён"))
+            else:
+                _add_api_error(request, result, "Не удалось обновить статус поиска команды")
+            return redirect("profile")
+
     selected_game = (request.GET.get("game") or "counterstrike").strip() or "counterstrike"
     nickname = (user.get("nickname") or "").strip()
     esports_payload = None
@@ -781,6 +1007,10 @@ def profile(request):
     else:
         esports_error = "У аккаунта не задан ник"
 
+    # История рейтинга для графика динамики (Chart.js)
+    history_result = api_client.get_rating_history(token)
+    rating_history = (history_result.data or []) if history_result.ok else []
+
     context = {
         "selected_game": selected_game,
         "esports_payload": esports_payload,
@@ -788,6 +1018,7 @@ def profile(request):
         "esports_error": esports_error,
         "edit_form": edit_form,
         "faceit_form": faceit_form,
+        "rating_history": rating_history,
         **roles,
     }
     return render(request, "profile.html", context)
@@ -856,8 +1087,59 @@ def streams(request):
 
 
 def analytics(request):
-    result = api_client.get_analytics(token=request.session.get("api_token"))
+    token = request.session.get("api_token")
+    result = api_client.get_analytics(token=token)
     payload = result.data if result.ok else {"playerStats": [], "disciplinePopularity": [], "prizePools": [], "summary": {}}
     if not result.ok:
         messages.info(request, (result.error or {}).get("message", "Аналитика временно недоступна"))
-    return render(request, "analytics.html", {"analytics": payload, **_role_flags(_read_current_user(request))})
+
+    # Винрейты команд: общий / группы / плей-офф / упорные матчи
+    winrates_result = api_client.get_team_winrates(token=token)
+    team_winrates = (winrates_result.data or []) if winrates_result.ok else []
+
+    return render(
+        request,
+        "analytics.html",
+        {
+            "analytics": payload,
+            "team_winrates": team_winrates,
+            **_role_flags(_read_current_user(request)),
+        },
+    )
+
+
+def scouting(request):
+    """Доска скаутинга: свободные агенты (LFT), отсортированные по Faceit Elo."""
+    token = request.session.get("api_token")
+    user = _read_current_user(request)
+    roles = _role_flags(user)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "toggle_lft":
+            if not token:
+                messages.info(request, "Войдите в аккаунт")
+                return redirect("login")
+            enabled = (request.POST.get("enabled") or "0") == "1"
+            result = api_client.set_looking_for_team(enabled, token=token)
+            if result.ok:
+                # Профиль в сессии устарел — флаг isLookingForTeam изменился
+                request.session.pop("current_user", None)
+                messages.success(request, (result.data or {}).get("message", "Статус обновлён"))
+            else:
+                _add_api_error(request, result, "Не удалось обновить статус поиска команды")
+            return redirect("scouting")
+
+    agents_result = api_client.get_free_agents(token=token)
+    free_agents = (agents_result.data or []) if agents_result.ok else []
+    if not agents_result.ok:
+        _add_api_error(request, agents_result, "Не удалось загрузить доску скаутинга")
+
+    for agent in free_agents:
+        agent["since_label"] = _humanize_time(agent.get("lookingForTeamSinceUtc"))
+
+    return render(
+        request,
+        "scouting.html",
+        {"free_agents": free_agents, **roles},
+    )

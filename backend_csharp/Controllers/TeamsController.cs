@@ -14,11 +14,13 @@ public class TeamsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly PandaScoreService _pandascore;
+    private readonly ActivityLogService _activity;
 
-    public TeamsController(AppDbContext db, PandaScoreService pandascore)
+    public TeamsController(AppDbContext db, PandaScoreService pandascore, ActivityLogService activity)
     {
         _db = db;
         _pandascore = pandascore;
+        _activity = activity;
     }
 
     public class CreateTeamRequest
@@ -43,6 +45,7 @@ public class TeamsController : ControllerBase
         var teams = await _db.Teams
             .Include(t => t.CaptainUser)
             .Include(t => t.Players)
+            .Where(t => !t.IsExternal) // спарсенные команды не показываем на странице «Команды»
             .OrderByDescending(t => t.Id)
             .ToListAsync();
 
@@ -78,6 +81,7 @@ public class TeamsController : ControllerBase
 
         _db.Teams.Add(team);
         await _db.SaveChangesAsync();
+        await _activity.LogAsync("team_created", $"Создана команда «{team.Name}»");
 
         return Ok(new { id = team.Id, name = team.Name, captainUserId = team.CaptainUserId });
     }
@@ -142,6 +146,8 @@ public class TeamsController : ControllerBase
             return Conflict(new { message = "В команде уже есть участник с таким ником" });
         }
 
+        await _activity.LogAsync("player_joined", $"Игрок {player.Nickname} присоединился к команде «{team.Name}»", ct);
+
         return Ok(new
         {
             id = player.Id,
@@ -195,6 +201,7 @@ public class TeamsController : ControllerBase
 
         _db.TeamPlayers.Remove(player);
         await _db.SaveChangesAsync();
+        await _activity.LogAsync("player_left", $"Игрок {player.Nickname} покинул команду «{team.Name}»");
         return NoContent();
     }
 
@@ -210,6 +217,7 @@ public class TeamsController : ControllerBase
 
         _db.Teams.Remove(team);
         await _db.SaveChangesAsync();
+        await _activity.LogAsync("team_deleted", $"Команда «{team.Name}» расформирована");
         return NoContent();
     }
 }

@@ -93,7 +93,7 @@ public class TournamentApplicationsController : ControllerBase
     }
 
     [HttpPost("{applicationId:int}/approve")]
-    public async Task<IActionResult> Approve(int tournamentId, int applicationId)
+    public async Task<IActionResult> Approve(int tournamentId, int applicationId, [FromServices] Services.ActivityLogService activity)
     {
         if (!AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
             return StatusCode(403, new { message = "Недостаточно прав" });
@@ -110,6 +110,8 @@ public class TournamentApplicationsController : ControllerBase
         app.Status = "approved";
         tournament.CurrentParticipants += 1;
         await _db.SaveChangesAsync();
+        await activity.LogAsync("application_approved",
+            $"Команда «{app.Team?.Name ?? "—"}» допущена на турнир «{tournament.Name}»");
 
         return Ok(ToDto(app));
     }

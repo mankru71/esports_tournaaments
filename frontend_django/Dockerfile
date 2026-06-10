@@ -19,4 +19,14 @@ COPY . .
 EXPOSE 8000
 
 # Команда запуска (переопределяется в docker-compose)
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+RUN python manage.py collectstatic --noinput
+
+EXPOSE 8000
+
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "4", \
+     "--timeout", "120", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "esports_tournament.wsgi:application"]

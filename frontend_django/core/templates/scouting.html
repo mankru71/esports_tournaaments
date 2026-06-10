@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Скаутинг{% endblock %}
+{% block content %}
+<section>
+  <div class="page-hero">
+    <div>
+      <h1 class="h3 mb-2">Доска скаутинга</h1>
+      <p class="text-muted mb-0">Свободные агенты, которые ищут команду. Сортировка: подтверждённый Faceit Elo.</p>
+    </div>
+    {% if current_user %}
+    <form method="post" class="m-0">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="toggle_lft">
+      {% if current_user.isLookingForTeam %}
+        <input type="hidden" name="enabled" value="0">
+        <button class="btn btn-outline-accent" type="submit">Я нашёл команду</button>
+      {% else %}
+        <input type="hidden" name="enabled" value="1">
+        <button class="btn btn-accent" type="submit">Ищу команду</button>
+      {% endif %}
+    </form>
+    {% endif %}
+  </div>
+
+  {% if free_agents %}
+  <div class="row g-3">
+    {% for agent in free_agents %}
+    <div class="col-md-6 col-xl-4">
+      <div class="card p-3 h-100">
+        <div class="d-flex align-items-center gap-3">
+          {% if agent.faceitAvatar %}
+            <img src="{{ agent.faceitAvatar }}" alt="{{ agent.nickname }}"
+                 class="rounded-circle flex-shrink-0"
+                 style="width:48px;height:48px;object-fit:cover;">
+          {% else %}
+            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center flex-shrink-0"
+                 style="width:48px;height:48px;font-weight:700;color:#fff;">
+              {{ agent.nickname|first|upper }}
+            </div>
+          {% endif %}
+          <div class="flex-grow-1 min-w-0">
+            <div class="fw-semibold text-truncate">
+              {{ agent.nickname }}
+              {% if agent.ratingVerified %}<span class="text-success" title="Рейтинг подтверждён">✓</span>{% endif %}
+            </div>
+            <div class="text-muted small text-capitalize">{{ agent.role }}{% if agent.since_label %} · ищет {{ agent.since_label }}{% endif %}</div>
+          </div>
+          <div class="text-end flex-shrink-0">
+            {% if agent.faceitElo %}
+              <div class="fw-bold" style="color:#ffb347;">{{ agent.faceitElo }}</div>
+              <div class="text-muted small">Faceit ELO{% if agent.faceitLevel %} · Lvl {{ agent.faceitLevel }}{% endif %}</div>
+            {% elif agent.rating %}
+              <div class="fw-bold">{{ agent.rating }}</div>
+              <div class="text-muted small">рейтинг</div>
+            {% else %}
+              <div class="text-muted small">без рейтинга</div>
+            {% endif %}
+          </div>
+        </div>
+        {% if agent.bio %}
+        <div class="text-muted small mt-2 mb-0">{{ agent.bio|truncatechars:120 }}</div>
+        {% endif %}
+        {% if agent.faceitProfileUrl %}
+        <div class="mt-2">
+          <a class="small" href="{{ agent.faceitProfileUrl }}" target="_blank" rel="noopener">Faceit-профиль →</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    Сейчас на доске никого нет. Ищете команду? Включите статус «Ищу команду»
+    {% if current_user %}кнопкой выше{% else %}в <a href="{% url 'profile' %}">профиле</a> после входа{% endif %} —
+    и капитаны вас заметят.
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

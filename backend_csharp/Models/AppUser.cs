@@ -29,6 +29,10 @@ public class AppUser
     public bool RatingVerified { get; set; }
     public DateTime? RatingVerifiedAtUtc { get; set; }
 
+    // ── Скаутинг (доска свободных агентов) ─────────────────────────────
+    public bool IsLookingForTeam { get; set; } = false;
+    public DateTime? LookingForTeamSinceUtc { get; set; }
+
     // ── Faceit-specific fields ─────────────────────────────────────────
     public string? FaceitNickname { get; set; }
     public int? FaceitElo { get; set; }

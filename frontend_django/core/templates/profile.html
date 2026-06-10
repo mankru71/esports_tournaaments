@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load bracket_extras %}
 {% block title %}Профиль{% endblock %}
 {% block content %}
 <div class="text-muted">Email: <span class="fw-semibold">{{ current_user.email }}</span></div>
@@ -127,6 +128,51 @@
           </form>
         {% endif %}
       </div>
+
+      <!-- Scouting (LFT) card -->
+      <div class="form-card p-4 mt-4">
+        <h2 class="h5 fw-bold mb-2">Скаутинг</h2>
+        {% if current_user.isLookingForTeam %}
+          <p class="text-muted small mb-3">
+            Вы на <a href="{% url 'scouting' %}">доске скаутинга</a> — капитаны видят ваш профиль среди свободных агентов.
+          </p>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="toggle_lft">
+            <input type="hidden" name="enabled" value="0">
+            <button class="btn btn-sm btn-outline-secondary w-100" type="submit">Убрать с доски скаутинга</button>
+          </form>
+        {% else %}
+          <p class="text-muted small mb-3">
+            Ищете команду? Включите статус — попадёте на <a href="{% url 'scouting' %}">доску скаутинга</a>,
+            где вас увидят капитаны. Привязанный Faceit Elo поднимает вас в списке.
+          </p>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="toggle_lft">
+            <input type="hidden" name="enabled" value="1">
+            <button class="btn btn-accent w-100" type="submit">Ищу команду</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <!-- Rating dynamics card -->
+      <div class="form-card p-4 mt-4">
+        <h2 class="h5 fw-bold mb-2">Динамика рейтинга</h2>
+        {% if rating_history %}
+          <div style="position:relative;height:220px;">
+            <canvas id="ratingChart"></canvas>
+          </div>
+          <div class="text-muted small mt-2">
+            Точки добавляются при привязке/обновлении Faceit и подтверждении рейтинга.
+          </div>
+        {% else %}
+          <p class="text-muted small mb-0">
+            История пока пуста — привяжите Faceit-аккаунт или подтвердите рейтинг,
+            и здесь появится график динамики Elo.
+          </p>
+        {% endif %}
+      </div>
     </div>
 
     <!-- RIGHT: PandaScore data -->
@@ -185,4 +231,64 @@
 
   </div>
 </section>
+
+{% if rating_history %}
+<script id="rating-history-data" type="application/json">{{ rating_history|safe_json }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    var holder = document.getElementById('rating-history-data');
+    var canvas = document.getElementById('ratingChart');
+    if (!holder || !canvas || typeof Chart === 'undefined') return;
+
+    var points = [];
+    try { points = JSON.parse(holder.textContent) || []; } catch (e) { return; }
+    if (!points.length) return;
+
+    var styles = getComputedStyle(document.documentElement);
+    var accent = (styles.getPropertyValue('--accent') || '#c8a96a').trim();
+    var muted = (styles.getPropertyValue('--muted') || '#8a8f98').trim();
+
+    var labels = points.map(function (p) {
+      var d = new Date(p.recordedAtUtc);
+      return isNaN(d) ? '' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    });
+
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Рейтинг',
+          data: points.map(function (p) { return Number(p.rating); }),
+          borderColor: accent,
+          backgroundColor: accent,
+          pointRadius: 4,
+          tension: 0.3,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { ticks: { color: muted }, grid: { color: 'rgba(128,128,128,.15)' } },
+          x: { ticks: { color: muted }, grid: { display: false } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              afterLabel: function (ctx) {
+                var src = (points[ctx.dataIndex] || {}).source;
+                return src ? 'Источник: ' + src : '';
+              }
+            }
+          }
+        }
+      }
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}
