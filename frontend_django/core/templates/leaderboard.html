@@ -1,0 +1,75 @@
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
+{% block title %}Leaderboard{% endblock %}
+
+{% block content %}
+<section>
+  <div class="page-hero">
+    <div>
+      <p class="eyebrow mb-2">Arena Control Pro</p>
+      <h1 class="h3 mb-2">Глобальный рейтинг прогнозистов</h1>
+      <p class="text-muted mb-0">Топ 100 лучших аналитиков по Predictor MMR.</p>
+    </div>
+  </div>
+
+  <div class="table-panel p-3 p-md-4">
+    <div class="table-responsive">
+      <table class="table table-striped align-middle mb-0" id="leaderboardTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Игрок</th>
+            <th>Бейджи</th>
+            <th class="text-end">MMR</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="4" class="text-center text-muted">Загрузка рейтинга...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<script>
+  (async function() {
+    try {
+      const res = await fetch('/api/predictions/leaderboard?limit=100');
+      const data = await res.json();
+      const tbody = document.querySelector("#leaderboardTable tbody");
+      tbody.innerHTML = '';
+      
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Пока нет данных. Сделайте первый прогноз!</td></tr>';
+        return;
+      }
+
+      data.forEach((user, index) => {
+        const badgesHtml = user.badges.map(b => 
+          `<span class="badge" style="background-color: ${b.colorCss || 'var(--accent)'};" title="${b.name}">
+            ${b.iconUrlOrCss ? `<i class="${b.iconUrlOrCss}"></i>` : ''} ${b.name}
+           </span>`
+        ).join(' ');
+
+        const avatar = user.avatarUrl || user.faceitAvatar || 'https://ui-avatars.com/api/?name=' + user.nickname;
+
+        tbody.innerHTML += `
+          <tr>
+            <td class="text-muted fw-bold">${index + 1}</td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <img src="${avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border: 2px solid var(--border);">
+                <span class="fw-semibold">${user.nickname}</span>
+              </div>
+            </td>
+            <td>${badgesHtml}</td>
+            <td class="text-end fw-bold" style="color:var(--accent);">${user.predictorMMR}</td>
+          </tr>
+        `;
+      });
+    } catch (e) {
+      console.error(e);
+      document.querySelector("#leaderboardTable tbody").innerHTML = '<tr><td colspan="4" class="text-center text-danger">Ошибка загрузки рейтинга.</td></tr>';
+    }
+  })();
+</script>
+{% endblock %}

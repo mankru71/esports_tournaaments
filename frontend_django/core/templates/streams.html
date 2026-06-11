@@ -1,97 +1,387 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Стримы{% endblock %}
+
 {% block content %}
-<section>
-  <div class="page-hero">
-    <div>
-      <h1 class="h3 mb-2">Стримы и игроки</h1>
-      <p class="text-muted mb-0">Поиск трансляций турниров и публичной информации об игроках.</p>
+<style>
+/* Theatre Mode Layout */
+.theatre-container {
+    display: flex;
+    gap: 1.5rem;
+    height: calc(100vh - 140px);
+    min-height: 600px;
+}
+@media(max-width: 992px) {
+    .theatre-container {
+        flex-direction: column;
+        height: auto;
+    }
+}
+
+.theatre-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+.theatre-sidebar {
+    width: 350px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+@media(max-width: 992px) {
+    .theatre-sidebar {
+        width: 100%;
+    }
+}
+
+.player-wrapper {
+    flex: 1;
+    background: #000;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.player-wrapper iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.player-placeholder {
+    color: var(--muted);
+    text-align: center;
+    padding: 2rem;
+}
+
+.player-controls {
+    padding: 1rem 1.5rem;
+    background: var(--surface-2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.stream-playlist {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.playlist-header {
+    padding: 1rem 1.25rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.playlist-items {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.playlist-item {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+.playlist-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+.playlist-item.active {
+    background: rgba(200, 169, 106, 0.1);
+    border-left: 3px solid var(--accent);
+}
+
+.playlist-item-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--surface-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+}
+
+.playlist-item.active .playlist-item-icon {
+    color: var(--accent);
+    background: rgba(200, 169, 106, 0.2);
+}
+
+.search-forms {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+}
+
+/* Chat iframe */
+#chat-container {
+    width: 340px;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    display: none;
+}
+.theatre-main.show-chat {
+    flex-direction: row;
+}
+</style>
+
+<div class="theatre-container">
+    <!-- Main Player Area -->
+    <div class="theatre-main" id="theatre-main">
+        <div class="player-wrapper" id="player-wrapper">
+            <div class="player-placeholder">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:1rem; opacity:0.5;"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                <h3 class="h5">Трансляция не выбрана</h3>
+                <p class="small mb-0">Выберите турнир и стрим из плейлиста справа</p>
+            </div>
+        </div>
+        
+        <!-- Twitch Chat Container -->
+        <div id="chat-container"></div>
+
+        <div class="player-controls">
+            <div>
+                <h2 class="h6 mb-0" id="current-stream-title">Режим кинотеатра</h2>
+                <div class="text-muted small" id="current-stream-meta">Наслаждайтесь просмотром</div>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-accent" id="toggle-chat-btn" style="display:none;" onclick="toggleChat()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    Чат Twitch
+                </button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <div class="row g-4">
-    <div class="col-lg-7">
-      <div class="form-card p-4 mb-4">
-        <h2 class="h5 mb-3">Найти стримы турнира</h2>
-        <form method="post" class="row g-2">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="find_tournament_streams">
-          <div class="col-md-9"><input class="form-control" name="tournament_query" value="{{ tournament_query }}" placeholder="IEM Katowice"></div>
-          <div class="col-md-3"><button class="btn btn-accent w-100" type="submit">Найти</button></div>
-        </form>
+    <!-- Sidebar Area -->
+    <div class="theatre-sidebar">
+        <!-- Search Forms -->
+        <div class="search-forms">
+            <ul class="nav nav-pills mb-3" style="gap:0.5rem;" id="search-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="btn btn-sm btn-accent active" id="tab-tournaments" data-bs-toggle="pill" data-bs-target="#pane-tournaments" type="button" role="tab" style="border-radius:20px;">Турниры</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="btn btn-sm btn-outline-secondary" id="tab-players" data-bs-toggle="pill" data-bs-target="#pane-players" type="button" role="tab" style="border-radius:20px;" onclick="document.getElementById('tab-tournaments').classList.remove('btn-accent'); this.classList.add('btn-accent');">Игроки</button>
+                </li>
+            </ul>
 
-        {% if tournament_payload %}
-          <div class="mt-4">
-            <div class="fw-semibold">{{ tournament_payload.tournament.name }}</div>
-            <div class="text-muted small mb-3">{{ tournament_payload.tournament.videogame }} · {{ tournament_payload.tournament.league }} · {{ tournament_payload.tournament.beginAt }}</div>
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="pane-tournaments" role="tabpanel">
+                    <form method="post" class="d-flex gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="find_tournament_streams">
+                        <input class="form-control form-control-sm" name="tournament_query" value="{{ tournament_query }}" placeholder="IEM Katowice..." required>
+                        <button class="btn btn-sm btn-accent" type="submit">Найти</button>
+                    </form>
+                </div>
+                <div class="tab-pane fade" id="pane-players" role="tabpanel">
+                    <form method="post" class="d-flex gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="find_player">
+                        <input class="form-control form-control-sm" name="player_query" value="{{ player_query }}" placeholder="s1mple..." required>
+                        <button class="btn btn-sm btn-outline-accent" type="submit">Найти</button>
+                    </form>
+                </div>
+            </div>
+        </div>
 
-            {% if tournament_payload.streams_prepared %}
-              <div class="d-flex flex-column gap-3">
-                {% for stream in tournament_payload.streams_prepared %}
-                  <div class="card p-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                      <div>
-                        <div class="fw-semibold text-capitalize">{{ stream.provider }}</div>
-                        <div class="text-muted small">{{ stream.matchName }}</div>
-                      </div>
-                      <a href="{{ stream.url }}" target="_blank" rel="noopener">Открыть источник</a>
-                    </div>
-                    {% if stream.provider == 'twitch' and stream.channel %}
-                      <iframe class="twitch-embed" src="https://player.twitch.tv/?channel={{ stream.channel }}&parent={{ twitch_parent }}&theme=dark" width="100%" height="360" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
-                    {% elif stream.provider == 'youtube' %}
-                      <iframe width="100%" height="360" src="{{ stream.embed_url }}?enablejsapi=0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        <!-- Playlist or Player Results -->
+        <div class="stream-playlist">
+            {% if player_payload %}
+                <div class="playlist-header">Результаты поиска игроков</div>
+                <div class="playlist-items p-3">
+                    {% if player_payload.results %}
+                        <div class="d-flex flex-column gap-2">
+                        {% for p in player_payload.results %}
+                            <div class="card p-3" style="background:var(--surface-2);">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div>
+                                    <div class="fw-semibold">{{ p.name|default:"(без имени)" }}</div>
+                                    <div class="text-muted small">{% if p.currentTeam %}{{ p.currentTeam }} · {% endif %}{% if p.role %}роль: {{ p.role }} · {% endif %}{% if p.nationality %}{{ p.nationality }}{% endif %}</div>
+                                    {% if p.profileUrl %}<a class="small mt-1 d-inline-block" href="{{ p.profileUrl }}" target="_blank" rel="noopener">Профиль игрока ↗</a>{% endif %}
+                                </div>
+                                {% if p.imageUrl %}<img src="{{ p.imageUrl }}" alt="player" style="width:44px;height:44px;border-radius:8px;object-fit:cover;">{% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                        </div>
                     {% else %}
-                      <div class="small text-muted">Для этого провайдера доступна только ссылка на источник.</div>
+                        <div class="text-muted text-center py-4">Игрок не найден.</div>
                     {% endif %}
-                  </div>
-                {% endfor %}
-              </div>
+                </div>
+
+            {% elif tournament_payload %}
+                <div class="playlist-header">
+                    {{ tournament_payload.tournament.name }}
+                    <div class="text-muted small fw-normal mt-1">{{ tournament_payload.tournament.videogame }} · Плейлист стримов</div>
+                </div>
+                
+                <div class="playlist-items">
+                    {% if tournament_payload.streams_prepared %}
+                        {% for stream in tournament_payload.streams_prepared %}
+                        <div class="playlist-item" onclick="loadStream(this, '{{ stream.provider }}', '{{ stream.channel|escapejs }}', '{{ stream.embed_url|escapejs }}', '{{ stream.matchName|escapejs }}')">
+                            <div class="playlist-item-icon">
+                                {% if stream.provider == 'twitch' %}
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.149 0l-1.612 4.119v16.836h5.731v3.045h3.224l3.045-3.045h4.657l6.269-6.269v-14.686h-21.314zm19.164 13.612l-3.582 3.582h-5.731l-3.045 3.045v-3.045h-4.836v-15.045h17.194v11.463zm-3.582-7.343v6.262h-2.149v-6.262h2.149zm-5.731 0v6.262h-2.149v-6.262h2.149z"/></svg>
+                                {% elif stream.provider == 'youtube' %}
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                                {% else %}
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <div class="fw-semibold text-capitalize">{{ stream.provider }}</div>
+                                <div class="text-muted small">{{ stream.matchName|default:"Main Stream" }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-muted text-center py-4 px-3">Для данного турнира трансляции не найдены.</div>
+                    {% endif %}
+                </div>
             {% else %}
-              <div class="alert alert-warning mt-3 mb-0">Для найденного турнира трансляции не обнаружены.</div>
-            {% endif %}
-          </div>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="col-lg-5">
-      <div class="form-card p-4 mb-4">
-        <h2 class="h5 mb-3">Найти игрока</h2>
-        <form method="post" class="row g-2">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="find_player">
-          <div class="col-md-8"><input class="form-control" name="player_query" value="{{ player_query }}" placeholder="s1mple"></div>
-          <div class="col-md-4"><button class="btn btn-outline-accent w-100" type="submit">Найти</button></div>
-        </form>
-
-        {% if player_payload %}
-          <div class="mt-4">
-            {% if player_payload.results %}
-              <div class="d-flex flex-column gap-2">
-                {% for p in player_payload.results %}
-                  <div class="card p-3">
-                    <div class="d-flex justify-content-between align-items-start gap-2">
-                      <div>
-                        <div class="fw-semibold">{{ p.name|default:"(без имени)" }}</div>
-                        <div class="text-muted small">{% if p.currentTeam %}{{ p.currentTeam }} · {% endif %}{% if p.role %}роль: {{ p.role }} · {% endif %}{% if p.nationality %}{{ p.nationality }}{% endif %}</div>
-                        {% if p.profileUrl %}<a class="small" href="{{ p.profileUrl }}" target="_blank" rel="noopener">Профиль игрока</a>{% endif %}
-                      </div>
-                      {% if p.imageUrl %}<img src="{{ p.imageUrl }}" alt="player" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">{% endif %}
+                <div class="playlist-header">Плейлист стримов</div>
+                <div class="playlist-items d-flex align-items-center justify-content-center">
+                    <div class="text-muted small text-center px-4">
+                        Воспользуйтесь поиском, чтобы найти трансляции турнира
                     </div>
-                  </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="empty-state">Игрок не найден.</div>
+                </div>
             {% endif %}
-          </div>
-        {% endif %}
-
+        </div>
+        
         {% if diagnostics and not diagnostics.success %}
-          <div class="alert alert-warning mt-4 mb-0">{{ diagnostics.message }}</div>
+          <div class="alert alert-warning mb-0 p-2 text-center" style="font-size:0.8rem;">{{ diagnostics.message }}</div>
         {% endif %}
-      </div>
     </div>
-  </div>
-</section>
+</div>
+
+<!-- Basic Bootstrap tab logic replacement since we don't load bootstrap JS fully on all pages -->
+<script>
+document.getElementById('tab-tournaments').addEventListener('click', function() {
+    this.classList.add('btn-accent', 'active');
+    this.classList.remove('btn-outline-secondary');
+    
+    document.getElementById('tab-players').classList.remove('btn-accent', 'active');
+    document.getElementById('tab-players').classList.add('btn-outline-secondary');
+    
+    document.getElementById('pane-tournaments').classList.add('show', 'active');
+    document.getElementById('pane-players').classList.remove('show', 'active');
+});
+
+document.getElementById('tab-players').addEventListener('click', function() {
+    this.classList.add('btn-accent', 'active');
+    this.classList.remove('btn-outline-secondary');
+    
+    document.getElementById('tab-tournaments').classList.remove('btn-accent', 'active');
+    document.getElementById('tab-tournaments').classList.add('btn-outline-secondary');
+    
+    document.getElementById('pane-players').classList.add('show', 'active');
+    document.getElementById('pane-tournaments').classList.remove('show', 'active');
+});
+
+let currentChannel = null;
+let chatVisible = false;
+
+function loadStream(element, provider, channel, embedUrl, matchName) {
+    // Update active class
+    document.querySelectorAll('.playlist-item').forEach(el => el.classList.remove('active'));
+    element.classList.add('active');
+
+    // Update UI titles
+    document.getElementById('current-stream-title').textContent = matchName || 'Трансляция';
+    document.getElementById('current-stream-meta').textContent = provider.charAt(0).toUpperCase() + provider.slice(1);
+
+    const playerWrapper = document.getElementById('player-wrapper');
+    const chatBtn = document.getElementById('toggle-chat-btn');
+    const twitchParent = "{{ twitch_parent }}";
+
+    // Embed Logic
+    if (provider === 'twitch' && channel) {
+        playerWrapper.innerHTML = `<iframe src="https://player.twitch.tv/?channel=${channel}&parent=${twitchParent}&theme=dark" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+        currentChannel = channel;
+        chatBtn.style.display = 'inline-flex';
+        
+        // Auto-refresh chat if open
+        if (chatVisible) {
+            document.getElementById('chat-container').innerHTML = `<iframe src="https://www.twitch.tv/embed/${channel}/chat?parent=${twitchParent}&darkpopout" frameborder="0" style="width:100%; height:100%;"></iframe>`;
+        }
+    } else if (provider === 'youtube' && embedUrl) {
+        playerWrapper.innerHTML = `<iframe src="${embedUrl}?enablejsapi=0&autoplay=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+        currentChannel = null;
+        chatBtn.style.display = 'none';
+        closeChat();
+    } else {
+        playerWrapper.innerHTML = `
+            <div class="player-placeholder">
+                <h3 class="h5">Внешняя ссылка</h3>
+                <p class="small text-muted mb-3">Этот стрим нельзя встроить. Вы можете посмотреть его по ссылке:</p>
+                <a href="${embedUrl}" target="_blank" rel="noopener" class="btn btn-accent">Открыть в новой вкладке</a>
+            </div>`;
+        currentChannel = null;
+        chatBtn.style.display = 'none';
+        closeChat();
+    }
+}
+
+function toggleChat() {
+    if (!currentChannel) return;
+    
+    chatVisible = !chatVisible;
+    const main = document.getElementById('theatre-main');
+    const chatContainer = document.getElementById('chat-container');
+    const twitchParent = "{{ twitch_parent }}";
+
+    if (chatVisible) {
+        main.classList.add('show-chat');
+        chatContainer.style.display = 'block';
+        chatContainer.innerHTML = `<iframe src="https://www.twitch.tv/embed/${currentChannel}/chat?parent=${twitchParent}&darkpopout" frameborder="0" style="width:100%; height:100%;"></iframe>`;
+    } else {
+        closeChat();
+    }
+}
+
+function closeChat() {
+    chatVisible = false;
+    document.getElementById('theatre-main').classList.remove('show-chat');
+    document.getElementById('chat-container').style.display = 'none';
+    document.getElementById('chat-container').innerHTML = '';
+}
+
+// Auto-play the first stream if available
+document.addEventListener('DOMContentLoaded', () => {
+    const firstItem = document.querySelector('.playlist-item');
+    if (firstItem) {
+        firstItem.click();
+    }
+    
+    {% if player_payload %}
+    // If player search was done, switch tabs to player
+    document.getElementById('tab-players').click();
+    {% endif %}
+});
+</script>
 {% endblock %}

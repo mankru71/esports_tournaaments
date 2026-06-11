@@ -1,3 +1,4 @@
+using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Services;
@@ -31,7 +32,7 @@ public class TournamentController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTournamentRequest request, [FromServices] ActivityLogService activity, CancellationToken ct)
     {
-        if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin"))
+        if (!User.IsInRole("admin"))
             return StatusCode(403, new { message = "Создавать турниры может только администратор" });
 
         var tournament = new Models.Tournament
@@ -56,7 +57,7 @@ public class TournamentController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, [FromServices] Data.AppDbContext db)
     {
-        if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin"))
+        if (!User.IsInRole("admin"))
             return StatusCode(403, new { message = "Удалять турниры может только администратор" });
 
         var tournament = await db.Tournaments.FindAsync(id);
@@ -76,7 +77,7 @@ public class TournamentController : ControllerBase
     [HttpPost("{id:int}/generate-bracket")]
     public async Task<IActionResult> GenerateBracket(int id, [FromServices] TournamentPlanningService planningService, [FromServices] Data.AppDbContext db, CancellationToken ct)
     {
-        if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Только администратор или судья может генерировать сетку" });
 
         var tournament = await db.Tournaments.FirstOrDefaultAsync(t => t.Id == id, ct);

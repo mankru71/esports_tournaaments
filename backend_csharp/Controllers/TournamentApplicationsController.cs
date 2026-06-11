@@ -27,7 +27,7 @@ public class TournamentApplicationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List(int tournamentId)
     {
-        if (!AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Недостаточно прав" });
 
         var apps = await _db.TournamentApplications
@@ -43,7 +43,7 @@ public class TournamentApplicationsController : ControllerBase
     [HttpGet("my")]
     public async Task<IActionResult> My(int tournamentId)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null) return Unauthorized(new { message = "Требуется вход" });
 
         var apps = await _db.TournamentApplications
@@ -58,7 +58,7 @@ public class TournamentApplicationsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Apply(int tournamentId, [FromBody] ApplyRequest request)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null) return Unauthorized(new { message = "Требуется вход" });
 
         var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
@@ -95,7 +95,7 @@ public class TournamentApplicationsController : ControllerBase
     [HttpPost("{applicationId:int}/approve")]
     public async Task<IActionResult> Approve(int tournamentId, int applicationId, [FromServices] Services.ActivityLogService activity)
     {
-        if (!AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Недостаточно прав" });
 
         var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
@@ -119,7 +119,7 @@ public class TournamentApplicationsController : ControllerBase
     [HttpPost("{applicationId:int}/reject")]
     public async Task<IActionResult> Reject(int tournamentId, int applicationId)
     {
-        if (!AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Недостаточно прав" });
 
         var app = await _db.TournamentApplications

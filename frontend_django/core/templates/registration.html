@@ -1,14 +1,20 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Регистрация{% endblock %}
 
 {% block content %}
 <section class="auth-panel">
-  <div class="form-card p-4 p-md-5">
-    <h1 class="h3 mb-2">Регистрация</h1>
-    <p class="text-muted mb-4">Создайте аккаунт игрока или капитана, чтобы участвовать в турнирах.</p>
+  <div class="form-card p-4 p-md-5" style="animation: fadeInUp 0.5s ease-out;">
+    <div class="text-center mb-4">
+      <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+           style="width:56px;height:56px;background:var(--accent-soft);border:1px solid var(--accent);">
+        <span style="font-size:1.5rem;color:var(--accent);font-weight:700;">AC</span>
+      </div>
+      <h1 class="h3 mb-2">Регистрация</h1>
+      <p class="text-muted mb-0">Создайте аккаунт, чтобы участвовать в турнирах.</p>
+    </div>
 
     {% if form.errors %}
-      <div class="alert alert-danger">
+      <div class="alert alert-danger" style="border-radius:12px;">
         <div class="fw-semibold mb-1">Не удалось выполнить регистрацию:</div>
         <ul class="mb-0 ps-3">
           {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
@@ -22,39 +28,40 @@
     <form method="post" novalidate>
       {% csrf_token %}
       <div class="mb-3">
-        <label class="form-label" for="id_nickname">{{ form.nickname.label }}</label>
+        <label class="form-label fw-semibold" for="id_nickname">{{ form.nickname.label }}</label>
         {{ form.nickname }}
         {% if form.nickname.errors %}<div class="text-danger small mt-1">{{ form.nickname.errors|striptags }}</div>{% endif %}
       </div>
 
       <div class="mb-3">
-        <label class="form-label" for="id_email">{{ form.email.label }}</label>
+        <label class="form-label fw-semibold" for="id_email">{{ form.email.label }}</label>
         {{ form.email }}
         {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|striptags }}</div>{% endif %}
       </div>
 
       <div class="mb-3">
-        <label class="form-label" for="id_password">{{ form.password.label }}</label>
+        <label class="form-label fw-semibold" for="id_password">{{ form.password.label }}</label>
         {{ form.password }}
         <div class="form-text">Минимум 8 символов.</div>
         {% if form.password.errors %}<div class="text-danger small mt-1">{{ form.password.errors|striptags }}</div>{% endif %}
       </div>
 
       <div class="mb-3">
-        <label class="form-label" for="id_password_confirm">{{ form.password_confirm.label }}</label>
+        <label class="form-label fw-semibold" for="id_password_confirm">{{ form.password_confirm.label }}</label>
         {{ form.password_confirm }}
         {% if form.password_confirm.errors %}<div class="text-danger small mt-1">{{ form.password_confirm.errors|striptags }}</div>{% endif %}
       </div>
 
       <div class="mb-4">
-        <label class="form-label" for="id_role">{{ form.role.label }}</label>
+        <label class="form-label fw-semibold" for="id_role">{{ form.role.label }}</label>
         {{ form.role }}
       </div>
 
-      <button class="btn btn-accent w-100" type="submit">Создать аккаунт</button>
+      <button class="btn btn-accent w-100 py-2" type="submit" style="font-size:1rem;">Создать аккаунт</button>
     </form>
 
     <p class="mt-4 mb-0 text-center text-muted">Уже есть аккаунт? <a href="{% url 'login' %}">Войти</a></p>
   </div>
 </section>
 {% endblock %}
+

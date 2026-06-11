@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% load bracket_extras %}
 
 {% block title %}{{ tournament.name }}{% endblock %}
@@ -26,6 +26,11 @@
           <button type="submit" class="btn btn-outline-accent" aria-pressed="false">В избранное</button>
         {% endif %}
       </form>
+      {% endif %}
+      {% if tournament.isExternal %}
+      <a href="{% url 'fantasy_draft' tournament.id %}" class="btn btn-accent" style="background:#ff5500; border:none; font-weight: bold;">
+        <i class="bi bi-star-fill"></i> Fantasy Draft
+      </a>
       {% endif %}
      
       <span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span>
@@ -219,7 +224,7 @@
   <div class="table-panel p-3 p-md-4">
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
       <h2 class="h5 mb-0">Матчи</h2>
-      <a class="btn btn-sm btn-outline-accent" href="{% url 'match_center' tournament.id %}">Матч-центр</a>
+      <a class="btn btn-sm btn-outline-accent" href="{% if tournament.isExternal %}{% url 'pro_match_center' tournament.id %}{% else %}{% url 'play_match_center' tournament.id %}{% endif %}">Матч-центр</a>
     </div>
     {% if matches %}
     <div class="table-responsive">
@@ -355,6 +360,7 @@
             <th class="text-center">Поражения</th>
             <th class="text-center">Счёт</th>
             <th class="text-center">Разница</th>
+            <th class="text-center">Форма</th>
           </tr>
         </thead>
         <tbody>{% for s in analytics_payload.standings %}<tr>
@@ -364,6 +370,11 @@
             <td class="text-center">{{ s.losses }}</td>
             <td class="text-center">{{ s.scoreFor }} : {{ s.scoreAgainst }}</td>
             <td class="text-center {% if s.diff > 0 %}text-success{% elif s.diff < 0 %}text-danger{% endif %}">{{ s.diff }}</td>
+            <td class="text-center">
+              {% for f in s.recentForm %}
+                <span class="badge {% if f == 'W' %}bg-success{% else %}bg-danger{% endif %}">{{ f }}</span>
+              {% endfor %}
+            </td>
           </tr>{% endfor %}</tbody>
       </table>
     </div>

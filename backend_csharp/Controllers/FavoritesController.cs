@@ -27,7 +27,7 @@ public class FavoritesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null) return Unauthorized(new { message = "Требуется вход" });
 
         var ids = await _db.UserFavorites
@@ -42,7 +42,7 @@ public class FavoritesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Add([FromBody] AddFavoriteRequest request, CancellationToken ct)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null) return Unauthorized(new { message = "Требуется вход" });
 
         var tournamentExists = await _db.Tournaments.AnyAsync(t => t.Id == request.TournamentId, ct);
@@ -76,7 +76,7 @@ public class FavoritesController : ControllerBase
     [HttpDelete("{tournamentId:int}")]
     public async Task<IActionResult> Remove(int tournamentId, CancellationToken ct)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null) return Unauthorized(new { message = "Требуется вход" });
 
         var favorite = await _db.UserFavorites

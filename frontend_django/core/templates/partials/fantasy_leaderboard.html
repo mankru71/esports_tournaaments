@@ -1,0 +1,28 @@
+{% if leaderboard %}
+<div class="table-responsive border rounded bg-surface">
+  <table class="table table-hover table-borderless align-middle mb-0">
+    <thead class="bg-surface-2 text-muted border-bottom">
+      <tr>
+        <th class="ps-4">Место</th>
+        <th>Пользователь</th>
+        <th>Фэнтези-Команда</th>
+        <th class="text-end pe-4">Очки</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in leaderboard %}
+      <tr>
+        <td class="ps-4 fw-bold {% if forloop.counter <= 3 %}text-accent{% endif %}">#{{ forloop.counter }}</td>
+        <td>{{ row.userName }}</td>
+        <td>{{ row.teamName }}</td>
+        <td class="text-end pe-4 fw-bold text-success">{{ row.totalPoints }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center p-4 border rounded text-muted">
+  Пока нет команд в таблице лидеров. Станьте первым!
+</div>
+{% endif %}

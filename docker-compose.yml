@@ -25,6 +25,10 @@ services:
       - PandaScore__Enabled=true
       - PANDASCORE_TOKEN=${PANDASCORE_TOKEN}
       - PANDASCORE_BASE_URL=${PANDASCORE_BASE_URL:-https://api.pandascore.co}
+      - Faceit__ApiKey=${FACEIT_API_KEY}
+      - Faceit__ClientId=${FACEIT_CLIENT_ID}
+      - Faceit__ClientSecret=${FACEIT_CLIENT_SECRET}
+      - Steam__ApiKey=${STEAM_API_KEY}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USER=${SMTP_USER}

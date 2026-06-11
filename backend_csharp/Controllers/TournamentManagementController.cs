@@ -103,7 +103,7 @@ public class TournamentManagementController : ControllerBase
     [HttpPost("planning")]
     public async Task<IActionResult> SavePlanning(int tournamentId, [FromBody] PlanningRequest request)
     {
-        if (!AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Недостаточно прав" });
 
         var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
@@ -123,7 +123,7 @@ public class TournamentManagementController : ControllerBase
     [HttpPost("status")]
     public async Task<IActionResult> SetStatus(int tournamentId, [FromBody] StatusRequest request)
     {
-        if (!AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Недостаточно прав" });
 
         var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
@@ -162,7 +162,7 @@ public class TournamentManagementController : ControllerBase
             .ToListAsync(ct);
 
         // ── Standings по матчам ЭТОГО турнира ──────────────────────────
-        var standings = new Dictionary<int, (string Name, int Wins, int Losses, int ScoreFor, int ScoreAgainst)>();
+        var standings = new Dictionary<int, (string Name, int Wins, int Losses, int ScoreFor, int ScoreAgainst, List<string> Form)>();
 
         void Track(int? teamId, string? name, int scoreFor, int scoreAgainst, bool won, bool lost)
         {
@@ -170,16 +170,22 @@ public class TournamentManagementController : ControllerBase
                 return;
             var row = standings.TryGetValue(teamId.Value, out var existing)
                 ? existing
-                : (Name: name!, Wins: 0, Losses: 0, ScoreFor: 0, ScoreAgainst: 0);
+                : (Name: name!, Wins: 0, Losses: 0, ScoreFor: 0, ScoreAgainst: 0, Form: new List<string>());
+            
+            if (won) row.Form.Add("W");
+            if (lost) row.Form.Add("L");
+            if (row.Form.Count > 5) row.Form.RemoveAt(0);
+
             standings[teamId.Value] = (
                 row.Name,
                 row.Wins + (won ? 1 : 0),
                 row.Losses + (lost ? 1 : 0),
                 row.ScoreFor + scoreFor,
-                row.ScoreAgainst + scoreAgainst);
+                row.ScoreAgainst + scoreAgainst,
+                row.Form);
         }
 
-        foreach (var m in matches)
+        foreach (var m in matches.OrderBy(m => m.Id)) // Ensure chronological order for recent form
         {
             var finished = m.Status is "finished" or "approved" && m.WinnerId.HasValue;
             Track(m.TeamAId, m.TeamA?.Name, m.ScoreA, m.ScoreB,
@@ -199,7 +205,8 @@ public class TournamentManagementController : ControllerBase
                 losses = s.Losses,
                 scoreFor = s.ScoreFor,
                 scoreAgainst = s.ScoreAgainst,
-                diff = s.ScoreFor - s.ScoreAgainst
+                diff = s.ScoreFor - s.ScoreAgainst,
+                recentForm = s.Form
             })
             .ToList();
 
@@ -266,7 +273,7 @@ public class TournamentManagementController : ControllerBase
     [HttpPost("prize-pool/payouts")]
     public async Task<IActionResult> SetPayouts(int tournamentId, [FromBody] PrizePayoutRequest request)
     {
-        if (!AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Недостаточно прав" });
 
         var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);

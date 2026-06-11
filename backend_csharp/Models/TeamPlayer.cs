@@ -11,6 +11,8 @@ public class TeamPlayer
     public string Nickname { get; set; } = string.Empty;
     public string Game { get; set; } = string.Empty;
     public decimal? Rating { get; set; }
+    
+    public int Cost { get; set; } = 100;
 
     // Поля, которые требует TeamsController:
     public string? RatingSource { get; set; }

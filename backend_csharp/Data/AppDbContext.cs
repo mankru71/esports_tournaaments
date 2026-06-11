@@ -18,7 +18,18 @@ public class AppDbContext : DbContext
     public DbSet<UserFavorite> UserFavorites { get; set; }
     public DbSet<ActivityLog> ActivityLogs { get; set; }
     public DbSet<RatingHistory> RatingHistories { get; set; }
-    // Существующие DbSets для Nominee, Vote...
+    public DbSet<TeamVacancy> TeamVacancies { get; set; }
+    public DbSet<TeamInvite> TeamInvites { get; set; }
+    public DbSet<PlayerEndorsement> PlayerEndorsements { get; set; }
+    public DbSet<MatchComment> MatchComments { get; set; }
+    
+    // Gamification
+    public DbSet<MatchPrediction> MatchPredictions { get; set; } = null!;
+    public DbSet<Badge> Badges { get; set; } = null!;
+    public DbSet<UserBadge> UserBadges { get; set; } = null!;
+    public DbSet<FantasyTeam> FantasyTeams { get; set; } = null!;
+    public DbSet<FantasyRoster> FantasyRosters { get; set; } = null!;
+    public DbSet<MvpVote> MvpVotes { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -82,6 +93,73 @@ public class AppDbContext : DbContext
             entity.HasOne(h => h.User)
                   .WithMany()
                   .HasForeignKey(h => h.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlayerEndorsement>(entity =>
+        {
+            entity.HasOne(e => e.EndorsedUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.EndorsedUserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.EndorserUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.EndorserUserId)
+                  .OnDelete(DeleteBehavior.Restrict); // Prevent multiple cascade paths
+        });
+
+        // Gamification / Pick'Em
+        modelBuilder.Entity<MatchPrediction>(entity =>
+        {
+            entity.HasOne(p => p.User)
+                  .WithMany()
+                  .HasForeignKey(p => p.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.Match)
+                  .WithMany()
+                  .HasForeignKey(p => p.MatchId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.PredictedTeam)
+                  .WithMany()
+                  .HasForeignKey(p => p.PredictedTeamId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(p => new { p.UserId, p.MatchId }).IsUnique();
+        });
+
+        modelBuilder.Entity<UserBadge>(entity =>
+        {
+            entity.HasOne(ub => ub.User)
+                  .WithMany()
+                  .HasForeignKey(ub => ub.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(ub => ub.Badge)
+                  .WithMany()
+                  .HasForeignKey(ub => ub.BadgeId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(ub => new { ub.UserId, ub.BadgeId }).IsUnique();
+        });
+
+        modelBuilder.Entity<TeamInvite>(entity =>
+        {
+            entity.HasOne(ti => ti.Captain)
+                  .WithMany()
+                  .HasForeignKey(ti => ti.CaptainId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(ti => ti.User)
+                  .WithMany()
+                  .HasForeignKey(ti => ti.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasOne(ti => ti.Team)
+                  .WithMany(t => t.Invites)
+                  .HasForeignKey(ti => ti.TeamId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
     }

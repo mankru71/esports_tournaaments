@@ -106,11 +106,49 @@ class CSharpApiClient:
     def get_tournaments(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "tournament", token=token)
 
-    def update_profile(self, nickname: str, bio: str, token: str) -> ApiResult:
-        return self._request("PUT", "auth/profile", data={"nickname": nickname, "bio": bio}, token=token)
+    def update_profile(self, nickname: str, bio: str, token: str, game_role: str = "", availability: str = "", pitch: str = "", discord_id: str = "", country: str = "", city: str = "", languages: str = "", highlights_url: str = "") -> ApiResult:
+        data = {
+            "nickname": nickname, 
+            "bio": bio,
+            "gameRole": game_role,
+            "availability": availability,
+            "pitch": pitch,
+            "discordId": discord_id,
+            "highlightsUrl": highlights_url,
+            "country": country,
+            "city": city,
+            "languages": languages
+        }
+        return self._request("PUT", "auth/profile", data=data, token=token)
 
     def verify_rating(self, provider: str, profile_url: str, token: str) -> ApiResult:
         return self._request("POST", "auth/profile/verify-rating", data={"provider": provider, "profileUrl": profile_url}, token=token)
+
+    def set_looking_for_team(self, enabled: bool, token: str) -> ApiResult:
+        return self._request("POST", "auth/profile/looking-for-team", data={"enabled": enabled}, token=token)
+
+    def get_rating_history(self, token: str) -> ApiResult:
+        return self._request("GET", "auth/profile/rating-history", token=token)
+
+    # ── Scouting & Invites ──
+
+    def get_free_agents(self) -> ApiResult:
+        return self._request("GET", "scouting/free-agents")
+
+    def get_vacancies(self) -> ApiResult:
+        return self._request("GET", "scouting/vacancies")
+
+    def create_vacancy(self, team_id: int, required_role: str, description: str, token: str) -> ApiResult:
+        return self._request("POST", f"teams/{team_id}/vacancies", data={"requiredRole": required_role, "description": description}, token=token)
+
+    def delete_vacancy(self, team_id: int, vacancy_id: int, token: str) -> ApiResult:
+        return self._request("DELETE", f"teams/{team_id}/vacancies/{vacancy_id}", token=token)
+
+    def send_invite(self, team_id: int, user_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"teams/{team_id}/invites", data={"userId": user_id}, token=token)
+
+    def respond_invite(self, invite_id: int, action: str, token: str) -> ApiResult:
+        return self._request("POST", f"teams/invites/{invite_id}/respond", data={"action": action}, token=token)
 
     def create_tournament(self, token: str, payload: dict) -> ApiResult:
         return self._request("POST", "tournament", data=payload, token=token)
@@ -252,19 +290,20 @@ class CSharpApiClient:
     def health_check(self) -> bool:
         return self._request("GET", "health").ok
 
-    def verify_faceit_account(self, user_id: int, nickname: str, token: str):
-        payload = {"FaceitNickname": nickname}
-        return self._request("POST", f"integrations/faceit/verify/{user_id}", data=payload, token=token)
-    
-    def verify_faceit(self, user_id: int, faceit_nickname: str, token: str) -> "ApiResult":
-        return self._request(
-            "POST",
-            f"integrations/faceit/verify/{user_id}",
-            data={"faceitNickname": faceit_nickname},
-            token=token,
-        )
+    def get_faceit_oauth_url(self, redirect_uri: str) -> ApiResult:
+        return self._request("GET", "integrations/faceit/oauth/url", params={"redirectUri": redirect_uri})
 
-    def unlink_faceit(self, user_id: int, token: str) -> "ApiResult":
+    def verify_faceit_oauth(self, user_id: int, code: str, redirect_uri: str, token: str) -> ApiResult:
+        payload = {"code": code, "redirectUri": redirect_uri}
+        return self._request("POST", f"integrations/faceit/oauth/verify/{user_id}", data=payload, token=token)
+
+    def get_steam_openid_url(self, redirect_uri: str) -> ApiResult:
+        return self._request("GET", "integrations/steam/openid/url", params={"redirectUri": redirect_uri})
+
+    def verify_steam_openid(self, user_id: int, openid_params: dict, token: str) -> ApiResult:
+        return self._request("POST", f"integrations/steam/openid/verify/{user_id}", data=openid_params, token=token)
+
+    def unlink_faceit(self, user_id: int, token: str) -> ApiResult:
         return self._request("DELETE", f"integrations/faceit/unlink/{user_id}", token=token)
 
     def esports_player(self, nickname: str, game: str = "counterstrike") -> ApiResult:

@@ -1,0 +1,120 @@
+<!-- Header: Nickname & Reputation/Stats -->
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h3 class="h5 fw-bold mb-1 text-light">
+      {{ agent.nickname }}
+      {% if agent.reputation %}
+        <span class="badge bg-success ms-1"><i class="bi bi-star-fill"></i> +{{ agent.reputation }}</span>
+      {% endif %}
+    </h3>
+    {% if agent.gameRole %}
+      <span class="badge" style="background-color: rgba(var(--bs-primary-rgb), 0.2); color: var(--accent-color); border: 1px solid var(--accent-color);">
+        {{ agent.gameRole }}
+      </span>
+    {% endif %}
+    {% if agent.country %}
+      <span class="badge bg-secondary ms-1">{{ agent.country }}</span>
+    {% endif %}
+  </div>
+  <div class="text-end">
+    {% if agent.faceitElo %}
+      <div class="fw-bold" style="color: #ff5500;">
+        <i class="bi bi-controller"></i> {{ agent.faceitElo }} ELO
+      </div>
+      <div class="small text-muted">Lvl {{ agent.faceitLevel|default:'?' }}</div>
+    {% elif agent.rating %}
+      <div class="fw-bold text-accent">
+        <i class="bi bi-star-fill"></i> {{ agent.rating|floatformat:0 }}
+      </div>
+      <div class="small text-muted">{{ agent.ratingProvider|default:'Локальный' }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="d-flex flex-column gap-2 mb-3 small flex-grow-1">
+  {% if agent.availability %}
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-clock text-muted"></i>
+      <span>Прайм-тайм: <strong>{{ agent.availability }}</strong></span>
+    </div>
+  {% endif %}
+  {% if agent.city %}
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-geo-alt text-muted"></i>
+      <span>Город: <strong>{{ agent.city }}</strong></span>
+    </div>
+  {% endif %}
+  {% if agent.languages %}
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-chat-left-text text-muted"></i>
+      <span>Языки: <strong>{{ agent.languages }}</strong></span>
+    </div>
+  {% endif %}
+  
+  {% if agent.pitch %}
+    <div class="mt-2 p-2 rounded" style="background-color: rgba(0,0,0,0.2); border-left: 3px solid var(--accent-color);">
+      <i class="bi bi-quote text-muted me-1"></i>
+      <em>{{ agent.pitch }}</em>
+    </div>
+  {% else %}
+    <p class="text-muted small mb-0 opacity-50">Нет описания</p>
+  {% endif %}
+</div>
+
+{% if agent.highlightsUrl %}
+<div class="mb-3 ratio ratio-16x9 rounded overflow-hidden">
+  <iframe src="{{ agent.highlightsUrl }}" title="Highlights" allowfullscreen></iframe>
+</div>
+{% endif %}
+
+<div class="mt-3 pt-3 border-top border-secondary d-flex align-items-center justify-content-between">
+  <div class="d-flex gap-2">
+    {% if agent.faceitProfileUrl %}
+      <a class="btn btn-sm btn-outline-warning" style="font-weight: 500;" href="{{ agent.faceitProfileUrl }}" target="_blank" rel="noopener">
+        Faceit
+      </a>
+    {% endif %}
+    
+    {% if agent.discordId %}
+      <button class="btn btn-sm" style="background-color: #5865F2; color: white; font-weight: 500;" onclick="copyDiscord('{{ agent.discordId|escapejs }}', this)" title="Скопировать Discord ID">
+        <i class="bi bi-discord"></i> Discord
+      </button>
+    {% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    {% if current_user and current_user.id != agent.id %}
+      <form method="post" class="m-0">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="endorse_player">
+        <input type="hidden" name="user_id" value="{{ agent.id }}">
+        <button type="submit" class="btn btn-sm btn-outline-success" title="Рекомендовать игрока">
+          <i class="bi bi-hand-thumbs-up"></i> +1
+        </button>
+      </form>
+    {% endif %}
+    
+    {% if is_captain and my_teams %}
+    <div class="dropdown">
+      <button class="btn btn-sm btn-accent dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        Пригласить
+      </button>
+      <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end shadow">
+        <li><h6 class="dropdown-header">Выберите команду</h6></li>
+        {% for team in my_teams %}
+        <li>
+          <form method="post" class="m-0 dropdown-item p-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="send_invite">
+            <input type="hidden" name="user_id" value="{{ agent.id }}">
+            <input type="hidden" name="team_id" value="{{ team.id }}">
+            <button type="submit" class="btn btn-link text-decoration-none text-light w-100 text-start px-3 py-2 border-0">
+              {{ team.name }}
+            </button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>

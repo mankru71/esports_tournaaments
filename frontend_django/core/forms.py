@@ -117,6 +117,52 @@ class ProfileEditForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Капитан команды, предпочитаю CS2 и LAN-турниры.'})
     )
+    game_role = forms.CharField(
+        label='Игровая роль',
+        required=False,
+        max_length=50,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Например: Снайпер, Капитан, Саппорт'})
+    )
+    availability = forms.CharField(
+        label='Прайм-тайм',
+        required=False,
+        max_length=50,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Например: 19:00 - 23:00 МСК'})
+    )
+    pitch = forms.CharField(
+        label='Краткий питч (для скаутинга)',
+        required=False,
+        max_length=150,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ищу стак для Faceit 10 lvl, готов к праккам'})
+    )
+    discord_id = forms.CharField(
+        label="Discord ID",
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "User#1234 или Username"}),
+    )
+    highlights_url = forms.URLField(
+        label="Хайлайты (YouTube/Twitch)",
+        required=False,
+        widget=forms.URLInput(attrs={"class": "form-control", "placeholder": "https://youtube.com/..."}),
+    )
+    country = forms.CharField(
+        label='Страна',
+        required=False,
+        max_length=50,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Например: Казахстан'})
+    )
+    city = forms.CharField(
+        label='Город',
+        required=False,
+        max_length=50,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Например: Астана'})
+    )
+    languages = forms.CharField(
+        label='Языки общения',
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'RU, EN, KZ'})
+    )
 
 
 class RatingVerifyForm(forms.Form):
@@ -150,4 +196,17 @@ class FaceitVerifyForm(forms.Form):
             'placeholder': 's1mple',
             'autocomplete': 'off'
         })
+    )
+
+class TeamVacancyForm(forms.Form):
+    required_role = forms.CharField(
+        label='Требуемая роль',
+        max_length=50,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Например: Снайпер, IGL'})
+    )
+    description = forms.CharField(
+        label='Описание',
+        required=False,
+        max_length=300,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Ищем активного игрока с праймом 19:00 - 23:00 МСК...'})
     )

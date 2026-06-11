@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Турниры{% endblock %}
 {% block content %}
 <section>
@@ -78,7 +78,7 @@
                         {% endif %}
                       </form>
                     {% endif %}
-                    <a class="btn btn-sm btn-outline-accent" href="{% url 'tournament_detail' tournament.id %}">Открыть</a>
+                    <a class="btn btn-sm btn-outline-accent" href="{% if is_pro %}{% url 'pro_tournament_detail' tournament.id %}{% else %}{% url 'play_tournament_detail' tournament.id %}{% endif %}">Открыть</a>
                     {% if is_admin and not tournament.isExternal %}
                       <form method="post" class="m-0" onsubmit="return confirm('Удалить турнир?');">
                         {% csrf_token %}

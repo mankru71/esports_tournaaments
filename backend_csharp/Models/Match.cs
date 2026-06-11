@@ -27,5 +27,10 @@ public class Match
 
     public string StreamUrl { get; set; } = string.Empty;
 
+    public bool IsAutoServer { get; set; } = false;
+
     public string Status { get; set; } = "planned"; 
+
+    public DateTime? StartTimeUtc { get; set; }
+    public bool Is15MinNotified { get; set; } = false;
 }

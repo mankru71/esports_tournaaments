@@ -1,13 +1,19 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Вход{% endblock %}
 {% block content %}
 <section class="auth-panel">
-  <div class="form-card p-4 p-md-5">
-    <h1 class="h3 mb-2">Вход в систему</h1>
-    <p class="text-muted mb-4">Управляйте турнирами, командами и матчами в едином кабинете.</p>
+  <div class="form-card p-4 p-md-5" style="animation: fadeInUp 0.5s ease-out;">
+    <div class="text-center mb-4">
+      <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+           style="width:56px;height:56px;background:var(--accent-soft);border:1px solid var(--accent);">
+        <span style="font-size:1.5rem;color:var(--accent);font-weight:700;">AC</span>
+      </div>
+      <h1 class="h3 mb-2">Вход в систему</h1>
+      <p class="text-muted mb-0">Управляйте турнирами, командами и матчами.</p>
+    </div>
 
     {% if form.errors %}
-      <div class="alert alert-danger">
+      <div class="alert alert-danger" style="border-radius:12px;">
         <ul class="mb-0 ps-3">
           {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
           {% for field in form %}
@@ -20,19 +26,35 @@
     <form method="post" novalidate>
       {% csrf_token %}
       <div class="mb-3">
-        <label class="form-label" for="id_email">{{ form.email.label }}</label>
+        <label class="form-label fw-semibold" for="id_email">{{ form.email.label }}</label>
         {{ form.email }}
         {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|striptags }}</div>{% endif %}
       </div>
       <div class="mb-4">
-        <label class="form-label" for="id_password">{{ form.password.label }}</label>
+        <label class="form-label fw-semibold" for="id_password">{{ form.password.label }}</label>
         {{ form.password }}
         {% if form.password.errors %}<div class="text-danger small mt-1">{{ form.password.errors|striptags }}</div>{% endif %}
       </div>
-      <button class="btn btn-accent w-100" type="submit">Войти</button>
+      <button class="btn btn-accent w-100 py-2" type="submit" style="font-size:1rem;">Войти</button>
+    </form>
+
+    <div class="d-flex align-items-center gap-3 my-4">
+      <hr class="flex-grow-1" style="border-color:var(--border);">
+      <span class="text-muted small">или</span>
+      <hr class="flex-grow-1" style="border-color:var(--border);">
+    </div>
+
+    <form method="post" action="{% url 'profile' %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="link_steam_openid">
+      <a href="http://localhost:5000/api/auth/steam/login" class="btn w-100 fw-semibold d-flex align-items-center justify-content-center gap-2 py-2" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;transition:var(--transition);font-size:.95rem;">
+        <i class="bi bi-steam"></i>
+        Войти через Steam
+      </a>
     </form>
 
     <p class="mt-4 mb-0 text-center text-muted">Нет аккаунта? <a href="{% url 'registration' %}">Зарегистрироваться</a></p>
   </div>
 </section>
 {% endblock %}
+

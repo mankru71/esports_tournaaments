@@ -1,17 +1,14 @@
-using MailKit.Net.Smtp;
-using MailKit.Security;
 using Microsoft.Extensions.Configuration;
-using MimeKit;
+using System.Net;
+using System.Net.Mail;
 
 namespace EsportsBackend.Services;
 
 /// <summary>
-/// Отправка почты через SMTP (MailKit, STARTTLS на 587-м порту).
+/// Отправка почты через стандартный .NET SmtpClient (System.Net.Mail).
 /// Рассчитано на Gmail с App Password:
 ///   SMTP_HOST=smtp.gmail.com, SMTP_PORT=587,
 ///   SMTP_USER=адрес@gmail.com, SMTP_PASS=16-значный App Password.
-/// Возвращает успех/провал — вызывающий код решает, что сказать пользователю.
-/// Без настроенного SMTP письмо не уходит, ссылка печатается в лог (демо-режим).
 /// </summary>
 public class EmailService
 {
@@ -41,28 +38,31 @@ public class EmailService
             return false;
         }
 
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress("Arena Control", user));
-        message.To.Add(MailboxAddress.Parse(toEmail));
-        message.Subject = subject;
-        message.Body = new BodyBuilder { HtmlBody = body }.ToMessageBody();
-
-        using var client = new SmtpClient();
-        client.Timeout = 15000; // Gmail отвечает быстро; не подвешиваем запрос
         try
         {
-            // 587 + STARTTLS — стандартная конфигурация Gmail (аналог EnableSsl=true)
-            await client.ConnectAsync(host, port, SecureSocketOptions.StartTls);
-            await client.AuthenticateAsync(user, pass);
-            await client.SendAsync(message);
+            using var client = new SmtpClient(host, port)
+            {
+                Credentials = new NetworkCredential(user, pass),
+                EnableSsl = true,
+                Timeout = 15000 // 15 seconds
+            };
+
+            var mailMessage = new MailMessage
+            {
+                From = new MailAddress(user, "Arena Control"),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            mailMessage.To.Add(toEmail);
+
+            await client.SendMailAsync(mailMessage);
             Console.WriteLine($"[EMAIL] Отправлено: {toEmail}");
             return true;
         }
-        catch (MailKit.Security.AuthenticationException ex)
+        catch (SmtpException ex)
         {
-            // Типичная ошибка Gmail 535-5.7.8: неверный App Password или
-            // не включена двухэтапная аутентификация
-            Console.WriteLine($"[EMAIL ERROR] Ошибка аутентификации SMTP ({user}): {ex.Message}");
+            Console.WriteLine($"[EMAIL ERROR] Ошибка SMTP: {ex.Message}");
             Console.WriteLine(">>> Проверьте App Password (без пробелов) и что в Google включена 2FA.");
             return false;
         }
@@ -70,11 +70,6 @@ public class EmailService
         {
             Console.WriteLine($"[EMAIL ERROR] {ex.GetType().Name}: {ex.Message}");
             return false;
-        }
-        finally
-        {
-            if (client.IsConnected)
-                await client.DisconnectAsync(true);
         }
     }
 

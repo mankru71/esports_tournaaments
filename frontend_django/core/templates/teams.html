@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Команды{% endblock %}
 {% block content %}
 <section class="page-hero">
@@ -91,28 +91,76 @@
     
 </form> 
             {% if current_user and current_user.email == team.captainEmail %}
-              <form method="post" class="row g-2 align-items-end">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="add_player">
-                <input type="hidden" name="team_id" value="{{ team.id }}">
-                <div class="col-md-5">
-                  <label class="form-label">Ник игрока</label>
-                  <input class="form-control" name="nickname" type="text" placeholder="electroNic" required>
+              <div class="mt-4 border-top pt-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="mb-0">Управление вакансиями</h6>
+                  <a href="{% url 'smart_scouting' team.id %}" class="btn btn-sm btn-accent" style="background:#ff5500; border:none;">
+                    <i class="bi bi-search"></i> Умный поиск игроков (Tinder)
+                  </a>
                 </div>
-                <div class="col-md-3">
-                  <label class="form-label">Рейтинг</label>
-                  <input class="form-control" name="rating" type="number" step="0.01" placeholder="2450">
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label">Игра</label>
-                  <input class="form-control" name="game" type="text" placeholder="counterstrike" value="counterstrike">
-                </div>
-                <div class="col-md-2">
-                  <button class="btn btn-outline-accent w-100" type="submit">Добавить</button>
-                </div>
-              </form>
+                {% if team.vacancies %}
+                  <div class="d-flex flex-column gap-2 mb-3">
+                    {% for vacancy in team.vacancies %}
+                      <div class="d-flex align-items-center justify-content-between gap-2 border rounded-3 px-3 py-2 bg-dark">
+                        <div>
+                          <div class="fw-semibold text-danger">{{ vacancy.requiredRole }}</div>
+                          <div class="small text-muted">{{ vacancy.description|default:'Нет описания' }}</div>
+                        </div>
+                        <form method="post" class="m-0">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="delete_vacancy">
+                          <input type="hidden" name="team_id" value="{{ team.id }}">
+                          <input type="hidden" name="vacancy_id" value="{{ vacancy.id }}">
+                          <button class="btn btn-sm btn-outline-danger py-0" type="submit">×</button>
+                        </form>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                
+                <form method="post" class="row g-2 align-items-end mb-4">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="create_vacancy">
+                  <input type="hidden" name="team_id" value="{{ team.id }}">
+                  <div class="col-md-4">
+                    <label class="form-label small">Роль</label>
+                    <input class="form-control form-control-sm" name="required_role" type="text" placeholder="Снайпер" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small">Описание</label>
+                    <input class="form-control form-control-sm" name="description" type="text" placeholder="Ищем опытного игрока...">
+                  </div>
+                  <div class="col-md-2">
+                    <button class="btn btn-sm btn-outline-accent w-100" type="submit">Открыть</button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="border-top pt-3">
+                <h6 class="mb-2">Добавить игрока</h6>
+                <form method="post" class="row g-2 align-items-end">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="add_player">
+                  <input type="hidden" name="team_id" value="{{ team.id }}">
+                  <div class="col-md-5">
+                    <label class="form-label small">Ник игрока</label>
+                    <input class="form-control form-control-sm" name="nickname" type="text" placeholder="electroNic" required>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label small">Рейтинг</label>
+                    <input class="form-control form-control-sm" name="rating" type="number" step="0.01" placeholder="2450">
+                  </div>
+                  <div class="col-md-2">
+                    <label class="form-label small">Игра</label>
+                    <input class="form-control form-control-sm" name="game" type="text" placeholder="counterstrike" value="counterstrike">
+                  </div>
+                  <div class="col-md-2">
+                    <button class="btn btn-sm btn-outline-accent w-100" type="submit">Добавить</button>
+                  </div>
+                </form>
+              </div>
             {% else %}
-              <div class="text-muted small">Добавлять/удалять игроков может только капитан команды.</div>
+              <div class="text-muted small mt-3">Добавлять игроков и открывать вакансии может только капитан команды.</div>
             {% endif %}
           </div>
         {% endfor %}

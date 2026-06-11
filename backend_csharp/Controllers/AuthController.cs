@@ -1,6 +1,8 @@
 using Data;
+using EsportsBackend.Services;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Models;
 using System.ComponentModel.DataAnnotations;
@@ -16,10 +18,66 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ILogger<AuthController> _logger;
-    public AuthController(AppDbContext db, ILogger<AuthController> logger)
+    private readonly SteamApiService _steamApi;
+
+    public AuthController(AppDbContext db, ILogger<AuthController> logger, SteamApiService steamApi)
     {
         _db = db;
         _logger = logger;
+        _steamApi = steamApi;
+    }
+
+    [HttpGet("steam/login")]
+    public IActionResult SteamLogin()
+    {
+        // Build absolute return URL
+        var returnUrl = $"{Request.Scheme}://{Request.Host}/api/auth/steam/callback";
+        var realm = $"{Request.Scheme}://{Request.Host}";
+
+        var steamOpenIdUrl = "https://steamcommunity.com/openid/login" +
+            "?openid.ns=http://specs.openid.net/auth/2.0" +
+            "&openid.mode=checkid_setup" +
+            $"&openid.return_to={Uri.EscapeDataString(returnUrl)}" +
+            $"&openid.realm={Uri.EscapeDataString(realm)}" +
+            "&openid.identity=http://specs.openid.net/auth/2.0/identifier_select" +
+            "&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select";
+
+        return Redirect(steamOpenIdUrl);
+    }
+
+    [HttpGet("steam/callback")]
+    public async Task<IActionResult> SteamCallback()
+    {
+        var isValid = await _steamApi.ValidateOpenIdAsync(Request.Query);
+        if (!isValid)
+            return Redirect("http://localhost:8000/login?error=SteamAuthFailed");
+
+        var claimedId = Request.Query["openid.claimed_id"].ToString();
+        var steamId = claimedId.Split('/').LastOrDefault();
+        
+        if (string.IsNullOrEmpty(steamId))
+            return Redirect("http://localhost:8000/login?error=InvalidSteamId");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SteamId == steamId);
+        if (user == null)
+        {
+            var (nickname, avatarUrl) = await _steamApi.GetPlayerSummariesAsync(steamId);
+            
+            user = new AppUser
+            {
+                Email = $"{steamId}@steam.local", // Placeholder email
+                Nickname = !string.IsNullOrWhiteSpace(nickname) ? nickname : $"SteamUser_{steamId.Substring(steamId.Length - 4)}",
+                Role = "player",
+                SteamId = steamId,
+                AvatarUrl = avatarUrl,
+                PasswordHash = Hash(Guid.NewGuid().ToString()) // Random password
+            };
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+        }
+
+        var token = BuildAccessToken(user.Id, user.Email, user.Nickname, user.Role);
+        return Redirect($"http://localhost:8000/login/steam/callback?token={token}");
     }
 
     public class LoginRequest
@@ -53,6 +111,16 @@ public class AuthController : ControllerBase
 
         [MaxLength(500)]
         public string? Bio { get; set; }
+
+        public string? GameRole { get; set; }
+        public string? Availability { get; set; }
+        [MaxLength(150)]
+        public string? Pitch { get; set; }
+        public string? DiscordId { get; set; }
+        public string? HighlightsUrl { get; set; }
+        public string? Country { get; set; }
+        public string? City { get; set; }
+        public string? Languages { get; set; }
     }
 
     public class VerifyRatingRequest
@@ -146,15 +214,16 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("me")]
+    [Authorize]
     public async Task<IActionResult> Me()
     {
         _logger.LogInformation("Incoming /api/auth/me");
 
-        var claims = AuthTokenHelper.ParseClaims(AuthTokenHelper.GetBearerToken(Request));
-        if (!claims.TryGetValue("sub", out var userIdRaw) || !int.TryParse(userIdRaw, out var userId))
+        var userId = User.GetUserId();
+        if (userId == null)
             return Unauthorized(new ProblemDetails { Title = "Unauthorized", Detail = "Invalid token", Status = 401 });
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
         if (user is null)
             return Unauthorized(new ProblemDetails { Title = "Unauthorized", Detail = "User not found", Status = 401 });
 
@@ -164,7 +233,7 @@ public class AuthController : ControllerBase
     [HttpPut("profile")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null)
             return Unauthorized(new { message = "Требуется вход" });
 
@@ -185,6 +254,15 @@ public class AuthController : ControllerBase
 
         user.Nickname = nickname;
         user.Bio = string.IsNullOrWhiteSpace(request.Bio) ? null : request.Bio.Trim();
+        user.GameRole = string.IsNullOrWhiteSpace(request.GameRole) ? null : request.GameRole.Trim();
+        user.Availability = string.IsNullOrWhiteSpace(request.Availability) ? null : request.Availability.Trim();
+        user.Pitch = string.IsNullOrWhiteSpace(request.Pitch) ? null : request.Pitch.Trim();
+        user.DiscordId = string.IsNullOrWhiteSpace(request.DiscordId) ? null : request.DiscordId.Trim();
+        user.HighlightsUrl = string.IsNullOrWhiteSpace(request.HighlightsUrl) ? null : request.HighlightsUrl.Trim();
+        user.Country = string.IsNullOrWhiteSpace(request.Country) ? null : request.Country.Trim();
+        user.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+        user.Languages = string.IsNullOrWhiteSpace(request.Languages) ? null : request.Languages.Trim();
+        
         await _db.SaveChangesAsync();
 
         return Ok(ToUserDto(user));
@@ -198,7 +276,7 @@ public class AuthController : ControllerBase
     [HttpGet("profile/rating-history")]
     public async Task<IActionResult> RatingHistory([FromServices] Services.RatingHistoryService history, CancellationToken ct)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null)
             return Unauthorized(new { message = "Требуется вход" });
 
@@ -234,7 +312,7 @@ public class AuthController : ControllerBase
     [HttpPost("profile/looking-for-team")]
     public async Task<IActionResult> SetLookingForTeam([FromBody] LookingForTeamRequest request)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null)
             return Unauthorized(new { message = "Требуется вход" });
 
@@ -258,7 +336,7 @@ public class AuthController : ControllerBase
     [HttpPost("profile/verify-rating")]
     public async Task<IActionResult> VerifyRating([FromBody] VerifyRatingRequest request, [FromServices] Services.RatingHistoryService history)
     {
-        var userId = AuthTokenHelper.GetUserId(Request);
+        var userId = User.GetUserId();
         if (userId is null)
             return Unauthorized(new { message = "Требуется вход" });
 
@@ -294,7 +372,7 @@ public class AuthController : ControllerBase
         });
     }
 
-    private static object ToUserDto(AppUser user) => new
+    private object ToUserDto(AppUser user) => new
     {
         id = user.Id,
         email = user.Email,
@@ -305,6 +383,7 @@ public class AuthController : ControllerBase
         isEmailVerified = user.IsEmailVerified,
         isLookingForTeam = user.IsLookingForTeam,
         lookingForTeamSinceUtc = user.LookingForTeamSinceUtc,
+        
         faceitNickname = user.FaceitNickname,
         faceitElo = user.FaceitElo,
         faceitLevel = user.FaceitLevel,
@@ -316,7 +395,21 @@ public class AuthController : ControllerBase
         ratingProvider = user.RatingProvider,
         ratingVerified = user.RatingVerified,
         ratingVerifiedAtUtc = user.RatingVerifiedAtUtc,
-        ratingProfileUrl = user.RatingProfileUrl
+        ratingProfileUrl = user.RatingProfileUrl,
+
+        gameRole = user.GameRole,
+        availability = user.Availability,
+        pitch = user.Pitch,
+        discordId = user.DiscordId,
+        highlightsUrl = user.HighlightsUrl,
+        
+        country = user.Country,
+        city = user.City,
+        languages = user.Languages,
+        
+        reputation = _db.PlayerEndorsements.Count(e => e.EndorsedUserId == user.Id),
+        
+        invites = _db.TeamInvites.Include(i => i.Team).Where(i => i.UserId == user.Id && i.Status == "pending").Select(i => new { id = i.Id, teamId = i.TeamId, teamName = i.Team!.Name, createdAtUtc = i.CreatedAtUtc }).ToList()
     };
 
     private static string Hash(string plain)
@@ -325,23 +418,27 @@ public class AuthController : ControllerBase
         return Convert.ToHexString(bytes);
     }
 
-    private static string BuildAccessToken(int userId, string email, string nickname, string role)
+    private string BuildAccessToken(int userId, string email, string nickname, string role)
     {
-        var header = Base64UrlEncode("{\"alg\":\"none\",\"typ\":\"JWT\"}");
-        var payloadObj = new
-        {
-            sub = userId,
-            email,
-            nickname,
-            role,
-            exp = DateTimeOffset.UtcNow.AddHours(8).ToUnixTimeSeconds()
-        };
-        var payload = Base64UrlEncode(JsonSerializer.Serialize(payloadObj));
-        return $"{header}.{payload}.local";
-    }
+        var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var key = configuration["Jwt:Key"] ?? "super_secret_key_12345678901234567890";
+        var securityKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+        var credentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(securityKey, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);
 
-    private static string Base64UrlEncode(string plain)
-    {
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(plain)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var claims = new[]
+        {
+            new System.Security.Claims.Claim(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new System.Security.Claims.Claim("email", email ?? ""),
+            new System.Security.Claims.Claim("nickname", nickname ?? ""),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role ?? "player"),
+            new System.Security.Claims.Claim("role", role ?? "player") // Add generic role for backward compatibility if needed
+        };
+
+        var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
+            claims: claims,
+            expires: DateTime.UtcNow.AddHours(8),
+            signingCredentials: credentials);
+
+        return new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().WriteToken(token);
     }
 }

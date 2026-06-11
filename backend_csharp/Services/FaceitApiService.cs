@@ -17,6 +17,7 @@ public sealed class FaceitPlayerInfo
 public sealed class FaceitApiService
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _config;
     private readonly ILogger<FaceitApiService> _logger;
     private readonly string? _apiKey;
 
@@ -28,6 +29,7 @@ public sealed class FaceitApiService
     public FaceitApiService(IHttpClientFactory httpClientFactory, IConfiguration config, ILogger<FaceitApiService> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _config = config;
         _logger = logger;
         _apiKey = (config["Faceit:ApiKey"] ?? config["FACEIT_API_KEY"])?.Trim();
     }
@@ -109,5 +111,59 @@ public sealed class FaceitApiService
             Level = level,
             FaceitUrl = faceitUrl
         };
+    }
+    public string ClientId => _config["Faceit:ClientId"] ?? "";
+    private string ClientSecret => _config["Faceit:ClientSecret"] ?? "";
+
+    /// <summary>
+    /// Obtains Faceit player info using an OAuth code.
+    /// Exchanges code for token, gets userinfo (to find nickname), then fetches player details.
+    /// </summary>
+    public async Task<FaceitPlayerInfo?> VerifyOAuthCodeAsync(string code, string redirectUri, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(ClientId) || string.IsNullOrEmpty(ClientSecret))
+            throw new InvalidOperationException("Faceit OAuth не настроен (Client ID/Secret отсутствует).");
+
+        using var client = new HttpClient();
+        
+        // 1. Exchange code for access token
+        var authHeader = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"));
+        var tokenReq = new HttpRequestMessage(HttpMethod.Post, "https://api.faceit.com/auth/v1/oauth/token")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                {"grant_type", "authorization_code"},
+                {"code", code}
+            })
+        };
+        tokenReq.Headers.Authorization = new AuthenticationHeaderValue("Basic", authHeader);
+        
+        var tokenRes = await client.SendAsync(tokenReq, ct);
+        if (!tokenRes.IsSuccessStatusCode)
+        {
+            var err = await tokenRes.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("Faceit OAuth token exchange failed: {Error}", err);
+            throw new InvalidOperationException("Ошибка при обмене OAuth кода.");
+        }
+
+        using var tokenDoc = await JsonDocument.ParseAsync(await tokenRes.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var accessToken = tokenDoc.RootElement.GetProperty("access_token").GetString();
+
+        // 2. Fetch UserInfo to get nickname
+        var userInfoReq = new HttpRequestMessage(HttpMethod.Get, "https://api.faceit.com/auth/v1/resources/userinfo");
+        userInfoReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        
+        var userInfoRes = await client.SendAsync(userInfoReq, ct);
+        if (!userInfoRes.IsSuccessStatusCode)
+            throw new InvalidOperationException("Не удалось получить информацию о пользователе Faceit.");
+
+        using var userDoc = await JsonDocument.ParseAsync(await userInfoRes.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var nickname = userDoc.RootElement.GetProperty("nickname").GetString();
+
+        if (string.IsNullOrEmpty(nickname))
+            throw new InvalidOperationException("Faceit вернул пустой никнейм.");
+
+        // 3. Fetch full player stats via Data API
+        return await GetPlayerByNicknameAsync(nickname, ct);
     }
 }

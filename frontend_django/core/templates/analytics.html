@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% load bracket_extras %}
 {% block title %}Аналитика{% endblock %}
 {% block content %}

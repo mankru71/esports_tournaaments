@@ -67,6 +67,7 @@ public class DiscordWebhookService
                 {
                     title = "Матч в эфире",
                     description = $"{teamA} — {teamB}",
+                    url = $"http://localhost:8000/play/tournaments/{match.TournamentId}/matches/",
                     color = 15844367,
                     fields = new[]
                     {

@@ -1,0 +1,193 @@
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
+{% block title %}Fantasy Draft - {{ tournament.name }}{% endblock %}
+{% block content %}
+<style>
+  .fantasy-player-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: transform 0.2s, border-color 0.2s;
+    cursor: pointer;
+  }
+  .fantasy-player-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+  .fantasy-player-card.selected {
+    border-color: var(--success);
+    background: rgba(40, 167, 69, 0.05);
+  }
+  .fantasy-cost {
+    font-weight: bold;
+    color: #ff5500;
+  }
+  .roster-slot {
+    background: var(--surface-2);
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: var(--muted);
+  }
+  .roster-slot.filled {
+    border-style: solid;
+    border-color: var(--accent);
+    background: var(--surface);
+    color: var(--text);
+  }
+</style>
+
+<div class="container py-4" id="fantasy-draft-container">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h3 fw-bold mb-1">Fantasy Draft: {{ tournament.name }}</h1>
+      <p class="text-muted mb-0">Соберите команду из 5 игроков, не превысив бюджет в 500$</p>
+    </div>
+    <div class="text-end">
+      <div class="h4 mb-0 fw-bold">Бюджет: <span id="budget-remaining" style="color: #ff5500;">500</span>$</div>
+      <small class="text-muted"><span id="drafted-count">0</span>/5 игроков выбрано</small>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Roster Panel -->
+    <div class="col-lg-4">
+      <div class="card p-3 mb-4 sticky-top" style="top: 80px;">
+        <h5 class="fw-bold mb-3">Ваш состав</h5>
+        
+        <form id="fantasy-draft-form" hx-post="{% url 'fantasy_draft_submit' tournament.id %}" hx-target="#fantasy-draft-container" hx-swap="outerHTML">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label small">Название команды</label>
+            <input type="text" class="form-control" name="team_name" placeholder="Моя дрим-тим" required>
+          </div>
+          
+          <div id="roster-slots" class="d-flex flex-column gap-2 mb-4">
+            <!-- Hidden inputs will be added here dynamically -->
+            <div class="roster-slot" id="slot-1">Игрок 1</div>
+            <div class="roster-slot" id="slot-2">Игрок 2</div>
+            <div class="roster-slot" id="slot-3">Игрок 3</div>
+            <div class="roster-slot" id="slot-4">Игрок 4</div>
+            <div class="roster-slot" id="slot-5">Игрок 5</div>
+          </div>
+          
+          <button type="submit" class="btn btn-accent w-100 fw-bold" id="btn-submit" disabled>Утвердить состав</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Players Pool -->
+    <div class="col-lg-8">
+      <div class="d-flex gap-3 mb-3">
+        <input type="text" class="form-control" placeholder="Поиск игрока..." id="player-search">
+      </div>
+      
+      <div class="row g-3" id="players-pool">
+        {% for p in players %}
+        <div class="col-md-6 col-lg-4 player-card-wrapper" data-name="{{ p.nickname|lower }}">
+          <div class="fantasy-player-card" 
+               onclick="togglePlayer(this, {{ p.id }}, '{{ p.nickname }}', {{ p.cost }})">
+            <div class="fw-bold">{{ p.nickname }}</div>
+            <div class="small text-muted mb-2">{{ p.teamName }}</div>
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="fantasy-cost">{{ p.cost }}$</span>
+              <i class="bi bi-plus-circle text-accent"></i>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center text-muted p-5 border rounded">
+          Для этого турнира пока не загружены игроки команд.
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  
+  <div class="mt-5 border-top pt-4">
+    <h3 class="fw-bold mb-3">Таблица лидеров</h3>
+    <div id="leaderboard-container" hx-get="{% url 'fantasy_leaderboard' tournament.id %}" hx-trigger="load">
+      <div class="text-center py-4"><div class="spinner-border text-accent"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let draftedPlayers = [];
+  const MAX_PLAYERS = 5;
+  const BUDGET = 500;
+  
+  function togglePlayer(cardElement, id, name, cost) {
+    const isSelected = cardElement.classList.contains('selected');
+    
+    if (isSelected) {
+      // Remove
+      draftedPlayers = draftedPlayers.filter(p => p.id !== id);
+      cardElement.classList.remove('selected');
+      cardElement.querySelector('.bi').classList.replace('bi-check-circle-fill', 'bi-plus-circle');
+    } else {
+      // Add
+      if (draftedPlayers.length >= MAX_PLAYERS) {
+        alert("Вы уже выбрали 5 игроков!");
+        return;
+      }
+      const currentCost = draftedPlayers.reduce((sum, p) => sum + p.cost, 0);
+      if (currentCost + cost > BUDGET) {
+        alert("Недостаточно бюджета!");
+        return;
+      }
+      
+      draftedPlayers.push({ id, name, cost });
+      cardElement.classList.add('selected');
+      cardElement.querySelector('.bi').classList.replace('bi-plus-circle', 'bi-check-circle-fill');
+    }
+    
+    updateRosterUI();
+  }
+  
+  function updateRosterUI() {
+    const slots = document.querySelectorAll('.roster-slot');
+    const form = document.getElementById('fantasy-draft-form');
+    let totalCost = 0;
+    
+    // Clear old hidden inputs
+    form.querySelectorAll('input[name="player_id"]').forEach(el => el.remove());
+    
+    slots.forEach((slot, index) => {
+      if (index < draftedPlayers.length) {
+        const p = draftedPlayers[index];
+        slot.className = 'roster-slot filled flex-column gap-1';
+        slot.innerHTML = `<div class="fw-bold">${p.name}</div><div class="small fantasy-cost">${p.cost}$</div>`;
+        totalCost += p.cost;
+        
+        // Add hidden input
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'player_id';
+        input.value = p.id;
+        form.appendChild(input);
+      } else {
+        slot.className = 'roster-slot';
+        slot.innerHTML = `Игрок ${index + 1}`;
+      }
+    });
+    
+    document.getElementById('budget-remaining').textContent = BUDGET - totalCost;
+    document.getElementById('drafted-count').textContent = draftedPlayers.length;
+    document.getElementById('btn-submit').disabled = (draftedPlayers.length !== MAX_PLAYERS);
+  }
+  
+  // Search filter
+  document.getElementById('player-search')?.addEventListener('input', function(e) {
+    const term = e.target.value.toLowerCase();
+    document.querySelectorAll('.player-card-wrapper').forEach(card => {
+      const name = card.getAttribute('data-name');
+      card.style.display = name.includes(term) ? 'block' : 'none';
+    });
+  });
+</script>
+{% endblock %}

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% load bracket_extras %}
 {% block title %}Профиль{% endblock %}
 {% block content %}
@@ -32,7 +32,13 @@
           <div>
             <h1 class="h5 mb-0 fw-bold">{{ current_user.nickname }}</h1>
             <div class="text-muted small">{{ current_user.email }}</div>
-            <span class="badge bg-secondary text-capitalize mt-1">{{ current_user.role }}</span>
+            <div class="mt-2 d-flex gap-2 flex-wrap align-items-center">
+              <span class="badge bg-secondary text-capitalize">{{ current_user.role }}</span>
+              <span class="badge" style="background-color: var(--accent);">
+                <i class="fas fa-medal me-1"></i> MMR: {{ current_user.predictorMMR|default:1000 }}
+              </span>
+              <!-- Optionally list badges if you have them in current_user.badges (needs backend support) -->
+            </div>
           </div>
         </div>
 
@@ -44,12 +50,72 @@
             {{ edit_form.nickname }}
           </div>
           <div>
+            <label class="form-label fw-semibold">{{ edit_form.game_role.label }}</label>
+            {{ edit_form.game_role }}
+          </div>
+          <div>
+            <label class="form-label fw-semibold">{{ edit_form.availability.label }}</label>
+            {{ edit_form.availability }}
+          </div>
+          <div>
+            <label class="form-label fw-semibold">{{ edit_form.pitch.label }}</label>
+            {{ edit_form.pitch }}
+          </div>
+          <div>
+            <label class="form-label fw-semibold">{{ edit_form.discord_id.label }}</label>
+            {{ edit_form.discord_id }}
+          </div>
+          <div>
+            <label class="form-label fw-semibold">{{ edit_form.highlights_url.label }}</label>
+            {{ edit_form.highlights_url }}
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label fw-semibold">{{ edit_form.country.label }}</label>
+              {{ edit_form.country }}
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">{{ edit_form.city.label }}</label>
+              {{ edit_form.city }}
+            </div>
+          </div>
+          <div>
+            <label class="form-label fw-semibold">{{ edit_form.languages.label }}</label>
+            {{ edit_form.languages }}
+          </div>
+          <div>
             <label class="form-label fw-semibold">{{ edit_form.bio.label }}</label>
             {{ edit_form.bio }}
           </div>
           <button class="btn btn-accent" type="submit">Сохранить профиль</button>
         </form>
       </div>
+
+      <!-- Pending Invites -->
+      {% if current_user.invites %}
+      <div class="card mb-4 border-0" style="background-color: var(--surface-bg);">
+        <div class="card-body p-4">
+          <h2 class="h5 mb-3 text-warning"><i class="bi bi-envelope me-2"></i>Приглашения в команды</h2>
+          <div class="d-flex flex-column gap-3">
+            {% for invite in current_user.invites %}
+            <div class="d-flex align-items-center justify-content-between p-3 border rounded bg-dark">
+              <div>
+                <div class="fw-semibold">{{ invite.teamName }}</div>
+                <div class="text-muted small">Приглашение отправлено</div>
+              </div>
+              <form method="post" class="d-flex gap-2 m-0">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="respond_invite">
+                <input type="hidden" name="invite_id" value="{{ invite.id }}">
+                <button type="submit" name="response_action" value="accept" class="btn btn-sm btn-success">Принять</button>
+                <button type="submit" name="response_action" value="decline" class="btn btn-sm btn-outline-danger">Отклонить</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
 
       <!-- Faceit card -->
       <div class="form-card p-4">
@@ -110,20 +176,64 @@
           </form>
 
         {% else %}
-          <!-- Link form -->
+          <!-- Link OAuth -->
           <p class="text-muted small mb-3">
-            Привяжите Faceit-аккаунт, чтобы отображать ELO, уровень и аватар.
+            Привяжите Faceit-аккаунт, чтобы подтвердить рейтинг на доске скаутинга.
           </p>
           <form method="post" class="d-flex flex-column gap-3">
             {% csrf_token %}
-            <input type="hidden" name="action" value="verify_faceit">
-            <div>
-              <label class="form-label fw-semibold">{{ faceit_form.faceit_nickname.label }}</label>
-              {{ faceit_form.faceit_nickname }}
+            <input type="hidden" name="action" value="link_faceit_oauth">
+            <button class="btn w-100 fw-semibold d-flex align-items-center justify-content-center gap-2" type="submit"
+                    style="background:#ff5500;border-color:#ff5500;color:#fff; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(255,85,0,0.2);">
+              <i class="bi bi-link-45deg"></i>
+              Войти через Faceit
+            </button>
+          </form>
+        {% endif %}
+      </div>
+
+      <!-- Steam card -->
+      <div class="form-card p-4 mt-4">
+        <h2 class="h5 fw-bold mb-3 d-flex align-items-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#66c0f4" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.5 14c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM11 12.5c0 1.93-1.57 3.5-3.5 3.5S4 14.43 4 12.5 5.57 9 7.5 9c1.03 0 1.95.45 2.6 1.16l2.12-1.2A5.47 5.47 0 0 1 11 12.5z"/>
+          </svg>
+          Steam
+        </h2>
+
+        {% if current_user.steamId %}
+          <div class="rounded-3 p-3 mb-3"
+               style="background:linear-gradient(135deg,#171a21 0%,#1b2838 100%);border:1px solid #66c0f4;">
+            <div class="d-flex align-items-center gap-3">
+              {% if current_user.avatarUrl %}
+                <img src="{{ current_user.avatarUrl }}" alt="Steam Avatar"
+                     class="rounded-circle flex-shrink-0"
+                     style="width:52px;height:52px;object-fit:cover;border:2px solid #66c0f4;">
+              {% else %}
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                     style="width:52px;height:52px;background:#66c0f4;font-weight:700;font-size:1.3rem;color:#171a21;">
+                  S
+                </div>
+              {% endif %}
+
+              <div class="flex-grow-1 min-w-0">
+                <div class="fw-bold text-white text-truncate">{{ current_user.nickname }}</div>
+                <div class="text-muted small">Steam ID: {{ current_user.steamId }}</div>
+              </div>
             </div>
-            <button class="btn w-100 fw-semibold" type="submit"
-                    style="background:#ff5500;border-color:#ff5500;color:#fff;">
-              Привязать Faceit
+          </div>
+          <p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i> Аккаунт подтвержден (No VAC)</p>
+        {% else %}
+          <p class="text-muted small mb-3">
+            Привяжите Steam, чтобы подтвердить чистоту аккаунта перед регистрацией на турниры.
+          </p>
+          <form method="post" class="d-flex flex-column gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="link_steam_openid">
+            <button class="btn w-100 fw-semibold d-flex align-items-center justify-content-center gap-2" type="submit"
+                    style="background:#171a21;border-color:#66c0f4;color:#66c0f4; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(102,192,244,0.1);">
+              <i class="bi bi-steam"></i>
+              Войти через Steam
             </button>
           </form>
         {% endif %}
@@ -134,7 +244,7 @@
         <h2 class="h5 fw-bold mb-2">Скаутинг</h2>
         {% if current_user.isLookingForTeam %}
           <p class="text-muted small mb-3">
-            Вы на <a href="{% url 'scouting' %}">доске скаутинга</a> — капитаны видят ваш профиль среди свободных агентов.
+            Вы на <a href="{% url 'play_scouting' %}">доске скаутинга</a> — капитаны видят ваш профиль среди свободных агентов.
           </p>
           <form method="post">
             {% csrf_token %}
@@ -144,7 +254,7 @@
           </form>
         {% else %}
           <p class="text-muted small mb-3">
-            Ищете команду? Включите статус — попадёте на <a href="{% url 'scouting' %}">доску скаутинга</a>,
+            Ищете команду? Включите статус — попадёте на <a href="{% url 'play_scouting' %}">доске скаутинга</a>,
             где вас увидят капитаны. Привязанный Faceit Elo поднимает вас в списке.
           </p>
           <form method="post">
@@ -222,7 +332,7 @@
         {% endif %}
 
         <div class="mt-4 pt-3 border-top">
-          <a class="btn btn-sm btn-outline-accent" href="{% url 'streams' %}">
+          <a class="btn btn-sm btn-outline-accent" href="{% url 'pro_streams' %}">
             Поиск игроков и стримов →
           </a>
         </div>

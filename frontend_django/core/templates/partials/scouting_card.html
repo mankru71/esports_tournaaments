@@ -1,0 +1,59 @@
+{% if recommendation %}
+<div class="tinder-card" id="scouting-card-{{ recommendation.id }}">
+  {% if recommendation.faceitAvatar %}
+    <img src="{{ recommendation.faceitAvatar }}" alt="{{ recommendation.nickname }}" class="tinder-avatar">
+  {% else %}
+    <div class="tinder-avatar-placeholder">
+      {{ recommendation.nickname|first|upper }}
+    </div>
+  {% endif %}
+  
+  <h2 class="h4 fw-bold mb-1">{{ recommendation.nickname }}</h2>
+  
+  <div class="d-flex justify-content-center gap-2 mb-3">
+    <span class="badge bg-secondary">{{ recommendation.gameRole|default:"Любая роль" }}</span>
+    <span class="badge" style="background-color: #ff5500;">
+      {{ recommendation.faceitElo }} ELO
+    </span>
+  </div>
+  
+  {% if recommendation.availability %}
+  <div class="text-muted small mb-3">
+    <i class="bi bi-clock"></i> Прайм-тайм: {{ recommendation.availability }}
+  </div>
+  {% endif %}
+  
+  {% if recommendation.pitch %}
+  <p class="text-muted small mt-2">
+    "{{ recommendation.pitch }}"
+  </p>
+  {% endif %}
+
+  <div class="tinder-controls">
+    <!-- SKIP BUTTON -->
+    <button class="tinder-btn btn-skip" 
+            hx-post="{% url 'smart_scouting_swipe' team_id %}" 
+            hx-vals='{"player_id": {{ recommendation.id }}, "action": "skip"}'
+            hx-target="#scouting-container"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('scouting-card-{{ recommendation.id }}').classList.add('swiping-left')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+    
+    <!-- INVITE BUTTON -->
+    <button class="tinder-btn btn-invite"
+            hx-post="{% url 'smart_scouting_swipe' team_id %}" 
+            hx-vals='{"player_id": {{ recommendation.id }}, "action": "invite"}'
+            hx-target="#scouting-container"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('scouting-card-{{ recommendation.id }}').classList.add('swiping-right')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    </button>
+  </div>
+</div>
+{% else %}
+<div class="text-center p-5 border rounded" style="background: var(--surface-2);">
+  <h2 class="h5 fw-bold mb-2">Кандидатов не найдено</h2>
+  <p class="text-muted small">Пока нет подходящих свободных агентов или вы просмотрели всех доступных игроков.</p>
+</div>
+{% endif %}

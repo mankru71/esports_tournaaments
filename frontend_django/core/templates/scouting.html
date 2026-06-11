@@ -1,11 +1,11 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Скаутинг{% endblock %}
 {% block content %}
 <section>
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Доска скаутинга</h1>
-      <p class="text-muted mb-0">Свободные агенты, которые ищут команду. Сортировка: подтверждённый Faceit Elo.</p>
+      <p class="text-muted mb-0">Свободные агенты, которые ищут команду. Найдите идеального игрока для вашего состава.</p>
     </div>
     {% if current_user %}
     <form method="post" class="m-0">
@@ -22,59 +22,274 @@
     {% endif %}
   </div>
 
-  {% if free_agents %}
-  <div class="row g-3">
+  <ul class="nav nav-tabs mb-4" id="scoutingTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="agents-tab" data-bs-toggle="tab" data-bs-target="#agents" type="button" role="tab">Свободные агенты</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="vacancies-tab" data-bs-toggle="tab" data-bs-target="#vacancies" type="button" role="tab">Открытые вакансии</button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="scoutingTabsContent">
+    <!-- FREE AGENTS TAB -->
+    <div class="tab-pane fade show active" id="agents" role="tabpanel" tabindex="0">
+      {% if free_agents %}
+  <!-- Filters Bar -->
+  <div class="card p-3 mb-4 border-0" style="background-color: var(--surface-2);">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label for="searchName" class="form-label small text-muted mb-1">Поиск по нику</label>
+        <input type="text" id="searchName" class="form-control form-control-sm" placeholder="Например, s1mple...">
+      </div>
+      <div class="col-md-2">
+        <label for="filterRole" class="form-label small text-muted mb-1">Роль</label>
+        <select id="filterRole" class="form-select form-select-sm">
+          <option value="">Все роли</option>
+          <!-- Roles will be populated by JS based on agents -->
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label for="filterMinElo" class="form-label small text-muted mb-1">Мин. ELO</label>
+        <input type="number" id="filterMinElo" class="form-control form-control-sm" placeholder="0" min="0">
+      </div>
+      <div class="col-md-3">
+        <label for="sortOrder" class="form-label small text-muted mb-1">Сортировка</label>
+        <select id="sortOrder" class="form-select form-select-sm">
+          <option value="elo_desc">Faceit ELO (по убыванию)</option>
+          <option value="elo_asc">Faceit ELO (по возрастанию)</option>
+          <option value="newest">Недавно ищут</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button type="button" id="resetFilters" class="btn btn-sm btn-outline-secondary w-100">Сбросить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3" id="agentsGrid">
     {% for agent in free_agents %}
-    <div class="col-md-6 col-xl-4">
-      <div class="card p-3 h-100">
+    <div class="col-md-6 col-xl-4 agent-card-wrapper" 
+         data-nickname="{{ agent.nickname|lower }}" 
+         data-role="{{ agent.gameRole|default:'none'|lower }}" 
+         data-elo="{{ agent.faceitElo|default:0 }}"
+         data-timestamp="{{ agent.lookingForTeamSinceUtc|default:'' }}">
+      <div class="card p-3 h-100 border-0" style="background-color: var(--surface-2); transition: transform 0.2s, box-shadow 0.2s; border-radius: 12px;">
         <div class="d-flex align-items-center gap-3">
           {% if agent.faceitAvatar %}
             <img src="{{ agent.faceitAvatar }}" alt="{{ agent.nickname }}"
-                 class="rounded-circle flex-shrink-0"
-                 style="width:48px;height:48px;object-fit:cover;">
+                 class="rounded-circle flex-shrink-0 shadow-sm"
+                 style="width:56px;height:56px;object-fit:cover; border: 2px solid var(--accent-color);">
           {% else %}
-            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center flex-shrink-0"
-                 style="width:48px;height:48px;font-weight:700;color:#fff;">
+            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm"
+                 style="width:56px;height:56px;font-weight:700;color:#fff; border: 2px solid #555;">
               {{ agent.nickname|first|upper }}
             </div>
           {% endif %}
           <div class="flex-grow-1 min-w-0">
-            <div class="fw-semibold text-truncate">
+            <div class="fw-semibold fs-5 text-truncate d-flex align-items-center gap-1">
               {{ agent.nickname }}
-              {% if agent.ratingVerified %}<span class="text-success" title="Рейтинг подтверждён">✓</span>{% endif %}
+              {% if agent.ratingVerified %}
+                <span class="text-success small" title="Рейтинг подтверждён" style="font-size: 0.9rem;">✓</span>
+              {% endif %}
             </div>
-            <div class="text-muted small text-capitalize">{{ agent.role }}{% if agent.since_label %} · ищет {{ agent.since_label }}{% endif %}</div>
-          </div>
-          <div class="text-end flex-shrink-0">
-            {% if agent.faceitElo %}
-              <div class="fw-bold" style="color:#ffb347;">{{ agent.faceitElo }}</div>
-              <div class="text-muted small">Faceit ELO{% if agent.faceitLevel %} · Lvl {{ agent.faceitLevel }}{% endif %}</div>
-            {% elif agent.rating %}
-              <div class="fw-bold">{{ agent.rating }}</div>
-              <div class="text-muted small">рейтинг</div>
-            {% else %}
-              <div class="text-muted small">без рейтинга</div>
+            <div class="text-muted small text-capitalize mt-1">
+              {% if agent.gameRole and agent.gameRole != 'none' %}
+                <span class="badge bg-dark border text-light me-1 px-2 py-1">{{ agent.gameRole }}</span>
+              {% endif %}
+              {% if agent.since_label %}
+                <span class="opacity-75">· {{ agent.since_label }}</span>
+              {% endif %}
+            </div>
+            {% if agent.availability %}
+            <div class="text-muted small mt-1">
+              <i class="bi bi-clock"></i> Время: {{ agent.availability }}
+            </div>
             {% endif %}
-          </div>
+            
+            {% if agent.country or agent.city or agent.languages %}
+            <div class="text-muted small mt-1">
+              <i class="bi bi-geo-alt"></i> 
+              {% if agent.city %}{{ agent.city }}{% if agent.country %}, {% endif %}{% endif %}
+              {% if agent.country %}{{ agent.country }}{% endif %}
+              {% if agent.languages %} · {{ agent.languages }}{% endif %}
+            </div>
+          {% endif %}
         </div>
-        {% if agent.bio %}
-        <div class="text-muted small mt-2 mb-0">{{ agent.bio|truncatechars:120 }}</div>
-        {% endif %}
-        {% if agent.faceitProfileUrl %}
-        <div class="mt-2">
-          <a class="small" href="{{ agent.faceitProfileUrl }}" target="_blank" rel="noopener">Faceit-профиль →</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Empty state for filters -->
+  <div id="noResults" class="empty-state d-none mt-4 border-0" style="background-color: var(--surface-2);">
+    <h5 class="mb-2">Никого не найдено</h5>
+    <p class="text-muted small mb-0">Попробуйте изменить параметры поиска или сбросить фильтры.</p>
+  </div>
+  {% else %}
+  <div class="alert alert-secondary mt-3 text-center py-5" style="background-color: var(--surface-2); border: none;">
+    <i class="bi bi-person-x fs-1 text-muted mb-2 d-block"></i>
+    Пока нет ни одного свободного агента.
+  </div>
+  {% endif %}
+</div>
+
+<!-- VACANCIES TAB -->
+<div class="tab-pane fade" id="vacancies" role="tabpanel" tabindex="0">
+  {% if vacancies %}
+  <div class="row g-3">
+    {% for vacancy in vacancies %}
+    <div class="col-md-6 col-xl-4">
+      <div class="card p-3 h-100 border-0" style="background-color: var(--surface-2); border-radius: 12px;">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="fw-bold fs-5">{{ vacancy.teamName }}</div>
+          <span class="badge bg-danger">{{ vacancy.requiredRole }}</span>
         </div>
-        {% endif %}
+        <div class="text-muted small mb-3 flex-grow-1">
+          {% if vacancy.description %}
+            {{ vacancy.description }}
+          {% else %}
+            Команда ищет игрока на роль: {{ vacancy.requiredRole }}
+          {% endif %}
+        </div>
+        <div class="text-end border-top border-secondary pt-2 mt-auto">
+          <a href="/teams/" class="btn btn-sm btn-outline-accent">Профиль команды</a>
+        </div>
       </div>
     </div>
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty-state">
-    Сейчас на доске никого нет. Ищете команду? Включите статус «Ищу команду»
-    {% if current_user %}кнопкой выше{% else %}в <a href="{% url 'profile' %}">профиле</a> после входа{% endif %} —
-    и капитаны вас заметят.
+  <div class="alert alert-secondary mt-3 text-center py-5" style="background-color: var(--surface-2); border: none;">
+    <i class="bi bi-card-text fs-1 text-muted mb-2 d-block"></i>
+    Пока нет открытых вакансий.
   </div>
   {% endif %}
+</div>
+</div>
 </section>
+
+<script>
+function copyDiscord(btn, discordId) {
+  navigator.clipboard.writeText(discordId).then(() => {
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check2"></i> Скопировано!';
+    setTimeout(() => {
+      btn.innerHTML = originalText;
+    }, 2000);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const grid = document.getElementById('agentsGrid');
+  if (!grid) return;
+
+  const cards = Array.from(grid.querySelectorAll('.agent-card-wrapper'));
+  const searchInput = document.getElementById('searchName');
+  const roleFilter = document.getElementById('filterRole');
+  const minEloFilter = document.getElementById('filterMinElo');
+  const sortSelect = document.getElementById('sortOrder');
+  const resetBtn = document.getElementById('resetFilters');
+  const noResults = document.getElementById('noResults');
+
+  // Populate roles dynamically
+  const roles = new Set();
+  cards.forEach(c => {
+    const r = c.getAttribute('data-role');
+    if (r && r !== 'none' && r !== '') roles.add(r);
+  });
+  
+  Array.from(roles).sort().forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = r.charAt(0).toUpperCase() + r.slice(1);
+    roleFilter.appendChild(opt);
+  });
+
+  const applyFilters = () => {
+    const q = searchInput.value.toLowerCase().trim();
+    const r = roleFilter.value.toLowerCase();
+    const minElo = parseInt(minEloFilter.value, 10) || 0;
+
+    let visibleCount = 0;
+    
+    // Sort array before displaying
+    const sortVal = sortSelect.value;
+    cards.sort((a, b) => {
+      if (sortVal === 'elo_desc') {
+        return parseInt(b.getAttribute('data-elo')) - parseInt(a.getAttribute('data-elo'));
+      } else if (sortVal === 'elo_asc') {
+        return parseInt(a.getAttribute('data-elo')) - parseInt(b.getAttribute('data-elo'));
+      } else if (sortVal === 'newest') {
+        const ta = a.getAttribute('data-timestamp') || '';
+        const tb = b.getAttribute('data-timestamp') || '';
+        return ta < tb ? 1 : ta > tb ? -1 : 0;
+      }
+      return 0;
+    });
+
+    cards.forEach(card => {
+      const name = card.getAttribute('data-nickname');
+      const role = card.getAttribute('data-role');
+      const elo = parseInt(card.getAttribute('data-elo'), 10) || 0;
+
+      const matchName = name.includes(q);
+      const matchRole = r === '' || role === r;
+      const matchElo = elo >= minElo;
+
+      if (matchName && matchRole && matchElo) {
+        card.style.display = '';
+        grid.appendChild(card); // Re-append to DOM to apply sort order
+        visibleCount++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    if (visibleCount === 0) {
+      noResults.classList.remove('d-none');
+    } else {
+      noResults.classList.add('d-none');
+    }
+  };
+
+  searchInput.addEventListener('input', applyFilters);
+  roleFilter.addEventListener('change', applyFilters);
+  minEloFilter.addEventListener('input', applyFilters);
+  sortSelect.addEventListener('change', applyFilters);
+
+  resetBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    roleFilter.value = '';
+    minEloFilter.value = '';
+    sortSelect.value = 'elo_desc';
+    applyFilters();
+  });
+
+  // Setup Copy buttons hover effect
+  const copyBtns = document.querySelectorAll('button[onclick^="copyDiscord"]');
+  copyBtns.forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+      btn.style.filter = 'brightness(1.1)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.filter = 'brightness(1)';
+    });
+  });
+  cards.forEach(c => {
+    const innerCard = c.querySelector('.card');
+    innerCard.addEventListener('mouseenter', () => {
+      innerCard.style.transform = 'translateY(-4px)';
+      innerCard.style.boxShadow = '0 10px 20px rgba(0,0,0,0.3)';
+    });
+    innerCard.addEventListener('mouseleave', () => {
+      innerCard.style.transform = 'translateY(0)';
+      innerCard.style.boxShadow = 'none';
+    });
+  });
+  
+  // Initial sort
+  applyFilters();
+});
+</script>
 {% endblock %}

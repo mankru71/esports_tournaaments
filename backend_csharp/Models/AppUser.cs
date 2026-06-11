@@ -40,4 +40,25 @@ public class AppUser
     public string? FaceitAvatar { get; set; }
     public string? FaceitProfileUrl { get; set; }
     public DateTime? FaceitLinkedAt { get; set; }
+
+    // ── Extended Scouting Fields ───────────────────────────────────────
+    public string? GameRole { get; set; } // e.g., IGL, Support, Sniper
+    public string? Availability { get; set; } // e.g., "19:00 - 23:00"
+    [MaxLength(150)]
+    public string? Pitch { get; set; } // Short bio for scouting
+    public string? DiscordId { get; set; } // For contact copying
+    [MaxLength(200)]
+    public string? HighlightsUrl { get; set; } // Youtube or Twitch clip
+
+    // ── Geo & Language Fields ──────────────────────────────────────────
+    public string? Country { get; set; }
+    public string? City { get; set; }
+    public string? Languages { get; set; }
+
+    // ── Steam SSO ──────────────────────────────────────────────────────
+    public string? SteamId { get; set; }
+    public string? AvatarUrl { get; set; }
+
+    // ── Gamification ───────────────────────────────────────────────────
+    public int PredictorMMR { get; set; } = 1000;
 }

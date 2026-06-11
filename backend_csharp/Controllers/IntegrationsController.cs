@@ -3,6 +3,7 @@ using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Services;
+using EsportsBackend.Services;
 using System.ComponentModel.DataAnnotations;
 
 namespace Controllers;
@@ -22,22 +23,33 @@ public class IntegrationsController : ControllerBase
         _logger = logger;
     }
 
-    public class FaceitVerifyRequest
+    [HttpGet("faceit/oauth/url")]
+    public IActionResult GetFaceitOAuthUrl([FromQuery] string redirectUri)
     {
-        [Required, MinLength(2), MaxLength(64)]
-        public string FaceitNickname { get; set; } = string.Empty;
+        var clientId = _faceit.ClientId;
+        if (string.IsNullOrEmpty(clientId))
+            return StatusCode(501, new { message = "Faceit OAuth не настроен сервером." });
+
+        // Generate the Faceit authorization URL
+        var state = Guid.NewGuid().ToString("N");
+        var url = $"https://accounts.faceit.com/?response_type=code&client_id={clientId}&redirect_popup=true&redirect_uri={Uri.EscapeDataString(redirectUri)}&state={state}";
+
+        return Ok(new { url, state });
+    }
+
+    public class FaceitOAuthVerifyRequest
+    {
+        [Required] public string Code { get; set; } = string.Empty;
+        [Required] public string RedirectUri { get; set; } = string.Empty;
     }
 
     /// <summary>
-    /// POST /api/integrations/faceit/verify/{userId}
-    /// Verifies a Faceit nickname for the authenticated user.
-    /// The caller must be the user themselves (userId must match token).
+    /// POST /api/integrations/faceit/oauth/verify/{userId}
     /// </summary>
-    [HttpPost("faceit/verify/{userId:int}")]
-    public async Task<IActionResult> VerifyFaceit(int userId, [FromBody] FaceitVerifyRequest request, [FromServices] RatingHistoryService history, CancellationToken ct)
+    [HttpPost("faceit/oauth/verify/{userId:int}")]
+    public async Task<IActionResult> VerifyFaceitOAuth(int userId, [FromBody] FaceitOAuthVerifyRequest request, [FromServices] RatingHistoryService history, CancellationToken ct)
     {
-        // Auth check — token owner must match the userId in the route
-        var tokenUserId = AuthTokenHelper.GetUserId(Request);
+        var tokenUserId = User.GetUserId();
         if (tokenUserId is null)
             return Unauthorized(new { message = "Требуется вход" });
         if (tokenUserId.Value != userId)
@@ -47,29 +59,19 @@ public class IntegrationsController : ControllerBase
         if (user is null)
             return NotFound(new { message = "Пользователь не найден" });
 
-        var nickname = (request.FaceitNickname ?? string.Empty).Trim();
-        if (string.IsNullOrEmpty(nickname))
-            return BadRequest(new { message = "Укажите Faceit-ник" });
-
-        // ── Fetch from Faceit API ──────────────────────────────────────────
         FaceitPlayerInfo? playerInfo;
         try
         {
-            playerInfo = await _faceit.GetPlayerByNicknameAsync(nickname, ct);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Faceit API call failed for userId={UserId}", userId);
-            return StatusCode(503, new { message = ex.Message });
+            playerInfo = await _faceit.VerifyOAuthCodeAsync(request.Code, request.RedirectUri, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching Faceit data for userId={UserId}", userId);
-            return StatusCode(500, new { message = "Внутренняя ошибка при запросе к Faceit" });
+            _logger.LogError(ex, "Failed to verify Faceit OAuth code for userId={UserId}", userId);
+            return BadRequest(new { message = ex.Message });
         }
 
         if (playerInfo is null)
-            return NotFound(new { message = $"Игрок с ником «{nickname}» не найден на Faceit" });
+            return NotFound(new { message = "Игрок не найден на Faceit" });
 
         // ── Persist to DB ─────────────────────────────────────────────────
         user.FaceitNickname = playerInfo.Nickname;
@@ -79,25 +81,23 @@ public class IntegrationsController : ControllerBase
         user.FaceitProfileUrl = playerInfo.FaceitUrl;
         user.FaceitLinkedAt = DateTime.UtcNow;
 
-        // Mirror to generic rating fields for backward compat
         user.RatingProvider = "faceit";
         user.RatingProfileUrl = playerInfo.FaceitUrl;
         user.Rating = playerInfo.Elo;
         user.RatingVerified = true;
         user.RatingVerifiedAtUtc = DateTime.UtcNow;
 
-        // Снимок Elo в историю рейтинга — для графика динамики в профиле
         if (playerInfo.Elo > 0)
             await history.SnapshotAsync(user.Id, playerInfo.Elo, "faceit", ct);
 
         await _db.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Faceit linked for userId={UserId}: nickname={Nickname}, elo={Elo}, level={Level}",
+        _logger.LogInformation("Faceit linked via OAuth for userId={UserId}: nickname={Nickname}, elo={Elo}, level={Level}",
             userId, playerInfo.Nickname, playerInfo.Elo, playerInfo.Level);
 
         return Ok(new
         {
-            message = $"Faceit-аккаунт «{playerInfo.Nickname}» привязан",
+            message = $"Faceit-аккаунт «{playerInfo.Nickname}» успешно привязан",
             faceit = new
             {
                 nickname = playerInfo.Nickname,
@@ -117,7 +117,7 @@ public class IntegrationsController : ControllerBase
     [HttpDelete("faceit/unlink/{userId:int}")]
     public async Task<IActionResult> UnlinkFaceit(int userId, CancellationToken ct)
     {
-        var tokenUserId = AuthTokenHelper.GetUserId(Request);
+        var tokenUserId = User.GetUserId();
         if (tokenUserId is null) return Unauthorized(new { message = "Требуется вход" });
         if (tokenUserId.Value != userId) return Forbid();
 
@@ -162,4 +162,59 @@ public class IntegrationsController : ControllerBase
         faceitAvatar = user.FaceitAvatar,
         faceitProfileUrl = user.FaceitProfileUrl
     };
+
+    [HttpGet("steam/openid/url")]
+    public IActionResult GetSteamOpenIdUrl([FromQuery] string redirectUri)
+    {
+        var steamOpenIdEndpoint = "https://steamcommunity.com/openid/login";
+        
+        var queryParams = new Dictionary<string, string>
+        {
+            { "openid.ns", "http://specs.openid.net/auth/2.0" },
+            { "openid.mode", "checkid_setup" },
+            { "openid.return_to", redirectUri },
+            { "openid.realm", new Uri(redirectUri).GetComponents(UriComponents.SchemeAndServer, UriFormat.Unescaped) },
+            { "openid.identity", "http://specs.openid.net/auth/2.0/identifier_select" },
+            { "openid.claimed_id", "http://specs.openid.net/auth/2.0/identifier_select" }
+        };
+
+        var queryString = string.Join("&", queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+        var url = $"{steamOpenIdEndpoint}?{queryString}";
+
+        return Ok(new { url });
+    }
+
+    [HttpPost("steam/openid/verify/{userId:int}")]
+    public async Task<IActionResult> VerifySteamOpenId(int userId, [FromBody] Dictionary<string, string> openIdParams, [FromServices] SteamApiService steam, CancellationToken ct)
+    {
+        var tokenUserId = User.GetUserId();
+        if (tokenUserId is null || tokenUserId.Value != userId)
+            return Unauthorized(new { message = "Требуется вход" });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return NotFound(new { message = "Пользователь не найден" });
+
+        var stringValuesDict = openIdParams.ToDictionary(k => k.Key, v => new Microsoft.Extensions.Primitives.StringValues(v.Value));
+        var queryCollection = new QueryCollection(stringValuesDict);
+
+        bool isValid = await steam.ValidateOpenIdAsync(queryCollection);
+        if (!isValid) return BadRequest(new { message = "Невалидный ответ от Steam OpenID" });
+
+        if (!openIdParams.TryGetValue("openid.claimed_id", out var claimedId))
+            return BadRequest(new { message = "Отсутствует claimed_id" });
+
+        var steamIdMatch = System.Text.RegularExpressions.Regex.Match(claimedId, @"https?://steamcommunity\.com/openid/id/(\d+)");
+        if (!steamIdMatch.Success) return BadRequest(new { message = "Не удалось извлечь SteamID" });
+        
+        var steamId = steamIdMatch.Groups[1].Value;
+        var (nickname, avatarUrl) = await steam.GetPlayerSummariesAsync(steamId);
+
+        user.SteamId = steamId;
+        if (!string.IsNullOrEmpty(avatarUrl)) user.AvatarUrl = avatarUrl;
+        
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("Steam linked via OpenID for userId={UserId}: steamId={SteamId}", userId, steamId);
+
+        return Ok(new { message = "Steam-аккаунт успешно привязан", steamId, nickname, avatarUrl });
+    }
 }

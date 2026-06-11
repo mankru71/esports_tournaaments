@@ -15,4 +15,6 @@ public class Team
     // ИСПРАВЛЕНО: Теперь EF Core знает, что брать из таблицы TeamPlayers
     public ICollection<TeamPlayer> Players { get; set; } = new List<TeamPlayer>();
     public ICollection<TournamentApplication> Applications { get; set; } = new List<TournamentApplication>();
+    public ICollection<TeamVacancy> Vacancies { get; set; } = new List<TeamVacancy>();
+    public ICollection<TeamInvite> Invites { get; set; } = new List<TeamInvite>();
 }

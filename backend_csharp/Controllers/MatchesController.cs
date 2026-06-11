@@ -1,3 +1,4 @@
+using Infrastructure;
 using Data;
 using Hubs;
 using Microsoft.AspNetCore.Mvc;
@@ -35,6 +36,11 @@ public class MatchesController : ControllerBase
     public class MatchStreamRequest
     {
         [Required] public string StreamUrl { get; set; } = string.Empty;
+    }
+
+    public class MatchAutoServerRequest
+    {
+        public bool IsAutoServer { get; set; }
     }
 
     /// <summary>Live-матчи всех турниров для главной страницы (сначала — со стримом).</summary>
@@ -121,6 +127,8 @@ public class MatchesController : ControllerBase
             {
                 id = m.Id,
                 tournamentId,
+                team_a_id = m.TeamAId,
+                team_b_id = m.TeamBId,
                 teamA = m.TeamA?.Name ?? "TBD",
                 teamB = m.TeamB?.Name ?? "TBD",
                 scoreA = m.ScoreA,
@@ -139,10 +147,39 @@ public class MatchesController : ControllerBase
         return Ok(new List<object>());
     }
 
+    [HttpGet("{id}/comments")]
+    public async Task<IActionResult> GetMatchComments(int id, [FromQuery] bool internalLobby = false, CancellationToken ct = default)
+    {
+        var query = _db.MatchComments
+            .Include(c => c.User)
+            .Where(c => c.MatchId == id);
+            
+        if (!internalLobby)
+            query = query.Where(c => !c.IsInternalLobby);
+        else
+            query = query.Where(c => c.IsInternalLobby);
+
+        var comments = await query.OrderBy(c => c.TimestampUtc).ToListAsync(ct);
+
+        return Ok(comments.Select(c => new
+        {
+            id = c.Id,
+            matchId = c.MatchId,
+            userId = c.UserId,
+            nickname = c.User?.Nickname ?? "Unknown",
+            avatarUrl = c.User?.AvatarUrl ?? c.User?.FaceitAvatar,
+            message = c.Message,
+            isInternalLobby = c.IsInternalLobby,
+            timestampUtc = c.TimestampUtc,
+            predictorMMR = c.User?.PredictorMMR ?? 1000,
+            badges = _db.UserBadges.Where(ub => ub.UserId == c.UserId).Select(ub => new { ub.Badge.Name, ub.Badge.IconUrlOrCss, ub.Badge.ColorCss }).ToList()
+        }));
+    }
+
     [HttpPut("{id:int}/result")]
     public async Task<IActionResult> SetMatchResult(int id, [FromBody] MatchResultRequest request, [FromServices] ActivityLogService activity, [FromServices] MatchPredictionService predictions)
     {
-        if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Только администратор или судья может изменять результаты" });
 
         var match = await _db.Matches
@@ -208,11 +245,26 @@ public class MatchesController : ControllerBase
         return Ok(payload);
     }
 
+    [HttpPut("{id:int}/autoserver")]
+    public async Task<IActionResult> ToggleAutoServer(int id, [FromBody] MatchAutoServerRequest request)
+    {
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
+            return StatusCode(403, new { message = "Нет доступа" });
+
+        var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound();
+
+        match.IsAutoServer = request.IsAutoServer;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { id = match.Id, isAutoServer = match.IsAutoServer });
+    }
+
 
     [HttpPut("{id:int}/stream")]
     public async Task<IActionResult> AttachStream(int id, [FromBody] MatchStreamRequest request)
     {
-        if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin", "judge"))
+        if (!User.IsInRole("admin") || User.IsInRole("judge"))
             return StatusCode(403, new { message = "Только администратор или судья может привязывать трансляции" });
 
         var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);

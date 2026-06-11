@@ -1,1 +1,11 @@
-{"Version":1,"Hash":"Y0PBrpVB9RLCHnutsjb275jajUCpxK1Eo37liZ8Aafk=","Source":"EsportsBackend","BasePath":"/","Mode":"Root","ManifestType":"Build","ReferencedProjectsConfiguration":[],"DiscoveryPatterns":[],"Assets":[],"Endpoints":[]}
+{
+  "Version": 1,
+  "Hash": "0XIsNaXe28sbQUO/OI4d6ca/J1dLci3jd2rQNf5yYWo=",
+  "Source": "EsportsBackend",
+  "BasePath": "_content/EsportsBackend",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

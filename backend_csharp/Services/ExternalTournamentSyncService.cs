@@ -7,27 +7,31 @@ using Models;
 namespace Services;
 
 /// <summary>
-/// Синхронизация внешних турниров из Liquipedia в локальную БД.
-///
-/// Два уровня:
-///  - SyncUpcomingAsync — список турниров (название, даты, статус, ПРИЗОВОЙ ФОНД);
-///  - SyncMatchesAsync — матчи конкретного события (лениво, при первом открытии),
-///    с персистом в Matches/Teams, чтобы сетка строилась из БД как у локальных.
+/// Синхронизация внешних турниров из Liquipedia, Pandascore и Faceit в локальную БД.
 /// </summary>
 public class ExternalTournamentSyncService
 {
     private readonly AppDbContext _db;
     private readonly LiquipediaService _liquipedia;
+    private readonly PandaScoreService _pandascore;
+    private readonly IEnumerable<ITournamentProvider> _providers;
     private readonly IMemoryCache _cache;
     private readonly ILogger<ExternalTournamentSyncService> _logger;
 
-    private const string Provider = "liquipedia";
-    private const string ListCacheKey = "liquipedia:sync:upcoming";
+    private const string ListCacheKey = "external:sync:upcoming";
 
-    public ExternalTournamentSyncService(AppDbContext db, LiquipediaService liquipedia, IMemoryCache cache, ILogger<ExternalTournamentSyncService> logger)
+    public ExternalTournamentSyncService(
+        AppDbContext db, 
+        LiquipediaService liquipedia, 
+        PandaScoreService pandascore,
+        IEnumerable<ITournamentProvider> providers,
+        IMemoryCache cache, 
+        ILogger<ExternalTournamentSyncService> logger)
     {
         _db = db;
         _liquipedia = liquipedia;
+        _pandascore = pandascore;
+        _providers = providers;
         _cache = cache;
         _logger = logger;
     }
@@ -39,84 +43,85 @@ public class ExternalTournamentSyncService
 
         try
         {
-            await RemoveStalePandascoreAsync(ct);
+            var addedCount = 0;
 
-            var parsed = await _liquipedia.GetTournamentListAsync(ct);
-            if (parsed.Count == 0)
-            {
-                _logger.LogWarning("Liquipedia sync: parser returned 0 tournaments (сеть/разметка). Продолжаем с локальными.");
-                _cache.Set(ListCacheKey, true, TimeSpan.FromMinutes(2));
-                return;
-            }
-
-            // Идущие — все, завершённые недавно и ближайшие — ограниченно
-            var selected = parsed.Where(t => t.Status == "live")
-                .Concat(parsed.Where(t => t.Status == "finished").OrderByDescending(t => t.EndDate).Take(10))
-                .Concat(parsed.Where(t => t.Status == "planned").OrderBy(t => t.StartDate).Take(25))
+            // 1. Liquipedia
+            var lpParsed = await _liquipedia.GetTournamentListAsync(ct);
+            var lpSelected = lpParsed.Where(t => t.Status == "live")
+                .Concat(lpParsed.Where(t => t.Status == "finished").OrderByDescending(t => t.EndDate).Take(10))
+                .Concat(lpParsed.Where(t => t.Status == "planned").OrderBy(t => t.StartDate).Take(25))
                 .GroupBy(t => t.PageName)
                 .Select(g => g.First())
                 .ToList();
 
-            var addedCount = 0;
-            foreach (var t in selected)
+            foreach (var t in lpSelected)
+                addedCount += await SaveTournamentAsync("liquipedia", t.PageName, t.Name, "counterstrike", t.PrizePool, t.Participants, t.StartDate?.ToString("yyyy-MM-dd"), t.Status, ct);
+
+            // 2. Pandascore
+            if (_pandascore.Enabled)
             {
-                var existing = await _db.Tournaments
-                    .FirstOrDefaultAsync(x => x.Provider == Provider && x.ProviderTournamentId == t.PageName, ct);
+                var psLive = await _pandascore.GetRunningTournamentsAsync(10, null, ct);
+                var psUpcoming = await _pandascore.GetUpcomingTournamentsAsync(25, null, ct);
+                var psSelected = psLive.Concat(psUpcoming).GroupBy(t => t.Id).Select(g => g.First()).ToList();
 
-                var startDate = t.StartDate?.ToString("yyyy-MM-dd") ?? string.Empty;
-
-                if (existing == null)
-                {
-                    addedCount += 1;
-                    _db.Tournaments.Add(new Tournament
-                    {
-                        Name = t.Name,
-                        Game = "counterstrike",
-                        PrizePool = t.PrizePool,
-                        MaxParticipants = t.Participants,
-                        CurrentParticipants = t.Participants,
-                        StartDate = startDate,
-                        Status = t.Status,
-                        Format = "single_elimination",
-                        StageType = "single",
-                        IsExternal = true,
-                        Provider = Provider,
-                        ProviderTournamentId = t.PageName,
-                        PrizeDistributionJson = DefaultPrizeDistribution()
-                    });
-                }
-                else
-                {
-                    existing.Name = t.Name;
-                    existing.PrizePool = t.PrizePool > 0 ? t.PrizePool : existing.PrizePool;
-                    existing.MaxParticipants = t.Participants > 0 ? t.Participants : existing.MaxParticipants;
-                    existing.CurrentParticipants = existing.MaxParticipants;
-                    existing.StartDate = string.IsNullOrWhiteSpace(startDate) ? existing.StartDate : startDate;
-                    existing.Status = t.Status;
-                    existing.IsExternal = true;
-                    if (string.IsNullOrWhiteSpace(existing.PrizeDistributionJson))
-                        existing.PrizeDistributionJson = DefaultPrizeDistribution();
-                }
+                foreach (var t in psSelected)
+                    addedCount += await SaveTournamentAsync("pandascore", t.Id, t.Name, t.VideogameName ?? "esports", t.PrizePool ?? 0, 16, t.BeginAt, t.Status ?? "planned", ct);
             }
 
-            // Одна агрегатная запись в ленту вместо записи на каждый турнир
-            if (addedCount > 0)
+            // 3. ITournamentProvider (Faceit etc.)
+            foreach (var provider in _providers.Where(p => p.ProviderName != "Liquipedia")) // _liquipedia handled separately for prize pool etc
             {
-                _db.ActivityLogs.Add(new ActivityLog
-                {
-                    ActionType = "external_sync",
-                    Message = $"Добавлено {addedCount} внешних турниров из Liquipedia"
-                });
+                var providerTournaments = await provider.GetTournamentsAsync(ct);
+                foreach (var t in providerTournaments)
+                    addedCount += await SaveTournamentAsync(provider.ProviderName.ToLowerInvariant(), t.ExternalId, t.Name, "esports", 0, 16, t.StartDate?.ToString("yyyy-MM-dd"), t.Status, ct);
             }
 
             await _db.SaveChangesAsync(ct);
-            _cache.Set(ListCacheKey, true, TimeSpan.FromMinutes(10));
-            _logger.LogInformation("Liquipedia tournaments synced: {Count}", selected.Count);
+            _cache.Set(ListCacheKey, true, TimeSpan.FromMinutes(5));
+            _logger.LogInformation("External sync: added/updated {Count} tournaments from multiple providers", addedCount);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Liquipedia sync failed (will continue with local tournaments).");
+            _logger.LogWarning(ex, "External tournament sync failed");
             _cache.Set(ListCacheKey, true, TimeSpan.FromMinutes(2));
+        }
+    }
+
+    private async Task<int> SaveTournamentAsync(string provider, string externalId, string name, string game, decimal prize, int participants, string? startDate, string status, CancellationToken ct)
+    {
+        var existing = await _db.Tournaments.FirstOrDefaultAsync(x => x.Provider == provider && x.ProviderTournamentId == externalId, ct);
+        if (existing == null)
+        {
+            _db.Tournaments.Add(new Tournament
+            {
+                Name = name,
+                Game = game,
+                PrizePool = prize,
+                MaxParticipants = participants,
+                CurrentParticipants = participants,
+                StartDate = startDate ?? string.Empty,
+                Status = status,
+                Format = "single_elimination",
+                StageType = "single",
+                IsExternal = true,
+                Provider = provider,
+                ProviderTournamentId = externalId,
+                PrizeDistributionJson = DefaultPrizeDistribution()
+            });
+            return 1;
+        }
+        else
+        {
+            existing.Name = name;
+            existing.PrizePool = prize > 0 ? prize : existing.PrizePool;
+            existing.MaxParticipants = participants > 0 ? participants : existing.MaxParticipants;
+            existing.CurrentParticipants = existing.MaxParticipants;
+            existing.StartDate = string.IsNullOrWhiteSpace(startDate) ? existing.StartDate : startDate;
+            existing.Status = status;
+            existing.IsExternal = true;
+            if (string.IsNullOrWhiteSpace(existing.PrizeDistributionJson))
+                existing.PrizeDistributionJson = DefaultPrizeDistribution();
+            return 0;
         }
     }
 
@@ -126,23 +131,47 @@ public class ExternalTournamentSyncService
     /// </summary>
     public async Task<bool> SyncMatchesAsync(Tournament tournament, CancellationToken ct = default)
     {
-        if (!tournament.IsExternal
-            || tournament.Provider != Provider
-            || string.IsNullOrWhiteSpace(tournament.ProviderTournamentId))
+        if (!tournament.IsExternal || string.IsNullOrWhiteSpace(tournament.ProviderTournamentId))
         {
             return await _db.Matches.AnyAsync(m => m.TournamentId == tournament.Id, ct);
         }
 
-        var markerKey = $"liquipedia:matches:synced:{tournament.Id}";
+        var markerKey = $"external:matches:synced:{tournament.Id}";
         if (_cache.TryGetValue(markerKey, out _))
             return await _db.Matches.AnyAsync(m => m.TournamentId == tournament.Id, ct);
 
         try
         {
-            var parsed = await _liquipedia.GetMatchesAsync(tournament.ProviderTournamentId!, ct);
+            List<LpMatch> parsed = new();
+
+            if (tournament.Provider == "liquipedia")
+            {
+                parsed = await _liquipedia.GetMatchesAsync(tournament.ProviderTournamentId, ct);
+            }
+            else if (tournament.Provider == "pandascore" && _pandascore.Enabled)
+            {
+                var psMatches = await _pandascore.GetMatchesForTournamentAsync(tournament.ProviderTournamentId, 50, tournament.Game, ct);
+                foreach (var m in psMatches)
+                {
+                    parsed.Add(new LpMatch(
+                        Round: m.Name ?? "Match",
+                        RoundNumber: GuessRoundNumber(m.Name),
+                        TeamA: m.OpponentA,
+                        TeamB: m.OpponentB,
+                        ScoreA: m.ScoreA,
+                        ScoreB: m.ScoreB,
+                        Status: m.Status ?? "planned",
+                        WinnerName: m.ScoreA > m.ScoreB ? m.OpponentA : (m.ScoreB > m.ScoreA ? m.OpponentB : null)
+                    ));
+                }
+            }
+            else
+            {
+                return await _db.Matches.AnyAsync(m => m.TournamentId == tournament.Id, ct);
+            }
+
             if (parsed.Count == 0)
             {
-                // Страница без сетки (анонс) — не дёргаем парсер чаще, чем раз в 10 минут
                 _cache.Set(markerKey, true, TimeSpan.FromMinutes(10));
                 return await _db.Matches.AnyAsync(m => m.TournamentId == tournament.Id, ct);
             }
@@ -150,8 +179,11 @@ public class ExternalTournamentSyncService
             var teamsByName = await ResolveExternalTeamsAsync(parsed, ct);
 
             var oldMatches = await _db.Matches.Where(m => m.TournamentId == tournament.Id).ToListAsync(ct);
-            if (oldMatches.Count > 0)
-                _db.Matches.RemoveRange(oldMatches);
+            var oldMatchesByRoundAndTeams = oldMatches
+                .GroupBy(m => new { m.Round, m.RoundNumber })
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var winningTeamIds = new HashSet<int>();
 
             foreach (var m in parsed)
             {
@@ -159,19 +191,93 @@ public class ExternalTournamentSyncService
                 var teamB = m.TeamB != null && teamsByName.TryGetValue(m.TeamB, out var tb) ? tb : null;
                 var winner = m.WinnerName != null && teamsByName.TryGetValue(m.WinnerName, out var w) ? w : null;
 
-                _db.Matches.Add(new Match
+                var matchKey = new { m.Round, m.RoundNumber };
+                Match? existingMatch = null;
+                bool newlyFinished = false;
+
+                if (oldMatchesByRoundAndTeams.TryGetValue(matchKey, out var list) && list.Count > 0)
                 {
-                    TournamentId = tournament.Id,
-                    Round = m.Round,
-                    RoundNumber = m.RoundNumber,
-                    TeamA = teamA,
-                    TeamB = teamB,
-                    ScoreA = m.ScoreA,
-                    ScoreB = m.ScoreB,
-                    Winner = winner,
-                    Status = m.Status
-                });
+                    existingMatch = list.FirstOrDefault(x => x.TeamAId == teamA?.Id && x.TeamBId == teamB?.Id) 
+                                 ?? list.First();
+                    list.Remove(existingMatch);
+                }
+
+                if (existingMatch != null)
+                {
+                    existingMatch.TeamA = teamA;
+                    existingMatch.TeamB = teamB;
+                    existingMatch.ScoreA = m.ScoreA;
+                    existingMatch.ScoreB = m.ScoreB;
+                    existingMatch.Winner = winner;
+                    
+                    if (existingMatch.Status != "finished" && m.Status == "finished" && winner != null)
+                        newlyFinished = true;
+
+                    if (existingMatch.Status != "finished")
+                        existingMatch.Status = m.Status;
+                }
+                else
+                {
+                    _db.Matches.Add(new Match
+                    {
+                        TournamentId = tournament.Id,
+                        Round = m.Round,
+                        RoundNumber = m.RoundNumber,
+                        TeamA = teamA,
+                        TeamB = teamB,
+                        ScoreA = m.ScoreA,
+                        ScoreB = m.ScoreB,
+                        Winner = winner,
+                        Status = m.Status
+                    });
+                    
+                    if (m.Status == "finished" && winner != null)
+                        newlyFinished = true;
+                }
+
+                if (newlyFinished && winner != null)
+                {
+                    winningTeamIds.Add(winner.Id);
+                }
             }
+
+            // Remove any old matches that are no longer in the parsed list
+            var matchesToRemove = oldMatchesByRoundAndTeams.Values.SelectMany(x => x).ToList();
+            if (matchesToRemove.Any())
+            {
+                _db.Matches.RemoveRange(matchesToRemove);
+            }
+            
+            // Process Fantasy Points
+            if (winningTeamIds.Any())
+            {
+                var winnerPlayerIds = await _db.TeamPlayers
+                    .Where(p => winningTeamIds.Contains(p.TeamId))
+                    .Select(p => p.Id)
+                    .ToListAsync(ct);
+
+                if (winnerPlayerIds.Any())
+                {
+                    var winningRosters = await _db.FantasyRosters
+                        .Include(r => r.FantasyTeam)
+                        .Where(r => winnerPlayerIds.Contains(r.ProPlayerId))
+                        .ToListAsync(ct);
+
+                    foreach (var roster in winningRosters)
+                    {
+                        if (roster.FantasyTeam != null && roster.FantasyTeam.TournamentId == tournament.Id)
+                        {
+                            roster.FantasyTeam.TotalPoints += 10;
+                        }
+                    }
+                }
+            }
+
+            // Bracket linkage heuristic for external tournaments
+            var tournamentMatches = _db.Matches.Local.Where(m => m.TournamentId == tournament.Id).ToList();
+            if (tournamentMatches.Count == 0)
+                tournamentMatches = await _db.Matches.Where(m => m.TournamentId == tournament.Id).ToListAsync(ct);
+            LinkExternalBracket(tournamentMatches);
 
             await _db.SaveChangesAsync(ct);
             _cache.Set(markerKey, true, TimeSpan.FromMinutes(30));
@@ -184,6 +290,29 @@ public class ExternalTournamentSyncService
             _logger.LogWarning(ex, "Liquipedia match sync failed for tournament {Id}", tournament.Id);
             _cache.Set(markerKey, true, TimeSpan.FromMinutes(5));
             return await _db.Matches.AnyAsync(m => m.TournamentId == tournament.Id, ct);
+        }
+    }
+
+    private void LinkExternalBracket(List<Match> matches)
+    {
+        var finals = matches.Where(m => m.Round != null && m.Round.Contains("Final", StringComparison.OrdinalIgnoreCase) && !m.Round.Contains("Semi", StringComparison.OrdinalIgnoreCase) && !m.Round.Contains("Quarter", StringComparison.OrdinalIgnoreCase)).ToList();
+        var semis = matches.Where(m => m.Round != null && m.Round.Contains("Semi", StringComparison.OrdinalIgnoreCase)).ToList();
+        var quarters = matches.Where(m => m.Round != null && m.Round.Contains("Quarter", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (finals.Count == 1 && semis.Count == 2)
+        {
+            semis[0].NextMatchId = finals[0].Id;
+            semis[0].NextMatch = finals[0];
+            semis[1].NextMatchId = finals[0].Id;
+            semis[1].NextMatch = finals[0];
+
+            if (quarters.Count == 4)
+            {
+                quarters[0].NextMatchId = semis[0].Id; quarters[0].NextMatch = semis[0];
+                quarters[1].NextMatchId = semis[0].Id; quarters[1].NextMatch = semis[0];
+                quarters[2].NextMatchId = semis[1].Id; quarters[2].NextMatch = semis[1];
+                quarters[3].NextMatchId = semis[1].Id; quarters[3].NextMatch = semis[1];
+            }
         }
     }
 
@@ -212,7 +341,21 @@ public class ExternalTournamentSyncService
         {
             if (map.ContainsKey(name))
                 continue;
+                
             var team = new Team { Name = name, IsExternal = true };
+            
+            // Auto-generate 5 dummy pro players for Fantasy Esports Draft
+            var rng = new Random();
+            for (int i = 1; i <= 5; i++)
+            {
+                team.Players.Add(new TeamPlayer
+                {
+                    Nickname = $"{name} Player {i}",
+                    Game = "counterstrike",
+                    Cost = rng.Next(8, 13) * 10 // Random cost 80, 90, 100, 110, 120
+                });
+            }
+            
             _db.Teams.Add(team);
             map[name] = team;
         }
@@ -220,27 +363,6 @@ public class ExternalTournamentSyncService
         return map;
     }
 
-    /// <summary>Одноразовая зачистка внешних турниров старого провайдера (pandascore).</summary>
-    private async Task RemoveStalePandascoreAsync(CancellationToken ct)
-    {
-        var stale = await _db.Tournaments
-            .Where(t => t.IsExternal && t.Provider == "pandascore")
-            .ToListAsync(ct);
-        if (stale.Count == 0)
-            return;
-
-        var ids = stale.Select(t => t.Id).ToList();
-        var matches = await _db.Matches.Where(m => ids.Contains(m.TournamentId)).ToListAsync(ct);
-        var favorites = await _db.UserFavorites.Where(f => ids.Contains(f.TournamentId)).ToListAsync(ct);
-        var applications = await _db.TournamentApplications.Where(a => ids.Contains(a.TournamentId)).ToListAsync(ct);
-
-        _db.Matches.RemoveRange(matches);
-        _db.UserFavorites.RemoveRange(favorites);
-        _db.TournamentApplications.RemoveRange(applications);
-        _db.Tournaments.RemoveRange(stale);
-        await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("Removed {Count} stale pandascore tournaments", stale.Count);
-    }
 
     private static string DefaultPrizeDistribution()
         => "[{\"place\":\"1 место\",\"percent\":50},{\"place\":\"2 место\",\"percent\":30},{\"place\":\"3 место\",\"percent\":20}]";

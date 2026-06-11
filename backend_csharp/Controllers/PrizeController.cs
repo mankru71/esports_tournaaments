@@ -1,3 +1,4 @@
+using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Data;
@@ -19,7 +20,7 @@ public class PrizeController : ControllerBase
     [HttpPost("{tournamentId}/distribute")]
     public async Task<IActionResult> DistributePrizes(int tournamentId)
     {
-        if (!Infrastructure.AuthTokenHelper.IsInAnyRole(Request, "admin"))
+        if (!User.IsInRole("admin"))
             return StatusCode(403, new { message = "Только администратор может распределять фонд" });
 
         var tournament = await _db.Tournaments.FindAsync(tournamentId);

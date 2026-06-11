@@ -8,6 +8,10 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
 var builder = WebApplication.CreateBuilder(args);
 
 
@@ -86,6 +90,9 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<VerificationService>();
+builder.Services.AddScoped<SteamApiService>();
 builder.Services.AddScoped<TournamentService>();
 builder.Services.AddScoped<ActivityLogService>();
 builder.Services.AddScoped<AnalyticsService>();
@@ -95,6 +102,8 @@ builder.Services.AddScoped<EsportsBackend.Services.VerificationService>();
 builder.Services.AddScoped<ExternalTournamentSyncService>();
 builder.Services.AddScoped<TournamentPlanningService>();
 builder.Services.AddScoped<PandaScoreService>();
+builder.Services.AddHostedService<Services.MatchNotificationWorker>();
+builder.Services.AddHostedService<Services.PredictionResolverService>();
 builder.Services.AddScoped<FaceitApiService>();
 
 
@@ -102,8 +111,35 @@ builder.Services.AddScoped<ITournamentProvider, FaceitTournamentService>();
 // Переиспользуем типизированный HttpClient-сервис, а не строим второй экземпляр без BaseAddress
 builder.Services.AddScoped<ITournamentProvider>(sp => sp.GetRequiredService<EsportsBackend.Services.LiquipediaService>());
 
-var app = builder.Build();
+// Add this before var app = builder.Build();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var key = builder.Configuration["Jwt:Key"] ?? "super_secret_key_12345678901234567890";
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/matches"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
+    });
 
+var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
@@ -136,6 +172,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<MatchesHub>("/hubs/matches");

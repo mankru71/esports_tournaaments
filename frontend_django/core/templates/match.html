@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Матчи · {{ tournament_id }}{% endblock %}
 
 {% block content %}
@@ -101,7 +101,7 @@
       <p class="eyebrow mb-1" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);">Матчи турнира</p>
       <h1>Матч-центр <span style="color:var(--muted);font-weight:400;">#{{ tournament_id }}</span></h1>
     </div>
-    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">← Турниры</a>
+    <a class="btn btn-outline-accent" href="{% url 'pro_tournaments' %}">← Турниры</a>
   </div>
 
   {# ── Tab navigation ── #}
@@ -132,7 +132,9 @@
                 <th class="text-center">Счёт</th>
                 <th>Команда B</th>
                 <th class="text-center">Прогноз ИИ</th>
+                <th class="text-center">Pick'Em</th>
                 <th>Статус</th>
+                <th>Чат</th>
               </tr>
             </thead>
             <tbody>
@@ -141,7 +143,7 @@
                 <td><span style="color:var(--muted);font-size:.8rem;">#{{ m.id }}</span></td>
                 <td>{{ m.round }}</td>
                 <td class="team-a fw-semibold">{{ m.teamA }}</td>
-                <td class="text-center fw-bold score {% if m.status == 'live' %}score-live{% endif %}">
+                <td class="text-center fw-bold score {% if m.status == 'live' %}score-live live-flash{% endif %}">
                   {{ m.scoreA }} : {{ m.scoreB }}
                 </td>
                 <td class="team-b fw-semibold">{{ m.teamB }}</td>
@@ -154,10 +156,26 @@
                   </span>
                   {% else %}<span class="text-muted small">—</span>{% endif %}
                 </td>
+                <td class="text-center">
+                  {% if m.status == 'planned' and m.team_a_id and m.team_b_id %}
+                    <div class="btn-group btn-group-sm pickem-group" role="group">
+                      <button type="button" class="btn btn-outline-accent" onclick="submitPrediction({{ m.id }}, {{ m.team_a_id }}, this)">{{ m.teamA|truncatechars:10 }}</button>
+                      <button type="button" class="btn btn-outline-accent" onclick="submitPrediction({{ m.id }}, {{ m.team_b_id }}, this)">{{ m.teamB|truncatechars:10 }}</button>
+                    </div>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
                 <td>
                   <span class="badge badge-status status-{{ m.status }} status">
                     {{ m.status_label }}
                   </span>
+                </td>
+                <td>
+                  <button class="btn btn-sm btn-outline-accent" onclick="openChat({{ m.id }}, '{{ m.teamA|escapejs }} vs {{ m.teamB|escapejs }}')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    Чат
+                  </button>
                 </td>
               </tr>
               {% endfor %}
@@ -178,15 +196,80 @@
 
     {% if is_admin or is_judge %}{% if not matches_readonly %}
     <div class="form-card p-4">
-      <h2 class="h5 mb-3">Обновить результат матча</h2>
-      <form method="post" class="row g-3">
-        {% csrf_token %}
-        <div class="col-md-4"><label class="form-label">{{ form.match_id.label }}</label>{{ form.match_id }}</div>
-        <div class="col-md-4"><label class="form-label">{{ form.score_a.label }}</label>{{ form.score_a }}</div>
-        <div class="col-md-4"><label class="form-label">{{ form.score_b.label }}</label>{{ form.score_b }}</div>
-        <div class="col-12"><button class="btn btn-accent" type="submit">Сохранить результат</button></div>
-      </form>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0">Управление матчем</h2>
+      </div>
+
+      <div class="mb-4 d-flex align-items-center gap-3 p-3 border rounded bg-surface-2" id="autoserver-container">
+        <div class="form-check form-switch fs-5 mb-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="autoserver-toggle">
+          <label class="form-check-label ms-2" for="autoserver-toggle">Авто-режим (Auto-Server)</label>
+        </div>
+        <div id="autoserver-status" class="ms-auto" style="display: none;">
+          <span class="badge bg-warning text-dark px-3 py-2" style="animation: pulse 1.5s infinite;">
+            Ожидание телеметрии с игрового сервера...
+          </span>
+        </div>
+      </div>
+
+      <div id="manual-update-form">
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <div class="col-md-4"><label class="form-label">{{ form.match_id.label }}</label>{{ form.match_id }}</div>
+          <div class="col-md-4"><label class="form-label">{{ form.score_a.label }}</label>{{ form.score_a }}</div>
+          <div class="col-md-4"><label class="form-label">{{ form.score_b.label }}</label>{{ form.score_b }}</div>
+          <div class="col-12"><button class="btn btn-accent" type="submit">Сохранить результат</button></div>
+        </form>
+      </div>
     </div>
+    <script>
+      const toggle = document.getElementById('autoserver-toggle');
+      const manualForm = document.getElementById('manual-update-form');
+      const statusBadge = document.getElementById('autoserver-status');
+      const matchSelect = document.getElementById('id_match_id'); // Match ID select inside the form
+
+      // Assume the selected match's autoserver state. 
+      // In a more complex SPA we'd fetch this when the select changes.
+      toggle.addEventListener('change', async function() {
+        const isAuto = this.checked;
+        const matchId = matchSelect.value;
+
+        if (!matchId) {
+          alert('Выберите матч сначала!');
+          this.checked = !isAuto;
+          return;
+        }
+
+        try {
+          const res = await fetch(`http://localhost:5000/api/matches/${matchId}/autoserver`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getCookie('api_token')}`
+            },
+            body: JSON.stringify({ isAutoServer: isAuto })
+          });
+          
+          if (!res.ok) throw new Error('Ошибка обновления статуса');
+
+          if (isAuto) {
+            manualForm.style.display = 'none';
+            statusBadge.style.display = 'block';
+          } else {
+            manualForm.style.display = 'block';
+            statusBadge.style.display = 'none';
+          }
+        } catch (e) {
+          alert(e.message);
+          this.checked = !isAuto;
+        }
+      });
+      
+      // Basic styling for the pulse
+      const style = document.createElement('style');
+      style.innerHTML = `@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }`;
+      document.head.appendChild(style);
+    </script>
     {% endif %}{% endif %}
   </div>
 
@@ -213,6 +296,34 @@
 
 {# Toast #}
 <div class="mc-toast" id="mc-toast"></div>
+
+{# Chat Offcanvas #}
+<div id="chatOffcanvas" class="offcanvas" style="position:fixed; top:0; right:-400px; width:400px; height:100vh; background:var(--surface); border-left:1px solid var(--border); box-shadow:-5px 0 25px rgba(0,0,0,0.5); transition:right 0.3s ease; z-index:10000; display:flex; flex-direction:column;">
+  <div style="padding:1rem 1.5rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--surface-2);">
+    <h5 id="chatTitle" style="margin:0; font-size:1.1rem; font-weight:700;">Чат матча</h5>
+    <button onclick="closeChat()" style="background:transparent; border:none; color:var(--muted); cursor:pointer;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+  </div>
+  
+  <div class="mc-tabs" style="margin:0; border-bottom:1px solid var(--border); padding:0 1.5rem; background:var(--surface-2);">
+    <button class="mc-tab active" id="tab-btn-trash" onclick="switchChatTab('trash')" style="padding:1rem 0;">Trash-talk Zone</button>
+    <button class="mc-tab" id="tab-btn-internal" onclick="switchChatTab('internal')" style="padding:1rem 0;">Internal Lobby</button>
+  </div>
+
+  <div id="chatMessages" style="flex:1; overflow-y:auto; padding:1.5rem; display:flex; flex-direction:column; gap:1rem;">
+    <!-- Messages will be appended here -->
+  </div>
+
+  <div style="padding:1rem 1.5rem; border-top:1px solid var(--border); background:var(--surface-2);">
+    <form id="chatForm" onsubmit="sendChatMessage(event)" style="display:flex; gap:0.5rem;">
+      <input type="text" id="chatInput" placeholder="Написать сообщение..." style="flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:0.5rem 0.75rem; font-size:0.9rem;" required autocomplete="off">
+      <button type="submit" class="btn btn-accent" style="padding:0.5rem 1rem;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+      </button>
+    </form>
+  </div>
+</div>
 
 {# SignalR for live score updates #}
 <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
@@ -303,10 +414,7 @@
   async function loadMvp() {
     mvpLoaded = true;
     try {
-      const res = await fetch(`/tournaments/${tournamentId}/mvp/`, {
-        headers: { "X-Requested-With": "XMLHttpRequest" }
-      });
-      const apiRes = await fetch(`/api/tournaments/${tournamentId}/mvp`, {
+      const apiRes = await fetch(`http://localhost:5000/api/mvp/results?tournamentId=${tournamentId}`, {
         headers: { "X-Requested-With": "XMLHttpRequest" }
       });
       if (apiRes.ok) {
@@ -425,14 +533,13 @@
     }
     btn.disabled = true;
     try {
-      const fd = new FormData();
-      fd.append("player_id", playerId);
-      fd.append("csrfmiddlewaretoken", getCsrf());
-
-      const res  = await fetch(`/tournaments/${tournamentId}/mvp/`, {
+      const res = await fetch(`http://localhost:5000/api/mvp/vote`, {
         method:  "POST",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-        body:    fd,
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${getCookie('api_token')}`
+        },
+        body: JSON.stringify({ tournamentId: parseInt(tournamentId), playerId: playerId }),
       });
 
       if (res.ok || res.redirected) {
@@ -456,18 +563,196 @@
     }
   };
 
-  // ── SignalR live score updates ────────────────────────────────────
+  // ── Chat Logic ────────────────────────────────────────────────────
+  let currentChatMatchId = null;
+  let currentChatTab = 'trash'; // 'trash' or 'internal'
+
+  window.openChat = async function(matchId, title) {
+    currentChatMatchId = matchId;
+    document.getElementById("chatTitle").textContent = "Чат: " + title;
+    document.getElementById("chatOffcanvas").style.right = "0";
+    
+    // Join SignalR group
+    if (window.signalR && conn.state === signalR.HubConnectionState.Connected) {
+      conn.invoke("JoinMatchLobby", String(matchId)).catch(() => {});
+    }
+    await loadChatMessages();
+  };
+
+  window.closeChat = function() {
+    document.getElementById("chatOffcanvas").style.right = "-400px";
+    if (currentChatMatchId && window.signalR && conn.state === signalR.HubConnectionState.Connected) {
+      conn.invoke("LeaveMatchLobby", String(currentChatMatchId)).catch(() => {});
+    }
+    currentChatMatchId = null;
+  };
+
+  window.switchChatTab = async function(tab) {
+    currentChatTab = tab;
+    document.getElementById("tab-btn-trash").classList.toggle("active", tab === 'trash');
+    document.getElementById("tab-btn-internal").classList.toggle("active", tab === 'internal');
+    await loadChatMessages();
+  };
+
+  async function loadChatMessages() {
+    const container = document.getElementById("chatMessages");
+    container.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:0.85rem;">Загрузка сообщений...</div>';
+    
+    try {
+      const isInternal = currentChatTab === 'internal';
+      const res = await fetch(`/api/matches/${currentChatMatchId}/comments?internalLobby=${isInternal}`);
+      if (res.ok) {
+        const messages = await res.json();
+        container.innerHTML = '';
+        if (messages.length === 0) {
+          container.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:0.85rem; margin-top:2rem;">Нет сообщений. Будьте первым!</div>';
+        } else {
+          messages.forEach(appendChatMessageToUI);
+        }
+        container.scrollTop = container.scrollHeight;
+      } else {
+        container.innerHTML = '<div style="text-align:center; color:var(--danger); font-size:0.85rem; margin-top:2rem;">Ошибка загрузки чата (возможно, нет доступа).</div>';
+      }
+    } catch (_) {
+      container.innerHTML = '<div style="text-align:center; color:var(--danger); font-size:0.85rem; margin-top:2rem;">Ошибка сети.</div>';
+    }
+  }
+
+  function appendChatMessageToUI(msg) {
+    const container = document.getElementById("chatMessages");
+    const emptyMsg = container.querySelector('div[style*="Нет сообщений"]');
+    if (emptyMsg) emptyMsg.remove();
+
+    const time = new Date(msg.timestampUtc).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const isMe = msg.nickname === "{{ request.user.nickname|escapejs }}";
+    
+    const align = isMe ? 'flex-end' : 'flex-start';
+    const bg = isMe ? 'var(--accent)' : 'var(--surface-2)';
+    const color = isMe ? '#000' : 'var(--text)';
+    const borderRadius = isMe ? '12px 12px 0 12px' : '12px 12px 12px 0';
+
+    const avatarInitial = (msg.nickname || "U").substring(0,2).toUpperCase();
+
+    const avatarHtml = !isMe ? `
+      <div style="width:28px; height:28px; border-radius:50%; background:var(--surface-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:700; color:var(--muted); flex-shrink:0; margin-top:0.25rem;">
+        ${msg.avatarUrl ? `<img src="${msg.avatarUrl}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">` : esc(avatarInitial)}
+      </div>
+    ` : '';
+
+    const badgesHtml = msg.badges ? msg.badges.map(b => 
+      `<span style="color:${b.colorCss || 'var(--accent)'}; margin-left:2px;" title="${b.name}">
+        ${b.iconUrlOrCss ? `<i class="${b.iconUrlOrCss}"></i>` : '★'}
+       </span>`
+    ).join('') : '';
+
+    const mmrBadge = msg.predictorMMR ? `<span class="badge" style="font-size:0.6rem; margin-left:4px; background:var(--surface-3); color:var(--accent);">${msg.predictorMMR} MMR</span>` : '';
+
+    const msgHtml = `
+      <div style="display:flex; flex-direction:column; align-items:${align}; max-width:85%; align-self:${align};">
+        ${!isMe ? `<span style="font-size:0.75rem; color:var(--muted); margin-bottom:2px; margin-left:36px;">${esc(msg.nickname)} ${badgesHtml} ${mmrBadge}</span>` : ''}
+        <div style="display:flex; gap:8px;">
+          ${avatarHtml}
+          <div style="background:${bg}; color:${color}; padding:0.6rem 0.85rem; border-radius:${borderRadius}; font-size:0.85rem; line-height:1.4; word-break:break-word; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+            ${esc(msg.message)}
+          </div>
+        </div>
+        <span style="font-size:0.65rem; color:var(--muted); margin-top:4px; margin-left:36px; margin-right:4px;">${time}</span>
+      </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', msgHtml);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  window.sendChatMessage = async function(e) {
+    e.preventDefault();
+    const input = document.getElementById("chatInput");
+    const text = input.value.trim();
+    if (!text || !currentChatMatchId) return;
+
+    if (!isLoggedIn) {
+      showToast("Войдите в аккаунт, чтобы писать в чат", "error");
+      return;
+    }
+
+    const isInternal = currentChatTab === 'internal';
+
+    if (window.signalR && conn && conn.state === signalR.HubConnectionState.Connected) {
+      await conn.invoke("SendMessage", currentChatMatchId, text, isInternal);
+      input.value = "";
+    } else {
+      showToast("Нет подключения к чату", "error");
+    }
+  };
+
+  window.submitPrediction = async function(matchId, teamId, btnElement) {
+    if (!isLoggedIn) {
+      showToast("Войдите в аккаунт, чтобы сделать прогноз", "error");
+      return;
+    }
+    
+    // Disable buttons temporarily
+    const group = btnElement.closest('.pickem-group');
+    if (group) {
+        group.querySelectorAll('button').forEach(b => b.disabled = true);
+    }
+    
+    try {
+      const res = await fetch('/api/predictions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getCookie('api_token')}`
+        },
+        body: JSON.stringify({ matchId: matchId, predictedTeamId: teamId })
+      });
+      
+      if (res.ok) {
+        showToast("Прогноз сохранен!", "success");
+        // Highlight chosen team
+        if (group) {
+            group.querySelectorAll('button').forEach(b => {
+                b.disabled = false;
+                b.classList.remove('btn-accent');
+                b.classList.add('btn-outline-accent');
+            });
+            btnElement.classList.remove('btn-outline-accent');
+            btnElement.classList.add('btn-accent');
+        }
+      } else {
+        const error = await res.json();
+        showToast(error.message || "Ошибка при сохранении прогноза", "error");
+        if (group) group.querySelectorAll('button').forEach(b => b.disabled = false);
+      }
+    } catch (e) {
+      showToast("Ошибка сети", "error");
+      if (group) group.querySelectorAll('button').forEach(b => b.disabled = false);
+    }
+  };
+  
+  function getCookie(name) {
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      if (match) return match[2];
+      return '';
+  }
+
   if (window.signalR) {
+    const tokenMatch = document.cookie.match(/(?:^|; )api_token=([^;]*)/);
+    const connToken = tokenMatch ? tokenMatch[1] : '';
+
     const conn = new signalR.HubConnectionBuilder()
-      .withUrl("/hubs/matches")
+      .withUrl(connToken ? `/hubs/matches?access_token=${connToken}` : "/hubs/matches")
       .withAutomaticReconnect()
       .build();
+
+    window.conn = conn; // Expose globally for chat
 
     conn.start()
       .then(() => conn.invoke("JoinTournament", tournamentId))
       .catch(() => {});
 
     conn.on("matchUpdated", payload => {
+      // existing logic
       const row = document.querySelector(`[data-match-id="${payload.id}"]`);
       if (!row) return;
       const score = row.querySelector(".score");
@@ -475,10 +760,47 @@
       if (score) {
         score.textContent = `${payload.scoreA} : ${payload.scoreB}`;
         score.classList.toggle("score-live", payload.status === "live");
+        score.classList.toggle("live-flash", payload.status === "live");
       }
       if (badge) {
         badge.textContent = payload.status;
         badge.className = `badge badge-status status-${payload.status} status`;
+      }
+    });
+
+    conn.on("ReceiveMessage", msg => {
+      if (msg.matchId === currentChatMatchId && msg.isInternalLobby === (currentChatTab === 'internal')) {
+        appendChatMessageToUI(msg);
+      }
+    });
+
+    conn.on("liveRoundUpdate", payload => {
+      const row = document.querySelector(`[data-match-id="${payload.matchId}"]`);
+      if (!row) return;
+      
+      let liveScoreboard = row.querySelector(".live-scoreboard-info");
+      if (!liveScoreboard) {
+        // Create the live scoreboard container if it doesn't exist
+        const td = row.querySelector(".score");
+        if (td) {
+            liveScoreboard = document.createElement("div");
+            liveScoreboard.className = "live-scoreboard-info";
+            liveScoreboard.style = "font-size: 0.75rem; color: var(--muted); margin-top: 4px; display: flex; justify-content: center; gap: 8px;";
+            td.appendChild(liveScoreboard);
+        }
+      }
+
+      if (liveScoreboard) {
+        let html = '';
+        if (payload.roundNumber) html += `<span>Round ${payload.roundNumber}</span>`;
+        if (payload.team1Alive !== null && payload.team2Alive !== null) {
+          html += `<span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;vertical-align:-2px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>${payload.team1Alive}v${payload.team2Alive}</span>`;
+        }
+        if (payload.bombStatus) {
+            let bombColor = payload.bombStatus === 'planted' ? 'var(--danger)' : 'var(--muted)';
+            html += `<span style="color:${bombColor}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;vertical-align:-2px;"><circle cx="11" cy="13" r="9"></circle><path d="M14.5 4a2.5 2.5 0 1 1-5 0"></path><line x1="11" y1="4" x2="11" y2="2"></line></svg>${payload.bombStatus}</span>`;
+        }
+        liveScoreboard.innerHTML = html;
       }
     });
   }

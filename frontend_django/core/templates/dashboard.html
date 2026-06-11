@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends request.is_htmx|yesno:"base_partial.html,base.html" %}
 {% block title %}Главная{% endblock %}
 
 {% block content %}
@@ -9,7 +9,7 @@
       <h1 class="h3 mb-2">Платформа киберспортивных турниров</h1>
       <p class="text-muted mb-0">Live-матчи, открытые регистрации, зал славы и события платформы — на одном экране.</p>
     </div>
-    <a class="btn btn-outline-accent" href="{% url 'tournaments' %}">Все турниры</a>
+    <a class="btn btn-outline-accent" href="{% url 'pro_tournaments' %}">Все турниры</a>
   </div>
 
   {# ═══ 1. LIVE-БЛОК (первый экран) ═══════════════════════════════════ #}
@@ -55,7 +55,7 @@
               </div>
               <div class="d-flex align-items-center gap-2">
                 {% if m.streamUrl %}<a class="btn btn-sm btn-outline-accent" href="{{ m.streamUrl }}" target="_blank" rel="noopener">Стрим</a>{% endif %}
-                <a class="btn btn-sm btn-ghost" href="{% url 'match_center' m.tournamentId %}">Матч-центр</a>
+                <a class="btn btn-sm btn-ghost" href="{% url 'pro_match_center' m.tournamentId %}">Матч-центр</a>
               </div>
             </div>
           </div>
@@ -79,7 +79,7 @@
   <div class="mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h2 class="h5 mb-0">Открыта регистрация</h2>
-      <a class="text-muted small" href="{% url 'tournaments' %}">Все турниры →</a>
+      <a class="text-muted small" href="{% url 'pro_tournaments' %}">Все турниры →</a>
     </div>
     <div class="row g-3">
       {% for t in open_tournaments %}
@@ -94,7 +94,7 @@
             Призовой: <span class="fw-semibold" style="color:var(--accent);">{{ t.prizePool }}</span>
             · Команды: {{ t.currentParticipants }}/{{ t.maxParticipants }}
           </div>
-          <a class="btn btn-accent btn-sm mt-auto" href="{% url 'tournament_detail' t.id %}">Подать заявку</a>
+          <a class="btn btn-accent btn-sm mt-auto" href="{% url 'play_tournament_detail' t.id %}">Подать заявку</a>
         </div>
       </div>
       {% endfor %}
@@ -170,8 +170,10 @@
 
     const tournamentIds = Array.from(new Set(cards.map(c => c.getAttribute("data-live-tournament"))));
 
+    const tokenMatch = document.cookie.match(/(?:^|; )api_token=([^;]*)/);
+    const token = tokenMatch ? tokenMatch[1] : '';
     const conn = new signalR.HubConnectionBuilder()
-      .withUrl("/hubs/matches")
+      .withUrl(token ? `/hubs/matches?access_token=${token}` : "/hubs/matches")
       .withAutomaticReconnect()
       .build();
 
