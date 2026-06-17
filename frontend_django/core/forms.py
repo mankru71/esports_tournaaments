@@ -112,11 +112,8 @@ class ProfileEditForm(forms.Form):
         max_length=32,
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 's1mple'})
     )
-    bio = forms.CharField(
-        label='О себе',
-        required=False,
-        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Капитан команды, предпочитаю CS2 и LAN-турниры.'})
-    )
+
+class ScoutingEditForm(forms.Form):
     game_role = forms.CharField(
         label='Игровая роль',
         required=False,
@@ -162,6 +159,11 @@ class ProfileEditForm(forms.Form):
         required=False,
         max_length=100,
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'RU, EN, KZ'})
+    )
+    bio = forms.CharField(
+        label='О себе',
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Опишите свой опыт...'})
     )
 
 

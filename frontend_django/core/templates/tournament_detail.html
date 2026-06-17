@@ -100,44 +100,47 @@
   </div>
   {% endif %}
 
+  <div class="table-panel p-3 p-md-4 mb-3">
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+      <div>
+        <h2 class="h5 mb-1">Сетка</h2>
+        {% if bracket.summary %}<div class="text-muted small">{{ bracket.summary }}</div>{% endif %}
+      </div>
+      {% if tournament.isExternal %}
+      <span class="badge text-bg-secondary">Данные из {{ tournament.provider|default:"внешнего источника" }} · только просмотр</span>
+      {% elif is_admin or is_judge %}
+      <div class="d-flex flex-column gap-2">
+        <form method="post" class="d-flex gap-2 flex-wrap">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_planning">
+          <select class="form-select form-select-sm" name="format">
+            <option value="single_elimination" {% if tournament.format == 'single_elimination' %}selected{% endif %}>Одиночная сетка</option>
+            <option value="group_stage" {% if tournament.format == 'group_stage' %}selected{% endif %}>Групповой этап</option>
+          </select>
+          <select class="form-select form-select-sm" name="stage_type">
+            <option value="single" {% if tournament.stageType == 'single' %}selected{% endif %}>Сетка</option>
+            <option value="groups" {% if tournament.stageType == 'groups' %}selected{% endif %}>Группы</option>
+          </select>
+          <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
+        </form>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="generate_bracket">
+          <button class="btn btn-sm btn-accent w-100" type="submit">Сгенерировать матчи</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    {# Визуальная сетка: JS-рендер из #bracket-data (работает и для внешних турниров) #}
+    <div id="visual-bracket" class="vb-root"></div>
+    <script id="bracket-data" type="application/json">{{ bracket.matches|safe_json }}</script>
+  </div>
+
   <div class="row g-3">
     <div class="col-lg-7">
       <div class="table-panel p-3 p-md-4 h-100">
-        <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
-          <div>
-            <h2 class="h5 mb-1">Сетка</h2>
-            {% if bracket.summary %}<div class="text-muted small">{{ bracket.summary }}</div>{% endif %}
-          </div>
-          {% if tournament.isExternal %}
-          <span class="badge text-bg-secondary">Данные из {{ tournament.provider|default:"внешнего источника" }} · только просмотр</span>
-          {% elif is_admin or is_judge %}
-          <div class="d-flex flex-column gap-2">
-            <form method="post" class="d-flex gap-2 flex-wrap">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="save_planning">
-              <select class="form-select form-select-sm" name="format">
-                <option value="single_elimination" {% if tournament.format == 'single_elimination' %}selected{% endif %}>Одиночная сетка</option>
-                <option value="group_stage" {% if tournament.format == 'group_stage' %}selected{% endif %}>Групповой этап</option>
-              </select>
-              <select class="form-select form-select-sm" name="stage_type">
-                <option value="single" {% if tournament.stageType == 'single' %}selected{% endif %}>Сетка</option>
-                <option value="groups" {% if tournament.stageType == 'groups' %}selected{% endif %}>Группы</option>
-              </select>
-              <button class="btn btn-sm btn-outline-accent" type="submit">Сохранить</button>
-            </form>
-            <form method="post">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="generate_bracket">
-              <button class="btn btn-sm btn-accent w-100" type="submit">Сгенерировать матчи</button>
-            </form>
-          </div>
-          {% endif %}
-        </div>
-
-        {# Визуальная сетка: JS-рендер из #bracket-data (работает и для внешних турниров) #}
-        <div id="visual-bracket" class="vb-root"></div>
-        <script id="bracket-data" type="application/json">{{ bracket.matches|safe_json }}</script>
-
+        <h2 class="h5 mb-3">Расписание и результаты</h2>
         {% if bracket.groups %}
         <div class="row g-3 mb-3">
           {% for group in bracket.groups %}
@@ -156,38 +159,42 @@
         {% endif %}
 
         {% if bracket.bracket_rounds %}
-<div class="table-responsive mt-3">
-  {% for round in bracket.bracket_rounds %}
-  <h6 class="text-muted mt-3 mb-1">{{ round.label }}</h6>
-  <table class="table table-sm table-bordered">
-    <thead>
-      <tr><th>#</th><th>Team A</th><th>Score</th><th>Team B</th><th>Score</th><th>Status</th></tr>
-    </thead>
-    <tbody>
-      {% for m in round.matches %}
-      <tr class="{% if m.isBye %}table-secondary{% endif %}">
-        <td>{{ m.id }}</td>
-        <td>
-          {% if m.teamA %}<span class="{% if m.winnerId == m.teamA.id %}fw-bold text-success{% endif %}">{{ m.teamA.name }}</span>{% else %}<span class="text-muted fst-italic">TBD</span>{% endif %}
-        </td>
-        <td>{% if not m.isBye %}{{ m.scoreA }}{% else %}—{% endif %}</td>
-        <td>
-          {% if m.isBye %}<span class="badge bg-secondary">BYE</span>{% elif m.teamB %}<span class="{% if m.winnerId == m.teamB.id %}fw-bold text-success{% endif %}">{{ m.teamB.name }}</span>{% else %}<span class="text-muted fst-italic">TBD</span>{% endif %}
-        </td>
-        <td>{% if not m.isBye %}{{ m.scoreB }}{% else %}—{% endif %}</td>
-        <td>
-          {% if m.isBye %}<span class="badge bg-secondary">Автопроход</span>
-          {% elif m.status == "approved" or m.status == "finished" %}<span class="badge bg-success">Завершён</span>
-          {% elif m.status == "live" %}<span class="badge bg-danger">Live</span>
-          {% else %}<span class="badge bg-secondary">Предстоит</span>{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endfor %}
-</div>
-{% endif %}
+        <div class="table-responsive mt-3">
+          {% for round in bracket.bracket_rounds %}
+          <h6 class="text-muted mt-3 mb-1">{{ round.label }}</h6>
+          <table class="table table-sm table-bordered">
+            <thead>
+              <tr><th>#</th><th>Team A</th><th>Score</th><th>Team B</th><th>Score</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {% for m in round.matches %}
+              <tr class="{% if m.isBye %}table-secondary{% endif %}">
+                <td>{{ m.id }}</td>
+                <td>
+                  {% if m.teamA %}<span class="{% if m.winnerId == m.teamA.id %}fw-bold text-success{% endif %}">{{ m.teamA.name }}</span>{% else %}<span class="text-muted fst-italic">TBD</span>{% endif %}
+                </td>
+                <td>{% if not m.isBye %}{{ m.scoreA }}{% else %}—{% endif %}</td>
+                <td>
+                  {% if m.isBye %}<span class="badge bg-secondary">BYE</span>{% elif m.teamB %}<span class="{% if m.winnerId == m.teamB.id %}fw-bold text-success{% endif %}">{{ m.teamB.name }}</span>{% else %}<span class="text-muted fst-italic">TBD</span>{% endif %}
+                </td>
+                <td>{% if not m.isBye %}{{ m.scoreB }}{% else %}—{% endif %}</td>
+                <td>
+                  {% if m.isBye %}<span class="badge bg-secondary">Автопроход</span>
+                  {% elif m.status == "approved" or m.status == "finished" %}<span class="badge bg-success">Завершён</span>
+                  {% elif m.status == "live" %}<span class="badge bg-danger">Live</span>
+                  {% else %}<span class="badge bg-secondary">Предстоит</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if not bracket.groups and not bracket.bracket_rounds %}
+        <div class="empty-state">Сетка ещё не сформирована.</div>
+        {% endif %}
       </div>
     </div>
     <div class="col-lg-5">
@@ -446,25 +453,25 @@
 </section>
 
 <style>
-  .vb-root { overflow-x: auto; padding: .5rem 0 1rem; }
-  .vb-stage-row { display: flex; gap: 0; align-items: stretch; min-width: 600px; }
-  .vb-col { display: flex; flex-direction: column; justify-content: space-around; flex: 1; padding: 0 .75rem; position: relative; }
-  .vb-col-label { text-align: center; font-size: .65rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); padding: .4rem 0 .8rem; }
-  .vb-match { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: .35rem 0; transition: border-color .2s; cursor: default; position: relative; }
-  .vb-match:hover { border-color: var(--accent); }
-  .vb-match.live { border-color: var(--success); box-shadow: 0 0 0 1px rgba(114, 167, 122, .35); }
+  .vb-root { overflow-x: auto; padding: .5rem 0 1rem; position: relative; width: 100%; }
+  .vb-stage-row { display: flex; gap: 1.5rem; align-items: stretch; width: max-content; }
+  .vb-col { display: flex; flex-direction: column; justify-content: space-around; min-width: 220px; padding: 0 .75rem; position: relative; }
+  .vb-col-label { text-align: center; font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); padding: .4rem 0 1rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+  .vb-match { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: .5rem 0; transition: border-color .2s, transform .2s; cursor: default; position: relative; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+  .vb-match:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .vb-match.live { border-color: var(--success); box-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
   .vb-match.finished { border-color: rgba(200, 169, 106, .3); }
-  .vb-team { display: flex; justify-content: space-between; align-items: center; padding: .4rem .75rem; gap: .5rem; }
+  .vb-team { display: flex; justify-content: space-between; align-items: center; padding: .5rem .75rem; gap: .5rem; height: 38px; }
   .vb-team:first-child { border-bottom: 1px solid var(--border); }
   .vb-team.winner { background: var(--accent-soft); }
-  .vb-team__name { font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 9rem; }
+  .vb-team__name { font-size: .82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
   .vb-team__name.tbd { color: var(--muted); font-weight: 400; font-style: italic; }
-  .vb-team__score { font-size: .82rem; font-weight: 700; min-width: 1.2rem; text-align: center; color: var(--text); }
+  .vb-team__score { font-size: .85rem; font-weight: 700; min-width: 1.5rem; text-align: center; color: var(--text); }
   .vb-team.winner .vb-team__score { color: var(--accent); }
-  .vb-status { position: absolute; top: 3px; right: 5px; font-size: .58rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .vb-status { position: absolute; top: 4px; right: 8px; font-size: .6rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); z-index: 10; }
   .vb-match.live .vb-status { color: var(--success); }
   .vb-match.finished .vb-status { color: var(--accent); }
-  #vb-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+  #vb-canvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0; }
   .vb-legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .75rem; font-size: .72rem; color: var(--muted); padding: 0 .75rem; }
   .vb-legend span { display: flex; align-items: center; gap: .35rem; }
   .vb-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
@@ -600,6 +607,14 @@
     function drawConnectors(wrap, row, rounds) {
       const cols = row.querySelectorAll(".vb-col");
       if (cols.length < 2) return;
+
+      // Clear any existing canvas
+      const oldCanvas = wrap.querySelector("#vb-canvas");
+      if (oldCanvas) oldCanvas.remove();
+
+      // Ensure wrap takes up the full width of row
+      wrap.style.display = "inline-block";
+      wrap.style.width = "max-content";
 
       const wrapRect = wrap.getBoundingClientRect();
       const canvas = document.createElement("canvas");

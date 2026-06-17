@@ -32,7 +32,7 @@ public class IntegrationsController : ControllerBase
 
         // Generate the Faceit authorization URL
         var state = Guid.NewGuid().ToString("N");
-        var url = $"https://accounts.faceit.com/?response_type=code&client_id={clientId}&redirect_popup=true&redirect_uri={Uri.EscapeDataString(redirectUri)}&state={state}";
+        var url = $"https://accounts.faceit.com/?response_type=code&client_id={clientId}&redirect_popup=false&redirect_uri={Uri.EscapeDataString(redirectUri)}&state={state}";
 
         return Ok(new { url, state });
     }
@@ -166,6 +166,15 @@ public class IntegrationsController : ControllerBase
     [HttpGet("steam/openid/url")]
     public IActionResult GetSteamOpenIdUrl([FromQuery] string redirectUri)
     {
+        if (!string.IsNullOrEmpty(redirectUri) && Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
+        {
+            var hostName = uri.Host;
+            if (System.Net.IPAddress.TryParse(hostName, out _))
+            {
+                return BadRequest(new { message = "Steam не поддерживает привязку через IP-адрес. Пожалуйста, используйте доменное имя (например, настройте домен в файле hosts)." });
+            }
+        }
+
         var steamOpenIdEndpoint = "https://steamcommunity.com/openid/login";
         
         var queryParams = new Dictionary<string, string>

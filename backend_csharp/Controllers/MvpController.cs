@@ -64,13 +64,19 @@ public class MvpController : ControllerBase
     public async Task<IActionResult> Results([FromQuery] int tournamentId, CancellationToken ct)
     {
         // 1. Найти команды, участвующие в турнире
-        var teamIds = await _db.Matches
-            .Where(m => m.TournamentId == tournamentId)
-            .SelectMany(m => new[] { m.TeamAId, m.TeamBId })
-            .Where(id => id.HasValue)
-            .Select(id => id!.Value)
+        var teamAIds = await _db.Matches
+            .Where(m => m.TournamentId == tournamentId && m.TeamAId != null)
+            .Select(m => m.TeamAId!.Value)
             .Distinct()
             .ToListAsync(ct);
+
+        var teamBIds = await _db.Matches
+            .Where(m => m.TournamentId == tournamentId && m.TeamBId != null)
+            .Select(m => m.TeamBId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var teamIds = teamAIds.Union(teamBIds).Distinct().ToList();
 
         // 2. Достать всех игроков этих команд
         var candidates = await _db.TeamPlayers

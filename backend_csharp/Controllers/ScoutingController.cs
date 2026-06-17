@@ -59,6 +59,36 @@ public class ScoutingController : ControllerBase
         return Ok(payload);
     }
 
+    [HttpGet("free-agents/{id:int}")]
+    public async Task<IActionResult> GetFreeAgent(int id, CancellationToken ct)
+    {
+        var u = await _db.Users.FirstOrDefaultAsync(user => user.Id == id && user.IsLookingForTeam, ct);
+        if (u == null) return NotFound(new { message = "Игрок не найден" });
+        return Ok(new
+        {
+            id = u.Id,
+            nickname = u.Nickname,
+            bio = u.Bio,
+            role = u.Role,
+            faceitNickname = u.FaceitNickname,
+            faceitElo = u.FaceitElo,
+            faceitLevel = u.FaceitLevel,
+            faceitAvatar = u.FaceitAvatar,
+            faceitProfileUrl = u.FaceitProfileUrl,
+            rating = u.Rating,
+            ratingVerified = u.RatingVerified,
+            lookingForTeamSinceUtc = u.LookingForTeamSinceUtc,
+            gameRole = u.GameRole,
+            availability = u.Availability,
+            pitch = u.Pitch,
+            discordId = u.DiscordId,
+            country = u.Country,
+            city = u.City,
+            languages = u.Languages,
+            highlightsUrl = u.HighlightsUrl
+        });
+    }
+
     [HttpGet("vacancies")]
     public async Task<IActionResult> Vacancies(CancellationToken ct)
     {

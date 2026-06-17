@@ -330,7 +330,14 @@ function loadStream(element, provider, channel, embedUrl, matchName) {
             document.getElementById('chat-container').innerHTML = `<iframe src="https://www.twitch.tv/embed/${channel}/chat?parent=${twitchParent}&darkpopout" frameborder="0" style="width:100%; height:100%;"></iframe>`;
         }
     } else if (provider === 'youtube' && embedUrl) {
-        playerWrapper.innerHTML = `<iframe src="${embedUrl}?enablejsapi=0&autoplay=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+        playerWrapper.innerHTML = `
+            <div style="position:relative; width:100%; height:100%; display:flex; flex-direction:column;">
+                <iframe style="flex:1; border:none;" src="${embedUrl}?autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                <div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.8); padding:0.5rem; text-align:center;">
+                    <span class="small text-muted me-2">Ошибка 150/153? Видео запрещено встраивать.</span>
+                    <a href="${embedUrl.replace('embed/', 'watch?v=')}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger">Смотреть на YouTube</a>
+                </div>
+            </div>`;
         currentChannel = null;
         chatBtn.style.display = 'none';
         closeChat();

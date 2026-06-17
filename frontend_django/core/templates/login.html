@@ -44,14 +44,12 @@
       <hr class="flex-grow-1" style="border-color:var(--border);">
     </div>
 
-    <form method="post" action="{% url 'profile' %}">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="link_steam_openid">
-      <a href="http://localhost:5000/api/auth/steam/login" class="btn w-100 fw-semibold d-flex align-items-center justify-content-center gap-2 py-2" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;transition:var(--transition);font-size:.95rem;">
+    <div class="mt-2">
+      <a href="/api/auth/steam/login" hx-boost="false" class="btn w-100 fw-semibold d-flex align-items-center justify-content-center gap-2 py-2" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;transition:var(--transition);font-size:.95rem;">
         <i class="bi bi-steam"></i>
         Войти через Steam
       </a>
-    </form>
+    </div>
 
     <p class="mt-4 mb-0 text-center text-muted">Нет аккаунта? <a href="{% url 'registration' %}">Зарегистрироваться</a></p>
   </div>

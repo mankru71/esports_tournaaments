@@ -19,17 +19,26 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ILogger<AuthController> _logger;
     private readonly SteamApiService _steamApi;
+    private readonly IConfiguration _config;
 
-    public AuthController(AppDbContext db, ILogger<AuthController> logger, SteamApiService steamApi)
+    public AuthController(AppDbContext db, ILogger<AuthController> logger, SteamApiService steamApi, IConfiguration config)
     {
         _db = db;
         _logger = logger;
         _steamApi = steamApi;
+        _config = config;
     }
 
     [HttpGet("steam/login")]
     public IActionResult SteamLogin()
     {
+        var hostName = Request.Host.Host;
+        if (System.Net.IPAddress.TryParse(hostName, out _))
+        {
+            var frontendUrl = (_config["PUBLIC_FRONTEND_URL"] ?? "http://localhost").TrimEnd('/');
+            return Redirect($"{frontendUrl}/login?error=SteamIpNotSupported");
+        }
+
         // Build absolute return URL
         var returnUrl = $"{Request.Scheme}://{Request.Host}/api/auth/steam/callback";
         var realm = $"{Request.Scheme}://{Request.Host}";
@@ -48,15 +57,16 @@ public class AuthController : ControllerBase
     [HttpGet("steam/callback")]
     public async Task<IActionResult> SteamCallback()
     {
+        var frontendUrl = (_config["PUBLIC_FRONTEND_URL"] ?? "http://localhost").TrimEnd('/');
         var isValid = await _steamApi.ValidateOpenIdAsync(Request.Query);
         if (!isValid)
-            return Redirect("http://localhost:8000/login?error=SteamAuthFailed");
+            return Redirect($"{frontendUrl}/login?error=SteamAuthFailed");
 
         var claimedId = Request.Query["openid.claimed_id"].ToString();
         var steamId = claimedId.Split('/').LastOrDefault();
         
         if (string.IsNullOrEmpty(steamId))
-            return Redirect("http://localhost:8000/login?error=InvalidSteamId");
+            return Redirect($"{frontendUrl}/login?error=InvalidSteamId");
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.SteamId == steamId);
         if (user == null)
@@ -77,7 +87,7 @@ public class AuthController : ControllerBase
         }
 
         var token = BuildAccessToken(user.Id, user.Email, user.Nickname, user.Role);
-        return Redirect($"http://localhost:8000/login/steam/callback?token={token}");
+        return Redirect($"{frontendUrl}/profile/steam/callback?token={token}");
     }
 
     public class LoginRequest

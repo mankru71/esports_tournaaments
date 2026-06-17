@@ -5,16 +5,21 @@
 <div class="text-muted">Email: <span class="fw-semibold">{{ current_user.email }}</span></div>
 
 {% if not current_user.isEmailVerified %}
-<div class="alert alert-danger mt-2 d-flex justify-content-between align-items-center p-2">
-    <span>⚠️ Почта не подтверждена!</span>
+<div class="alert alert-warning border-warning bg-warning-subtle text-warning-emphasis mt-2 d-flex justify-content-between align-items-center p-3 rounded shadow-sm">
+    <div class="d-flex align-items-center gap-2">
+        <svg width="20" height="20" fill="currentColor" class="bi bi-exclamation-triangle-fill" viewBox="0 0 16 16">
+            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+        </svg>
+        <span><strong>Please verify your email</strong> / Пожалуйста, подтвердите ваш адрес электронной почты.</span>
+    </div>
     <form method="post" class="m-0">
         {% csrf_token %}
         <input type="hidden" name="action" value="send_verification_email">
-        <button type="submit" class="btn btn-sm btn-danger">Отправить ссылку</button>
+        <button type="submit" class="btn btn-sm btn-warning fw-semibold">Отправить ссылку / Resend Link</button>
     </form>
 </div>
 {% else %}
-<div class="badge bg-success mt-1 mb-2">✓ Почта подтверждена</div>
+<div class="badge bg-success mt-1 mb-2">✓ Почта подтверждена / Email verified</div>
 {% endif %}
 <section class="mb-5">
   <div class="row g-4">
@@ -48,44 +53,6 @@
           <div>
             <label class="form-label fw-semibold">{{ edit_form.nickname.label }}</label>
             {{ edit_form.nickname }}
-          </div>
-          <div>
-            <label class="form-label fw-semibold">{{ edit_form.game_role.label }}</label>
-            {{ edit_form.game_role }}
-          </div>
-          <div>
-            <label class="form-label fw-semibold">{{ edit_form.availability.label }}</label>
-            {{ edit_form.availability }}
-          </div>
-          <div>
-            <label class="form-label fw-semibold">{{ edit_form.pitch.label }}</label>
-            {{ edit_form.pitch }}
-          </div>
-          <div>
-            <label class="form-label fw-semibold">{{ edit_form.discord_id.label }}</label>
-            {{ edit_form.discord_id }}
-          </div>
-          <div>
-            <label class="form-label fw-semibold">{{ edit_form.highlights_url.label }}</label>
-            {{ edit_form.highlights_url }}
-          </div>
-          <div class="row g-2">
-            <div class="col-6">
-              <label class="form-label fw-semibold">{{ edit_form.country.label }}</label>
-              {{ edit_form.country }}
-            </div>
-            <div class="col-6">
-              <label class="form-label fw-semibold">{{ edit_form.city.label }}</label>
-              {{ edit_form.city }}
-            </div>
-          </div>
-          <div>
-            <label class="form-label fw-semibold">{{ edit_form.languages.label }}</label>
-            {{ edit_form.languages }}
-          </div>
-          <div>
-            <label class="form-label fw-semibold">{{ edit_form.bio.label }}</label>
-            {{ edit_form.bio }}
           </div>
           <button class="btn btn-accent" type="submit">Сохранить профиль</button>
         </form>
@@ -167,6 +134,17 @@
             </div>
           </div>
 
+          {% if current_user.ratingProvider != 'faceit' or not current_user.ratingVerified %}
+          <form method="post" class="mb-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="verify_rating">
+            <input type="hidden" name="provider" value="faceit">
+            <button class="btn btn-sm btn-success w-100" type="submit">
+              Подтвердить рейтинг Faceit
+            </button>
+          </form>
+          {% endif %}
+
           <form method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="unlink_faceit">
@@ -180,7 +158,7 @@
           <p class="text-muted small mb-3">
             Привяжите Faceit-аккаунт, чтобы подтвердить рейтинг на доске скаутинга.
           </p>
-          <form method="post" class="d-flex flex-column gap-3">
+          <form method="post" class="d-flex flex-column gap-3" hx-boost="false">
             {% csrf_token %}
             <input type="hidden" name="action" value="link_faceit_oauth">
             <button class="btn w-100 fw-semibold d-flex align-items-center justify-content-center gap-2" type="submit"
@@ -222,12 +200,23 @@
               </div>
             </div>
           </div>
-          <p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i> Аккаунт подтвержден (No VAC)</p>
+          <p class="text-success small mb-2"><i class="bi bi-check-circle me-1"></i> Аккаунт подтвержден (No VAC)</p>
+
+          {% if current_user.ratingProvider != 'steam' or not current_user.ratingVerified %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="verify_rating">
+            <input type="hidden" name="provider" value="steam">
+            <button class="btn btn-sm btn-success w-100" type="submit">
+              Подтвердить рейтинг Steam
+            </button>
+          </form>
+          {% endif %}
         {% else %}
           <p class="text-muted small mb-3">
             Привяжите Steam, чтобы подтвердить чистоту аккаунта перед регистрацией на турниры.
           </p>
-          <form method="post" class="d-flex flex-column gap-3">
+          <form method="post" class="d-flex flex-column gap-3" hx-boost="false">
             {% csrf_token %}
             <input type="hidden" name="action" value="link_steam_openid">
             <button class="btn w-100 fw-semibold d-flex align-items-center justify-content-center gap-2" type="submit"

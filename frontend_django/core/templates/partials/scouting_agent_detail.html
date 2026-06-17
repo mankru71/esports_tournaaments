@@ -1,0 +1,125 @@
+<div class="text-center mb-4">
+  {% if agent.faceitAvatar %}
+    <img src="{{ agent.faceitAvatar }}" alt="{{ agent.nickname }}"
+         class="rounded-circle shadow-sm"
+         style="width:96px;height:96px;object-fit:cover; border: 3px solid var(--accent);">
+  {% else %}
+    <div class="rounded-circle bg-secondary d-inline-flex align-items-center justify-content-center shadow-sm"
+         style="width:96px;height:96px;font-size:2.5rem;font-weight:700;color:#fff; border: 3px solid #555;">
+      {{ agent.nickname|first|upper }}
+    </div>
+  {% endif %}
+  <h2 class="h3 mt-3 mb-1 text-light fw-bold">
+    {{ agent.nickname }}
+    {% if agent.ratingVerified %}
+      <span class="text-success small" title="Рейтинг подтверждён">✓</span>
+    {% endif %}
+  </h2>
+  
+  <div class="d-flex justify-content-center gap-2 mt-2 flex-wrap">
+    {% if agent.gameRole and agent.gameRole != 'none' %}
+      <span class="badge bg-dark border text-light px-3 py-2">{{ agent.gameRole }}</span>
+    {% endif %}
+    {% if agent.faceitElo %}
+      <span class="badge text-bg-warning px-3 py-2"><i class="bi bi-controller"></i> {{ agent.faceitElo }} ELO (Lvl {{ agent.faceitLevel|default:'?' }})</span>
+    {% elif agent.rating %}
+      <span class="badge bg-accent px-3 py-2"><i class="bi bi-star-fill"></i> {{ agent.rating|floatformat:0 }} ({{ agent.ratingProvider|default:'Локальный' }})</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-4 text-start">
+  <div class="col-sm-6">
+    <div class="p-3 rounded h-100" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border);">
+      <div class="text-muted small mb-1"><i class="bi bi-clock"></i> Прайм-тайм (Время)</div>
+      <div class="fw-semibold">{{ agent.availability|default:"Не указано" }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6">
+    <div class="p-3 rounded h-100" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border);">
+      <div class="text-muted small mb-1"><i class="bi bi-geo-alt"></i> Локация</div>
+      <div class="fw-semibold">
+        {% if agent.city %}{{ agent.city }}{% if agent.country %}, {% endif %}{% endif %}
+        {% if agent.country %}{{ agent.country }}{% endif %}
+        {% if not agent.city and not agent.country %}Не указано{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-12">
+    <div class="p-3 rounded" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border);">
+      <div class="text-muted small mb-1"><i class="bi bi-chat-left-text"></i> Владение языками</div>
+      <div class="fw-semibold">{{ agent.languages|default:"Не указано" }}</div>
+    </div>
+  </div>
+</div>
+
+{% if agent.pitch %}
+<div class="mb-4 text-start">
+  <h4 class="h6 text-muted mb-2">О себе (Питч)</h4>
+  <div class="p-3 rounded" style="background: rgba(var(--accent-rgb), 0.05); border-left: 4px solid var(--accent); color: var(--text);">
+    <i class="bi bi-quote text-muted me-1 fs-5"></i>
+    <em>{{ agent.pitch }}</em>
+  </div>
+</div>
+{% endif %}
+
+{% if agent.highlightsUrl %}
+<div class="mb-4 text-start">
+  <h4 class="h6 text-muted mb-2">Видео хайлайты</h4>
+  <div class="ratio ratio-16x9 rounded overflow-hidden border border-secondary shadow-sm">
+    <iframe src="{{ agent.highlightsUrl }}" title="Player Highlights" allowfullscreen></iframe>
+  </div>
+</div>
+{% endif %}
+
+<div class="pt-3 border-top border-secondary d-flex align-items-center justify-content-between flex-wrap gap-3">
+  <div class="d-flex gap-2">
+    {% if agent.faceitProfileUrl %}
+      <a class="btn btn-outline-warning btn-sm" href="{{ agent.faceitProfileUrl }}" target="_blank" rel="noopener">
+        <i class="bi bi-box-arrow-up-right"></i> Профиль Faceit
+      </a>
+    {% endif %}
+    {% if agent.discordId %}
+      <button class="btn btn-sm" style="background-color: #5865F2; color: white;" onclick="copyDiscord(this, '{{ agent.discordId|escapejs }}')">
+        <i class="bi bi-discord"></i> Discord: {{ agent.discordId }}
+      </button>
+    {% endif %}
+  </div>
+
+  <div class="d-flex gap-2">
+    {% if current_user and current_user.id != agent.id %}
+      <form method="post" class="m-0">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="endorse_player">
+        <input type="hidden" name="user_id" value="{{ agent.id }}">
+        <button type="submit" class="btn btn-sm btn-outline-success" title="Рекомендовать игрока">
+          <i class="bi bi-hand-thumbs-up"></i> Рекомендовать (+1)
+        </button>
+      </form>
+    {% endif %}
+
+    {% if is_captain and my_teams %}
+    <div class="dropdown">
+      <button class="btn btn-sm btn-accent dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        Пригласить в команду
+      </button>
+      <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end shadow">
+        <li><h6 class="dropdown-header">Выберите команду</h6></li>
+        {% for team in my_teams %}
+        <li>
+          <form method="post" class="m-0 dropdown-item p-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="send_invite">
+            <input type="hidden" name="user_id" value="{{ agent.id }}">
+            <input type="hidden" name="team_id" value="{{ team.id }}">
+            <button type="submit" class="btn btn-link text-decoration-none text-light w-100 text-start px-3 py-2 border-0">
+              {{ team.name }}
+            </button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>

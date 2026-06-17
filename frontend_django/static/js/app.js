@@ -50,18 +50,20 @@
   }
 
   function initFavorites() {
-    document.querySelectorAll("[data-show-favorites]").forEach((button) => {
-      button.addEventListener("click", () => {
+    document.addEventListener("click", (e) => {
+      const button = e.target.closest("[data-show-favorites]");
+      if (button) {
         document.querySelectorAll("[data-show-favorites]").forEach((b) => b.classList.remove("active"));
         button.classList.add("active");
         applyFavoritesFilter(button.getAttribute("data-show-favorites"));
-      });
+      }
     });
   }
 
   function initCopyButtons() {
-    document.querySelectorAll("[data-copy-current-url]").forEach((button) => {
-      button.addEventListener("click", async () => {
+    document.addEventListener("click", async (e) => {
+      const button = e.target.closest("[data-copy-current-url]");
+      if (button) {
         try {
           await navigator.clipboard.writeText(window.location.href);
           const oldText = button.textContent;
@@ -75,12 +77,12 @@
         } catch {
           window.prompt("Скопируйте ссылку", window.location.href);
         }
-      });
+      }
     });
   }
 
   // --- Плавные анимации при скролле ---
-  function initScrollAnimations() {
+  function initScrollAnimations(target) {
     const observerOptions = {
       threshold: 0.05, // Элемент начнет появляться, когда хотя бы 5% его видно на экране
       rootMargin: "0px 0px -40px 0px" // Небольшой отступ снизу для красоты
@@ -95,12 +97,10 @@
       });
     }, observerOptions);
 
-    // Находим все блоки, которые нужно анимировать.
-    // ВАЖНО: .page-hero намеренно исключён — transform-анимация на заголовках
-    // страниц вызывала ре-растеризацию текста («прыгающие» буквы в шапке).
-    const animatedElements = document.querySelectorAll(
-      '.card, .section-panel, .table-panel, .empty-state'
-    );
+    const container = target || document;
+    const animatedElements = container.querySelectorAll
+      ? container.querySelectorAll('.card, .section-panel, .table-panel, .empty-state')
+      : [];
 
     // Задаем каждому элементу каскадную задержку, чтобы они выплывали друг за другом
     animatedElements.forEach((el, index) => {
@@ -113,6 +113,26 @@
 
   // Инициализация темы до полной загрузки DOM, чтобы избежать мерцания
   applyTheme(safeGetTheme());
+
+  // Делегированный обработчик переключения темы
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("#themeToggle");
+    if (btn) {
+      const root = document.documentElement;
+      const current = root.getAttribute("data-theme") === "light" ? "light" : "dark";
+      root.classList.add("theme-switching");
+      applyTheme(current === "light" ? "dark" : "light");
+      syncToggleUi();
+      window.setTimeout(() => root.classList.remove("theme-switching"), 300);
+    }
+  });
+
+  // Запуск инициализации при HTMX-загрузке/свапе
+  document.addEventListener("htmx:load", function (evt) {
+    const target = evt.detail.elt || document;
+    initScrollAnimations(target);
+    syncToggleUi();
+  });
 
   document.addEventListener("DOMContentLoaded", function () {
     // Авто-скрытие уведомлений
@@ -127,27 +147,11 @@
     const yearEl = document.getElementById("footer-year");
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
-    // Тумблер переключения темы.
-    // Класс theme-switching включает единый transition для ВСЕХ элементов
-    // (см. app.css), чтобы смена темы была синхронной, и снимается после неё.
-    syncToggleUi();
-    const btn = document.getElementById("themeToggle");
-    if (btn) {
-      btn.addEventListener("click", function () {
-        const root = document.documentElement;
-        const current = root.getAttribute("data-theme") === "light" ? "light" : "dark";
-        root.classList.add("theme-switching");
-        applyTheme(current === "light" ? "dark" : "light");
-        syncToggleUi();
-        window.setTimeout(() => root.classList.remove("theme-switching"), 300);
-      });
-    }
-
-    // Запуск всех модулей
+    // Запуск всех глобальных модулей
     initFavorites();
     initCopyButtons();
-    initScrollAnimations();
   });
+
   // --- СОХРАНЕНИЕ ПОЗИЦИИ СКРОЛЛА ПРИ ОТПРАВКЕ ФОРМ ---
   document.addEventListener("DOMContentLoaded", () => {
     const scrollKey = "pageScrollPos";

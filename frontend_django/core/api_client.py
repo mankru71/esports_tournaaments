@@ -103,8 +103,11 @@ class CSharpApiClient:
     def me(self, token: str) -> ApiResult:
         return self._request("GET", "auth/me", token=token)
 
-    def get_tournaments(self, token: str | None = None) -> ApiResult:
-        return self._request("GET", "tournament", token=token)
+    def get_tournaments(self, token: str | None = None, search: str | None = None) -> ApiResult:
+        params = {}
+        if search:
+            params["search"] = search
+        return self._request("GET", "tournament", params=params, token=token)
 
     def update_profile(self, nickname: str, bio: str, token: str, game_role: str = "", availability: str = "", pitch: str = "", discord_id: str = "", country: str = "", city: str = "", languages: str = "", highlights_url: str = "") -> ApiResult:
         data = {
@@ -206,6 +209,9 @@ class CSharpApiClient:
     def get_matches(self, tournament_id: int, token: str | None = None) -> ApiResult:
         return self._request("GET", "matches", params={"tournamentId": tournament_id}, token=token)
 
+    def predict_match(self, match_id: int, predicted_team_id: int, token: str) -> ApiResult:
+        return self._request("POST", f"matches/{match_id}/predict", data={"predictedTeamId": predicted_team_id}, token=token)
+
     def update_match_result(self, match_id: str | int, score_a: int, score_b: int, token: str) -> ApiResult:
         return self._request("PUT", f"matches/{match_id}/result", data={"scoreA": score_a, "scoreB": score_b}, token=token)
 
@@ -232,6 +238,9 @@ class CSharpApiClient:
 
     def get_free_agents(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "scouting/free-agents", token=token)
+
+    def get_free_agent(self, agent_id: int) -> ApiResult:
+        return self._request("GET", f"scouting/free-agents/{agent_id}")
 
     def set_looking_for_team(self, enabled: bool, token: str) -> ApiResult:
         return self._request("POST", "auth/profile/looking-for-team", data={"enabled": enabled}, token=token)
@@ -323,5 +332,30 @@ class CSharpApiClient:
 
     def remove_favorite(self, tournament_id: int, token: str) -> ApiResult:
         return self._request("DELETE", f"favorites/{tournament_id}", token=token)
+
+    def get_smart_scouting_recommendations(self, team_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", "scouting/recommendations", params={"teamId": team_id}, token=token)
+
+    def swipe_smart_scouting(self, team_id: int, player_id: int, action: str, token: str | None = None) -> ApiResult:
+        payload = {
+            "TeamId": team_id,
+            "PlayerId": player_id,
+            "Action": action
+        }
+        return self._request("POST", "scouting/swipe", data=payload, token=token)
+
+    def get_fantasy_players(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", f"fantasy/{tournament_id}/players", token=token)
+
+    def submit_fantasy_draft(self, tournament_id: int, team_name: str, player_ids: list[int], token: str | None = None) -> ApiResult:
+        payload = {
+            "TournamentId": tournament_id,
+            "TeamName": team_name,
+            "PlayerIds": player_ids
+        }
+        return self._request("POST", "fantasy/draft", data=payload, token=token)
+
+    def get_fantasy_leaderboard(self, tournament_id: int, token: str | None = None) -> ApiResult:
+        return self._request("GET", f"fantasy/{tournament_id}/leaderboard", token=token)
         
 api_client = CSharpApiClient()

@@ -29,15 +29,18 @@ urlpatterns = [
     # Play Zone
     path('pro/tournaments/<int:tournament_id>/fantasy/', views.fantasy_draft, name='fantasy_draft'),
     path('pro/tournaments/<int:tournament_id>/fantasy/submit/', views.fantasy_draft_submit, name='fantasy_draft_submit'),
+    path('pro/tournaments/<int:tournament_id>/fantasy/toggle/<int:player_id>/', views.fantasy_draft_toggle, name='fantasy_draft_toggle'),
     path('pro/tournaments/<int:tournament_id>/fantasy/leaderboard/', views.fantasy_leaderboard, name='fantasy_leaderboard'),
     path('play/tournaments/', views.tournaments, {'is_pro': False}, name='play_tournaments'),
     path('play/tournaments/<int:tournament_id>/', views.tournament_detail, name='play_tournament_detail'),
     path('play/tournaments/<int:tournament_id>/matches/', views.match_center, name='play_match_center'),
     path('play/scouting/', views.scouting, name='play_scouting'),
+    path('play/scouting/agent/<int:agent_id>/', views.scouting_agent_detail, name='scouting_agent_detail'),
     path('registration/', views.registration, name='registration'),
     path('play/scouting/team/<int:team_id>/', views.smart_scouting, name='smart_scouting'),
     path('play/scouting/team/<int:team_id>/swipe/', views.smart_scouting_swipe, name='smart_scouting_swipe'),
     path('play/teams/', views.teams, name='play_teams'),
+    path('play/tournaments/matches/<int:match_id>/predict/', views.predict_match, name='predict_match'),
 ]
 
 if settings.DEBUG:

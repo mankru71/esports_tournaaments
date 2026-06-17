@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Models;
 using Services;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Controllers;
 
@@ -123,6 +124,13 @@ public class MatchesController : ControllerBase
                     predicted[candidates[i].Id] = results[i];
             }
 
+            var currentUserId = User.GetUserId();
+            var userPredictions = currentUserId.HasValue
+                ? await _db.MatchPredictions
+                    .Where(p => p.UserId == currentUserId.Value)
+                    .ToDictionaryAsync(p => p.MatchId, p => p.PredictedTeamId, ct)
+                : new Dictionary<int, int>();
+
             var payload = matchesFromDb.Select(m => new
             {
                 id = m.Id,
@@ -139,12 +147,81 @@ public class MatchesController : ControllerBase
                 streamUrl = m.StreamUrl,
                 prediction = predicted.TryGetValue(m.Id, out var p) && p != null
                     ? new { teamAWinProbability = p.TeamAWinProbability, teamBWinProbability = p.TeamBWinProbability }
-                    : (object?)null
+                    : (object?)null,
+                userPredictionTeamId = userPredictions.TryGetValue(m.Id, out var teamId) ? (int?)teamId : null
             });
             return Ok(payload);
         }
 
         return Ok(new List<object>());
+    }
+
+    public class PredictRequest
+    {
+        [Required]
+        public int PredictedTeamId { get; set; }
+    }
+
+    [HttpPost("{id:int}/predict")]
+    [Authorize]
+    public async Task<IActionResult> Predict(int id, [FromBody] PredictRequest request, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId == null)
+            return Unauthorized();
+
+        var match = await _db.Matches
+            .Include(m => m.TeamA)
+            .Include(m => m.TeamB)
+            .FirstOrDefaultAsync(m => m.Id == id, ct);
+
+        if (match == null)
+            return NotFound(new { message = "Матч не найден." });
+
+        if (match.Status != "planned")
+            return BadRequest(new { message = "Прогнозы принимаются только до начала матча." });
+
+        if (match.TeamAId != request.PredictedTeamId && match.TeamBId != request.PredictedTeamId)
+            return BadRequest(new { message = "Выбранная команда не участвует в этом матче." });
+
+        var existingPrediction = await _db.MatchPredictions
+            .FirstOrDefaultAsync(p => p.UserId == userId.Value && p.MatchId == id, ct);
+
+        if (existingPrediction != null)
+        {
+            existingPrediction.PredictedTeamId = request.PredictedTeamId;
+            existingPrediction.CreatedAtUtc = DateTime.UtcNow;
+            _db.MatchPredictions.Update(existingPrediction);
+        }
+        else
+        {
+            var prediction = new MatchPrediction
+            {
+                UserId = userId.Value,
+                MatchId = id,
+                PredictedTeamId = request.PredictedTeamId,
+                Status = "Pending"
+            };
+            _db.MatchPredictions.Add(prediction);
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        var teamAName = match.TeamA?.Name ?? "TBD";
+        var teamBName = match.TeamB?.Name ?? "TBD";
+        var truncatedA = teamAName.Length > 10 ? teamAName.Substring(0, 7) + "..." : teamAName;
+        var truncatedB = teamBName.Length > 10 ? teamBName.Substring(0, 7) + "..." : teamBName;
+
+        var classA = request.PredictedTeamId == match.TeamAId ? "btn-accent" : "btn-outline-accent";
+        var classB = request.PredictedTeamId == match.TeamBId ? "btn-accent" : "btn-outline-accent";
+
+        var html = $@"
+<div class=""btn-group btn-group-sm pickem-group"" role=""group"">
+  <button type=""button"" class=""btn {classA}"" hx-post=""/play/tournaments/matches/{id}/predict/"" hx-vals='{{""predicted_team_id"": {match.TeamAId}}}' hx-target=""closest .pickem-group"" hx-swap=""outerHTML"">{truncatedA}</button>
+  <button type=""button"" class=""btn {classB}"" hx-post=""/play/tournaments/matches/{id}/predict/"" hx-vals='{{""predicted_team_id"": {match.TeamBId}}}' hx-target=""closest .pickem-group"" hx-swap=""outerHTML"">{truncatedB}</button>
+</div>";
+
+        return Content(html, "text/html");
     }
 
     [HttpGet("{id}/comments")]

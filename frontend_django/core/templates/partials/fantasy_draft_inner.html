@@ -1,0 +1,196 @@
+{% if error_message %}
+<div class="alert alert-danger border-danger-subtle d-flex align-items-center gap-2 alert-dismissible fade show" role="alert">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-danger"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+  <div>{{ error_message }}</div>
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+{% if success_message %}
+<div class="alert alert-success border-success-subtle d-flex align-items-center gap-2 alert-dismissible fade show" role="alert">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+  <div>{{ success_message }}</div>
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<!-- Budget Tracker Summary Panel -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 p-4 rounded shadow-sm border animate-fade-in" style="background: var(--surface); border-color: var(--border);">
+  <div>
+    <h2 class="h4 fw-bold mb-1 text-white">Fantasy Draft: {{ tournament.name }}</h2>
+    <p class="text-muted small mb-0">Соберите команду из 5 игроков, не превысив бюджет в 500$</p>
+  </div>
+  <div class="d-flex align-items-center gap-4 mt-3 mt-md-0">
+    <div class="text-end">
+      <div class="small text-muted text-uppercase fw-semibold" style="letter-spacing: 0.05em; font-size: 0.75rem;">Остаток бюджета</div>
+      <div class="h3 mb-0 fw-bold font-monospace" style="color: {% if budget_remaining >= 200 %}var(--success){% elif budget_remaining >= 50 %}var(--warning){% else %}var(--danger){% endif %}; transition: color 0.3s ease;">
+        {{ budget_remaining }}$
+      </div>
+    </div>
+    <div class="vr" style="height: 40px; opacity: 0.15; width: 1px;"></div>
+    <div class="text-end">
+      <div class="small text-muted text-uppercase fw-semibold" style="letter-spacing: 0.05em; font-size: 0.75rem;">Игроков в составе</div>
+      <div class="h3 mb-0 fw-bold font-monospace text-white">
+        {{ draft_count }}<span class="text-muted h5">/5</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Left: Roster Panel -->
+  <div class="col-lg-4">
+    <div class="card p-3 mb-4 sticky-top border-0 animate-fade-in" style="top: 80px; background: var(--surface); box-shadow: var(--shadow); border-radius: 16px;">
+      <h5 class="fw-bold mb-3 text-white">Ваш состав</h5>
+      
+      <!-- Filled and Empty Slots -->
+      <div class="d-flex flex-column gap-3 mb-4">
+        {% for p in roster_players %}
+          <!-- Filled Slot -->
+          <div class="roster-slot-card filled-slot d-flex align-items-center justify-content-between p-3 border rounded shadow-sm" style="background: var(--surface-2); border-color: var(--accent) !important; transition: all 0.3s ease;">
+            <div class="d-flex align-items-center gap-3">
+              <div class="slot-number d-flex align-items-center justify-content-center fw-bold text-accent rounded-circle" style="width: 32px; height: 32px; background: var(--accent-soft); font-size: 0.9rem;">
+                {{ forloop.counter }}
+              </div>
+              <div>
+                <div class="fw-bold text-white">{{ p.nickname }}</div>
+                <div class="small text-muted">{{ p.teamName }}</div>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+              <span class="fw-bold text-accent font-monospace">{{ p.cost }}$</span>
+              <button type="button" 
+                      class="btn btn-sm btn-outline-danger border-0 rounded-circle d-flex align-items-center justify-content-center p-0" 
+                      style="width: 28px; height: 28px; background: rgba(216, 102, 102, 0.1);"
+                      hx-post="{% url 'fantasy_draft_toggle' tournament.id p.id %}"
+                      hx-target="#fantasy-draft-inner-container"
+                      hx-swap="innerHTML"
+                      title="Удалить из состава">
+                <i class="bi bi-x-lg" style="font-size: 0.85rem;"></i>
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+        
+        <!-- Empty Slots -->
+        {% if draft_count < 5 %}
+          {% if draft_count == 4 %}
+            <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+              <div class="d-flex align-items-center gap-3">
+                <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">5</div>
+                <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
+              </div>
+            </div>
+          {% elif draft_count == 3 %}
+            {% for j in "45" %}
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
+                  <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
+                </div>
+              </div>
+            {% endfor %}
+          {% elif draft_count == 2 %}
+            {% for j in "345" %}
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
+                  <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
+                </div>
+              </div>
+            {% endfor %}
+          {% elif draft_count == 1 %}
+            {% for j in "2345" %}
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
+                  <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
+                </div>
+              </div>
+            {% endfor %}
+          {% elif draft_count == 0 %}
+            {% for j in "12345" %}
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
+                  <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
+                </div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endif %}
+      </div>
+
+      <!-- Submit Form -->
+      <form id="fantasy-draft-form" hx-post="{% url 'fantasy_draft_submit' tournament.id %}" hx-target="#fantasy-draft-inner-container" hx-swap="innerHTML">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label small fw-semibold text-muted">Название команды</label>
+          <input type="text" 
+                 class="form-control" 
+                 name="team_name" 
+                 placeholder="Например: Super Star Squad" 
+                 value="{{ team_name|default:'' }}" 
+                 required 
+                 style="background: var(--surface-2); border-color: var(--border); color: var(--text);">
+        </div>
+        
+        <button type="submit" 
+                class="btn btn-accent w-100 fw-bold py-2.5" 
+                id="btn-submit" 
+                {% if draft_count != 5 %}disabled{% endif %}>
+          Утвердить состав
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Right: Players Pool -->
+  <div class="col-lg-8">
+    <div class="row g-3" id="players-pool">
+      {% for p in players %}
+      <div class="col-md-6 col-lg-4 player-card-wrapper animate-fade-in" data-name="{{ p.nickname|lower }}">
+        <div class="card h-100 fantasy-player-card {% if p.id in draft_ids %}selected-card{% endif %}" 
+             style="background: var(--surface); border: 1px solid {% if p.id in draft_ids %}var(--accent){% else %}var(--border){% endif %}; border-radius: 12px; transition: all 0.25s ease; box-shadow: var(--shadow);">
+          <div class="card-body d-flex flex-column justify-content-between p-3">
+            <div>
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h5 class="fw-bold mb-0 text-white" style="font-size: 1.1rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 120px;" title="{{ p.nickname }}">{{ p.nickname }}</h5>
+                <span class="badge font-monospace" style="background: var(--accent-soft); color: var(--accent); font-size: 0.85rem; border: 1px solid rgba(200, 169, 106, 0.2);">
+                  {{ p.cost }}$
+                </span>
+              </div>
+              <p class="text-muted small mb-3"><i class="bi bi-person-workspace me-1"></i>{{ p.teamName }}</p>
+            </div>
+            
+            <div>
+              {% if p.id in draft_ids %}
+                <button type="button" 
+                        class="btn btn-sm btn-outline-danger w-100 fw-bold d-flex align-items-center justify-content-center gap-1 py-1.5"
+                        hx-post="{% url 'fantasy_draft_toggle' tournament.id p.id %}"
+                        hx-target="#fantasy-draft-inner-container"
+                        hx-swap="innerHTML">
+                  <i class="bi bi-dash-circle"></i> Удалить
+                </button>
+              {% else %}
+                <button type="button" 
+                        class="btn btn-sm btn-accent w-100 fw-bold d-flex align-items-center justify-content-center gap-1 py-1.5"
+                        hx-post="{% url 'fantasy_draft_toggle' tournament.id p.id %}"
+                        hx-target="#fantasy-draft-inner-container"
+                        hx-swap="innerHTML"
+                        {% if draft_count >= 5 or budget_remaining < p.cost %}disabled{% endif %}>
+                  <i class="bi bi-plus-circle"></i> Добавить
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="col-12 text-center text-muted p-5 border rounded" style="background: var(--surface); border-color: var(--border) !important;">
+        Для этого турнира пока не загружены игроки команд.
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

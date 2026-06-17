@@ -124,7 +124,8 @@ public sealed class FaceitApiService
         if (string.IsNullOrEmpty(ClientId) || string.IsNullOrEmpty(ClientSecret))
             throw new InvalidOperationException("Faceit OAuth не настроен (Client ID/Secret отсутствует).");
 
-        using var client = new HttpClient();
+        var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         
         // 1. Exchange code for access token
         var authHeader = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"));
@@ -133,7 +134,8 @@ public sealed class FaceitApiService
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 {"grant_type", "authorization_code"},
-                {"code", code}
+                {"code", code},
+                {"redirect_uri", redirectUri}
             })
         };
         tokenReq.Headers.Authorization = new AuthenticationHeaderValue("Basic", authHeader);

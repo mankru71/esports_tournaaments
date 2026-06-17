@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -92,7 +93,11 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<VerificationService>();
-builder.Services.AddScoped<SteamApiService>();
+builder.Services.AddHttpClient<SteamApiService>(client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+});
 builder.Services.AddScoped<TournamentService>();
 builder.Services.AddScoped<ActivityLogService>();
 builder.Services.AddScoped<AnalyticsService>();
@@ -107,7 +112,7 @@ builder.Services.AddHostedService<Services.PredictionResolverService>();
 builder.Services.AddScoped<FaceitApiService>();
 
 
-builder.Services.AddScoped<ITournamentProvider, FaceitTournamentService>();
+builder.Services.AddScoped<ITournamentProvider>(sp => sp.GetRequiredService<FaceitTournamentService>());
 // Переиспользуем типизированный HttpClient-сервис, а не строим второй экземпляр без BaseAddress
 builder.Services.AddScoped<ITournamentProvider>(sp => sp.GetRequiredService<EsportsBackend.Services.LiquipediaService>());
 
@@ -140,6 +145,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 var app = builder.Build();
+
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 using (var scope = app.Services.CreateScope())
 {

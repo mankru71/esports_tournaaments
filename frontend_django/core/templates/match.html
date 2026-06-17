@@ -124,7 +124,7 @@
     <div class="table-panel p-3 p-md-4 mb-3">
       {% if matches %}
         <div class="table-responsive">
-          <table class="table table-striped align-middle mb-0">
+          <table class="table table-striped align-middle mb-0" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
             <thead>
               <tr>
                 <th>ID</th><th>Раунд</th>
@@ -159,8 +159,8 @@
                 <td class="text-center">
                   {% if m.status == 'planned' and m.team_a_id and m.team_b_id %}
                     <div class="btn-group btn-group-sm pickem-group" role="group">
-                      <button type="button" class="btn btn-outline-accent" onclick="submitPrediction({{ m.id }}, {{ m.team_a_id }}, this)">{{ m.teamA|truncatechars:10 }}</button>
-                      <button type="button" class="btn btn-outline-accent" onclick="submitPrediction({{ m.id }}, {{ m.team_b_id }}, this)">{{ m.teamB|truncatechars:10 }}</button>
+                      <button type="button" class="btn {% if m.userPredictionTeamId == m.team_a_id %}btn-accent{% else %}btn-outline-accent{% endif %}" hx-post="/play/tournaments/matches/{{ m.id }}/predict/" hx-vals='{"predicted_team_id": {{ m.team_a_id }}}' hx-target="closest .pickem-group" hx-swap="outerHTML">{{ m.teamA|truncatechars:10 }}</button>
+                      <button type="button" class="btn {% if m.userPredictionTeamId == m.team_b_id %}btn-accent{% else %}btn-outline-accent{% endif %}" hx-post="/play/tournaments/matches/{{ m.id }}/predict/" hx-vals='{"predicted_team_id": {{ m.team_b_id }}}' hx-target="closest .pickem-group" hx-swap="outerHTML">{{ m.teamB|truncatechars:10 }}</button>
                     </div>
                   {% else %}
                     <span class="text-muted small">—</span>
@@ -241,7 +241,7 @@
         }
 
         try {
-          const res = await fetch(`http://localhost:5000/api/matches/${matchId}/autoserver`, {
+          const res = await fetch(`/api/matches/${matchId}/autoserver`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -414,7 +414,7 @@
   async function loadMvp() {
     mvpLoaded = true;
     try {
-      const apiRes = await fetch(`http://localhost:5000/api/mvp/results?tournamentId=${tournamentId}`, {
+      const apiRes = await fetch(`/api/mvp/results?tournamentId=${tournamentId}`, {
         headers: { "X-Requested-With": "XMLHttpRequest" }
       });
       if (apiRes.ok) {
@@ -533,7 +533,7 @@
     }
     btn.disabled = true;
     try {
-      const res = await fetch(`http://localhost:5000/api/mvp/vote`, {
+      const res = await fetch(`/api/mvp/vote`, {
         method:  "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -730,6 +730,19 @@
     }
   };
   
+  document.body.addEventListener('htmx:responseError', function(evt) {
+    const xhr = evt.detail.xhr;
+    let msg = xhr.responseText || 'Произошла ошибка при отправке запроса';
+    showToast(msg, "error");
+  });
+
+  document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+    const path = evt.detail.pathInfo.requestPath;
+    if (path && path.includes('/predict/') && evt.detail.xhr.status === 200) {
+      showToast("Прогноз сохранен!", "success");
+    }
+  });
+
   function getCookie(name) {
       const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
       if (match) return match[2];

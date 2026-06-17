@@ -38,66 +38,81 @@
   {% endif %}
 
   <div class="table-panel p-3 p-md-4">
-    {% if tournaments %}
-      <div class="table-responsive">
-        <table class="table table-striped align-middle mb-0 tournament-table">
-          <thead>
-            <tr>
-              <th>Турнир</th>
-              <th>Дисциплина</th>
-              <th>Формат</th>
-              <th>Участники</th>
-              <th>Статус</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for tournament in tournaments %}
-              <tr data-tournament-row="{{ tournament.id }}" data-favorited="{% if tournament.id in favorite_ids %}1{% else %}0{% endif %}">
-                <td>
-                  <div class="fw-semibold">{{ tournament.name }}</div>
-                  <div class="text-muted small">Старт: {{ tournament.startDate }}</div>
-                </td>
-                <td>{{ tournament.discipline }}</td>
-                <td>{{ tournament.format }}</td>
-                <td>{{ tournament.currentParticipants }}/{{ tournament.maxParticipants }}</td>
-                <td><span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span></td>
-                <td>
-                  <div class="d-flex justify-content-end gap-2 flex-wrap">
-                    {% if current_user %}
-                      <form method="post" class="m-0">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="toggle_favorite">
-                        <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
-                        {% if tournament.id in favorite_ids %}
-                          <input type="hidden" name="favorited" value="1">
-                          <button type="submit" class="btn btn-sm btn-ghost active" aria-pressed="true">В избранном</button>
-                        {% else %}
-                          <input type="hidden" name="favorited" value="0">
-                          <button type="submit" class="btn btn-sm btn-ghost" aria-pressed="false">В избранное</button>
-                        {% endif %}
-                      </form>
-                    {% endif %}
-                    <a class="btn btn-sm btn-outline-accent" href="{% if is_pro %}{% url 'pro_tournament_detail' tournament.id %}{% else %}{% url 'play_tournament_detail' tournament.id %}{% endif %}">Открыть</a>
-                    {% if is_admin and not tournament.isExternal %}
-                      <form method="post" class="m-0" onsubmit="return confirm('Удалить турнир?');">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="delete_tournament">
-                        <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
-                      </form>
-                    {% endif %}
-                  </div>
-                </td>
+    <div class="mb-3">
+      <input type="text" 
+             name="search" 
+             placeholder="Поиск турнира по названию или дисциплине..." 
+             class="form-control"
+             value="{{ request.GET.search|default:'' }}"
+             hx-get="{% if is_pro %}{% url 'pro_tournaments' %}{% else %}{% url 'play_tournaments' %}{% endif %}" 
+             hx-trigger="keyup changed delay:300ms, search" 
+             hx-target="#tournament-grid" 
+             hx-select="#tournament-grid"
+             hx-swap="outerHTML">
+    </div>
+
+    <div id="tournament-grid">
+      {% if tournaments %}
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0 tournament-table">
+            <thead>
+              <tr>
+                <th>Турнир</th>
+                <th>Дисциплина</th>
+                <th>Формат</th>
+                <th>Участники</th>
+                <th>Статус</th>
+                <th></th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <div class="empty-state d-none" data-favorites-empty>В избранном пока нет турниров.</div>
-    {% else %}
-      <div class="empty-state">Турниров пока нет.</div>
-    {% endif %}
+            </thead>
+            <tbody>
+              {% for tournament in tournaments %}
+                <tr data-tournament-row="{{ tournament.id }}" data-favorited="{% if tournament.id in favorite_ids %}1{% else %}0{% endif %}">
+                  <td>
+                    <div class="fw-semibold">{{ tournament.name }}</div>
+                    <div class="text-muted small">Старт: {{ tournament.startDate }}</div>
+                  </td>
+                  <td>{{ tournament.discipline }}</td>
+                  <td>{{ tournament.format }}</td>
+                  <td>{{ tournament.currentParticipants }}/{{ tournament.maxParticipants }}</td>
+                  <td><span class="badge badge-status status-{{ tournament.status }}">{{ tournament.status_label }}</span></td>
+                  <td>
+                    <div class="d-flex justify-content-end gap-2 flex-wrap">
+                      {% if current_user %}
+                        <form method="post" class="m-0">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="toggle_favorite">
+                          <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
+                          {% if tournament.id in favorite_ids %}
+                            <input type="hidden" name="favorited" value="1">
+                            <button type="submit" class="btn btn-sm btn-ghost active" aria-pressed="true">В избранном</button>
+                          {% else %}
+                            <input type="hidden" name="favorited" value="0">
+                            <button type="submit" class="btn btn-sm btn-ghost" aria-pressed="false">В избранное</button>
+                          {% endif %}
+                        </form>
+                      {% endif %}
+                      <a class="btn btn-sm btn-outline-accent" href="{% if is_pro %}{% url 'pro_tournament_detail' tournament.id %}{% else %}{% url 'play_tournament_detail' tournament.id %}{% endif %}">Открыть</a>
+                      {% if is_admin and not tournament.isExternal %}
+                        <form method="post" class="m-0" onsubmit="return confirm('Удалить турнир?');">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="delete_tournament">
+                          <input type="hidden" name="tournament_id" value="{{ tournament.id }}">
+                          <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="empty-state d-none" data-favorites-empty>В избранном пока нет турниров.</div>
+      {% else %}
+        <div class="empty-state">Турниров пока нет.</div>
+      {% endif %}
+    </div>
   </div>
 </section>
 {% endblock %}

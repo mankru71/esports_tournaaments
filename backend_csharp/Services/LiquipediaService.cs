@@ -395,7 +395,18 @@ public class LiquipediaService : ITournamentProvider
 
     private static LpMatch BuildMatch(string round, int roundNumber, string? teamA, string? teamB, int scoreA, int scoreB, bool winnerA, bool winnerB)
     {
-        var status = winnerA || winnerB
+        var finished = winnerA || winnerB;
+        if (!finished)
+        {
+            if (scoreA >= 2 || scoreB >= 2 || (scoreA == 1 && scoreB == 0) || (scoreB == 1 && scoreA == 0))
+            {
+                finished = true;
+                winnerA = scoreA > scoreB;
+                winnerB = scoreB > scoreA;
+            }
+        }
+
+        var status = finished
             ? "finished"
             : scoreA == 0 && scoreB == 0
                 ? "planned"

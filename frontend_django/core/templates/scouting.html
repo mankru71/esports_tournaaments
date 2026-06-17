@@ -8,17 +8,20 @@
       <p class="text-muted mb-0">Свободные агенты, которые ищут команду. Найдите идеального игрока для вашего состава.</p>
     </div>
     {% if current_user %}
-    <form method="post" class="m-0">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="toggle_lft">
-      {% if current_user.isLookingForTeam %}
-        <input type="hidden" name="enabled" value="0">
-        <button class="btn btn-outline-accent" type="submit">Я нашёл команду</button>
-      {% else %}
-        <input type="hidden" name="enabled" value="1">
-        <button class="btn btn-accent" type="submit">Ищу команду</button>
-      {% endif %}
-    </form>
+    <div class="d-flex gap-2">
+      <form method="post" class="m-0">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="toggle_lft">
+        {% if current_user.isLookingForTeam %}
+          <input type="hidden" name="enabled" value="0">
+          <button class="btn btn-outline-accent" type="submit">Я нашёл команду</button>
+        {% else %}
+          <input type="hidden" name="enabled" value="1">
+          <button class="btn btn-accent" type="submit">Ищу команду</button>
+        {% endif %}
+      </form>
+      <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#editScoutingModal">Редактировать анкету</button>
+    </div>
     {% endif %}
   </div>
 
@@ -74,7 +77,13 @@
          data-role="{{ agent.gameRole|default:'none'|lower }}" 
          data-elo="{{ agent.faceitElo|default:0 }}"
          data-timestamp="{{ agent.lookingForTeamSinceUtc|default:'' }}">
-      <div class="card p-3 h-100 border-0" style="background-color: var(--surface-2); transition: transform 0.2s, box-shadow 0.2s; border-radius: 12px;">
+      <div class="card p-3 h-100 border-0 agent-scouting-card" 
+           style="background-color: var(--surface-2); transition: transform 0.2s, box-shadow 0.2s; border-radius: 12px; cursor: pointer;"
+           data-bs-toggle="modal" 
+           data-bs-target="#agentDetailModal"
+           hx-get="{% url 'scouting_agent_detail' agent.id %}"
+           hx-target="#agentDetailModalBody"
+           hx-trigger="click">
         <div class="d-flex align-items-center gap-3">
           {% if agent.faceitAvatar %}
             <img src="{{ agent.faceitAvatar }}" alt="{{ agent.nickname }}"
@@ -292,4 +301,94 @@ document.addEventListener('DOMContentLoaded', () => {
   applyFilters();
 });
 </script>
+{% if current_user and scouting_form %}
+<div class="modal fade" id="editScoutingModal" tabindex="-1" aria-labelledby="editScoutingModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" style="background-color: var(--surface-bg);">
+      <div class="modal-header border-bottom-0 pb-0">
+        <h5 class="modal-title" id="editScoutingModalLabel">Анкета для скаутинга</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <form method="post">
+        <div class="modal-body">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_scouting_profile">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ scouting_form.game_role.label }}</label>
+              {{ scouting_form.game_role }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ scouting_form.availability.label }}</label>
+              {{ scouting_form.availability }}
+            </div>
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">{{ scouting_form.pitch.label }}</label>
+              {{ scouting_form.pitch }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ scouting_form.discord_id.label }}</label>
+              {{ scouting_form.discord_id }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ scouting_form.highlights_url.label }}</label>
+              {{ scouting_form.highlights_url }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ scouting_form.country.label }}</label>
+              {{ scouting_form.country }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ scouting_form.city.label }}</label>
+              {{ scouting_form.city }}
+            </div>
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">{{ scouting_form.languages.label }}</label>
+              {{ scouting_form.languages }}
+            </div>
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">{{ scouting_form.bio.label }}</label>
+              {{ scouting_form.bio }}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-top-0 pt-0">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-accent">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Agent Detail Modal -->
+<div class="modal fade" id="agentDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow" style="background-color: var(--surface); border-radius: 16px;">
+      <div class="modal-header border-0 pb-0">
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pt-0" id="agentDetailModalBody">
+        <div class="text-center py-5">
+          <div class="spinner-border text-accent" role="status">
+            <span class="visually-hidden">Загрузка...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .agent-scouting-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease !important;
+  }
+  .agent-scouting-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.4) !important;
+    background-color: var(--surface-3) !important;
+  }
+</style>
+
 {% endblock %}

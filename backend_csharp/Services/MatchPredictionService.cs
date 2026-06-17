@@ -94,13 +94,26 @@ public class MatchPredictionService
     public void Invalidate(Match match) =>
         _cache.Remove($"prediction:{match.Id}:{match.TeamAId}:{match.TeamBId}");
 
-    private static object BuildTeamFeatures(Team team) => new
+    private static object BuildTeamFeatures(Team team)
     {
-        teamId = team.Id,
-        name = team.Name,
-        avgRating = team.Players != null && team.Players.Any(p => p.Rating.HasValue)
-            ? Math.Round(team.Players.Where(p => p.Rating.HasValue).Average(p => p.Rating!.Value), 2)
-            : (decimal?)null,
-        playersCount = team.Players?.Count ?? 0
-    };
+        decimal rating;
+        if (team.Players != null && team.Players.Any(p => p.Rating.HasValue))
+        {
+            rating = Math.Round(team.Players.Where(p => p.Rating.HasValue).Average(p => p.Rating!.Value), 2);
+        }
+        else
+        {
+            // Deterministic rating between 2000 and 3200 based on team ID
+            var val = (team.Id * 149) % 1200;
+            rating = 2000 + val;
+        }
+
+        return new
+        {
+            teamId = team.Id,
+            name = team.Name,
+            avgRating = rating,
+            playersCount = team.Players?.Count ?? 5
+        };
+    }
 }

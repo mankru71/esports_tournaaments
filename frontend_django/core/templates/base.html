@@ -14,17 +14,14 @@
   <style>
     /* HTMX Indicator styles */
     .htmx-indicator{
-        opacity:0;
-        pointer-events: none;
+        display: none !important;
+        opacity: 0;
         transition: opacity 200ms ease-in;
     }
-    .htmx-request .htmx-indicator{
-        opacity:1;
-        pointer-events: all;
-    }
+    .htmx-request .htmx-indicator,
     .htmx-request.htmx-indicator{
-        opacity:1;
-        pointer-events: all;
+        display: flex !important;
+        opacity: 1;
     }
   </style>
 </head>
@@ -49,7 +46,7 @@
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
               <!-- Pro Zone -->
               <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle fw-bold" href="#" id="proDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: var(--accent);">
+                <a class="nav-link dropdown-toggle fw-bold" href="#" id="proDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" hx-boost="false" style="color: var(--accent);">
                   PRO ZONE
                 </a>
                 <ul class="dropdown-menu" aria-labelledby="proDropdown">
@@ -63,7 +60,7 @@
               
               <!-- Play Zone -->
               <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle fw-bold" href="#" id="playDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: #4ade80;">
+                <a class="nav-link dropdown-toggle fw-bold" href="#" id="playDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" hx-boost="false" style="color: #4ade80;">
                   PLAY ZONE
                 </a>
                 <ul class="dropdown-menu" aria-labelledby="playDropdown">

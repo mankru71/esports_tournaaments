@@ -22,11 +22,35 @@ public class TournamentController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken ct)
+    public async Task<IActionResult> Get([FromQuery] string? search, [FromServices] IServiceScopeFactory scopeFactory)
     {
-        await _sync.SyncUpcomingAsync(ct);
-        var tournaments = _tournamentService.GetAllTournaments().Select(ToDto);
-        return Ok(tournaments);
+        var tournaments = _tournamentService.GetAllTournaments().ToList();
+        
+        if (!tournaments.Any())
+        {
+            await _sync.SyncUpcomingAsync(CancellationToken.None);
+            tournaments = _tournamentService.GetAllTournaments().ToList();
+        }
+        else
+        {
+            _ = Task.Run(async () => 
+            {
+                using var scope = scopeFactory.CreateScope();
+                var syncService = scope.ServiceProvider.GetRequiredService<ExternalTournamentSyncService>();
+                await syncService.SyncUpcomingAsync(CancellationToken.None);
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.Trim().ToLower();
+            tournaments = tournaments.Where(t => 
+                (t.Name != null && t.Name.ToLower().Contains(searchLower)) || 
+                (t.Game != null && t.Game.ToLower().Contains(searchLower))
+            ).ToList();
+        }
+        
+        return Ok(tournaments.Select(ToDto));
     }
 
     [HttpPost]

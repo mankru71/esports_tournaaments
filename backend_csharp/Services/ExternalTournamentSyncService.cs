@@ -41,11 +41,11 @@ public class ExternalTournamentSyncService
         if (_cache.TryGetValue(ListCacheKey, out _))
             return;
 
+        var addedCount = 0;
+
+        // 1. Liquipedia
         try
         {
-            var addedCount = 0;
-
-            // 1. Liquipedia
             var lpParsed = await _liquipedia.GetTournamentListAsync(ct);
             var lpSelected = lpParsed.Where(t => t.Status == "live")
                 .Concat(lpParsed.Where(t => t.Status == "finished").OrderByDescending(t => t.EndDate).Take(10))
@@ -56,8 +56,15 @@ public class ExternalTournamentSyncService
 
             foreach (var t in lpSelected)
                 addedCount += await SaveTournamentAsync("liquipedia", t.PageName, t.Name, "counterstrike", t.PrizePool, t.Participants, t.StartDate?.ToString("yyyy-MM-dd"), t.Status, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Liquipedia sync failed");
+        }
 
-            // 2. Pandascore
+        // 2. Pandascore
+        try
+        {
             if (_pandascore.Enabled)
             {
                 var psLive = await _pandascore.GetRunningTournamentsAsync(10, null, ct);
@@ -67,28 +74,43 @@ public class ExternalTournamentSyncService
                 foreach (var t in psSelected)
                     addedCount += await SaveTournamentAsync("pandascore", t.Id, t.Name, t.VideogameName ?? "esports", t.PrizePool ?? 0, 16, t.BeginAt, t.Status ?? "planned", ct);
             }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Pandascore sync failed");
+        }
 
-            // 3. ITournamentProvider (Faceit etc.)
-            foreach (var provider in _providers.Where(p => p.ProviderName != "Liquipedia")) // _liquipedia handled separately for prize pool etc
+        // 3. ITournamentProvider (Faceit etc.)
+        foreach (var provider in _providers.Where(p => p.ProviderName != "Liquipedia")) // _liquipedia handled separately for prize pool etc
+        {
+            try
             {
                 var providerTournaments = await provider.GetTournamentsAsync(ct);
                 foreach (var t in providerTournaments)
                     addedCount += await SaveTournamentAsync(provider.ProviderName.ToLowerInvariant(), t.ExternalId, t.Name, "esports", 0, 16, t.StartDate?.ToString("yyyy-MM-dd"), t.Status, ct);
             }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "{ProviderName} sync failed", provider.ProviderName);
+            }
+        }
 
+        try
+        {
             await _db.SaveChangesAsync(ct);
             _cache.Set(ListCacheKey, true, TimeSpan.FromMinutes(5));
             _logger.LogInformation("External sync: added/updated {Count} tournaments from multiple providers", addedCount);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "External tournament sync failed");
+            _logger.LogWarning(ex, "External tournament database save failed");
             _cache.Set(ListCacheKey, true, TimeSpan.FromMinutes(2));
         }
     }
 
     private async Task<int> SaveTournamentAsync(string provider, string externalId, string name, string game, decimal prize, int participants, string? startDate, string status, CancellationToken ct)
     {
+        var mappedStatus = MapTournamentStatus(status);
         var existing = await _db.Tournaments.FirstOrDefaultAsync(x => x.Provider == provider && x.ProviderTournamentId == externalId, ct);
         if (existing == null)
         {
@@ -100,7 +122,7 @@ public class ExternalTournamentSyncService
                 MaxParticipants = participants,
                 CurrentParticipants = participants,
                 StartDate = startDate ?? string.Empty,
-                Status = status,
+                Status = mappedStatus,
                 Format = "single_elimination",
                 StageType = "single",
                 IsExternal = true,
@@ -117,7 +139,7 @@ public class ExternalTournamentSyncService
             existing.MaxParticipants = participants > 0 ? participants : existing.MaxParticipants;
             existing.CurrentParticipants = existing.MaxParticipants;
             existing.StartDate = string.IsNullOrWhiteSpace(startDate) ? existing.StartDate : startDate;
-            existing.Status = status;
+            existing.Status = mappedStatus;
             existing.IsExternal = true;
             if (string.IsNullOrWhiteSpace(existing.PrizeDistributionJson))
                 existing.PrizeDistributionJson = DefaultPrizeDistribution();
@@ -153,6 +175,7 @@ public class ExternalTournamentSyncService
                 var psMatches = await _pandascore.GetMatchesForTournamentAsync(tournament.ProviderTournamentId, 50, tournament.Game, ct);
                 foreach (var m in psMatches)
                 {
+                    var mappedStatus = MapMatchStatus(m.Status);
                     parsed.Add(new LpMatch(
                         Round: m.Name ?? "Match",
                         RoundNumber: GuessRoundNumber(m.Name),
@@ -160,7 +183,7 @@ public class ExternalTournamentSyncService
                         TeamB: m.OpponentB,
                         ScoreA: m.ScoreA,
                         ScoreB: m.ScoreB,
-                        Status: m.Status ?? "planned",
+                        Status: mappedStatus,
                         WinnerName: m.ScoreA > m.ScoreB ? m.OpponentA : (m.ScoreB > m.ScoreA ? m.OpponentB : null)
                     ));
                 }
@@ -202,6 +225,7 @@ public class ExternalTournamentSyncService
                     list.Remove(existingMatch);
                 }
 
+                var mappedStatus = MapMatchStatus(m.Status);
                 if (existingMatch != null)
                 {
                     existingMatch.TeamA = teamA;
@@ -210,11 +234,11 @@ public class ExternalTournamentSyncService
                     existingMatch.ScoreB = m.ScoreB;
                     existingMatch.Winner = winner;
                     
-                    if (existingMatch.Status != "finished" && m.Status == "finished" && winner != null)
+                    if (existingMatch.Status != "finished" && mappedStatus == "finished" && winner != null)
                         newlyFinished = true;
 
                     if (existingMatch.Status != "finished")
-                        existingMatch.Status = m.Status;
+                        existingMatch.Status = mappedStatus;
                 }
                 else
                 {
@@ -228,10 +252,10 @@ public class ExternalTournamentSyncService
                         ScoreA = m.ScoreA,
                         ScoreB = m.ScoreB,
                         Winner = winner,
-                        Status = m.Status
+                        Status = mappedStatus
                     });
                     
-                    if (m.Status == "finished" && winner != null)
+                    if (mappedStatus == "finished" && winner != null)
                         newlyFinished = true;
                 }
 
@@ -277,6 +301,20 @@ public class ExternalTournamentSyncService
             var tournamentMatches = _db.Matches.Local.Where(m => m.TournamentId == tournament.Id).ToList();
             if (tournamentMatches.Count == 0)
                 tournamentMatches = await _db.Matches.Where(m => m.TournamentId == tournament.Id).ToListAsync(ct);
+            
+            // Dynamic tournament status propagation based on match progress
+            if (tournamentMatches.Count > 0)
+            {
+                if (tournamentMatches.All(m => m.Status == "finished"))
+                {
+                    tournament.Status = "finished";
+                }
+                else if (tournamentMatches.Any(m => m.Status == "live" || m.Status == "finished"))
+                {
+                    tournament.Status = "live";
+                }
+            }
+
             LinkExternalBracket(tournamentMatches);
 
             await _db.SaveChangesAsync(ct);
@@ -379,5 +417,29 @@ public class ExternalTournamentSyncService
         var m = System.Text.RegularExpressions.Regex.Match(lower, @"\d+");
         if (m.Success && int.TryParse(m.Value, out var n)) return 1000 / n;
         return 50;
+    }
+
+    public static string MapMatchStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return "planned";
+        var lower = status.ToLowerInvariant().Trim();
+        if (lower == "running" || lower == "live" || lower == "ongoing")
+            return "live";
+        if (lower == "finished" || lower == "completed" || lower == "won" || lower == "approved")
+            return "finished";
+        if (lower == "canceled" || lower == "cancelled" || lower == "postponed")
+            return "finished";
+        return "planned";
+    }
+
+    public static string MapTournamentStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return "planned";
+        var lower = status.ToLowerInvariant().Trim();
+        if (lower == "running" || lower == "live" || lower == "ongoing")
+            return "live";
+        if (lower == "finished" || lower == "completed")
+            return "finished";
+        return "planned";
     }
 }

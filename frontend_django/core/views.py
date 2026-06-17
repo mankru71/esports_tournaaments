@@ -1,7 +1,8 @@
 from datetime import date
 from django.contrib import messages
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from .api_client import api_client
 from .forms import (
     FaceitVerifyForm,
@@ -9,6 +10,7 @@ from .forms import (
     MatchResultForm,
     ProfileEditForm,
     RegistrationForm,
+    ScoutingEditForm,
     TeamCreateForm,
     TeamPlayerForm,
     TeamVacancyForm,
@@ -19,7 +21,7 @@ from functools import wraps
 def login_required(view_func):
     @wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
-        token = request.COOKIES.get("api_token")
+        token = request.session.get("api_token") or request.COOKIES.get("api_token")
         if not token:
             messages.info(request, "Войдите в аккаунт")
             return redirect("login")
@@ -108,6 +110,8 @@ def _normalize_match(item):
     status_key, status_label = _normalize_status(item.get("status", "planned"))
     return {
         "id": item.get("id"),
+        "team_a_id": item.get("team_a_id"),
+        "team_b_id": item.get("team_b_id"),
         "teamA": item.get("teamA", "н/д"),
         "teamB": item.get("teamB", "н/д"),
         "scoreA": item.get("scoreA", 0),
@@ -118,6 +122,7 @@ def _normalize_match(item):
         "groupName": item.get("groupName", ""),
         "streamUrl": item.get("streamUrl", "") or "",
         "prediction": _normalize_prediction(item.get("prediction")),
+        "userPredictionTeamId": item.get("userPredictionTeamId"),
     }
 
 
@@ -183,7 +188,7 @@ def _read_current_user(request):
         return None
 
     cached_user = request.session.get("current_user")
-    if cached_user:
+    if cached_user and cached_user.get("isEmailVerified"):
         return cached_user
 
     me_result = api_client.me(token)
@@ -400,6 +405,20 @@ def dashboard(request):
 
 
 def login_view(request):
+    error_code = request.GET.get("error")
+    if error_code:
+        if error_code == "SteamIpNotSupported":
+            messages.error(
+                request,
+                "Steam не поддерживает авторизацию через IP-адрес. Пожалуйста, используйте доменное имя (например, localhost или настройте локальный домен в hosts)."
+            )
+        elif error_code == "SteamAuthFailed":
+            messages.error(request, "Не удалось авторизоваться через Steam. Повторите попытку.")
+        elif error_code == "InvalidSteamId":
+            messages.error(request, "Steam вернул пустой или неверный идентификатор пользователя.")
+        else:
+            messages.error(request, f"Ошибка авторизации: {error_code}")
+
     if request.method == "POST":
         form = LoginForm(request.POST)
         if form.is_valid():
@@ -411,7 +430,9 @@ def login_view(request):
                     me_result = api_client.me(token)
                     request.session["current_user"] = me_result.data if me_result.ok else (login_result.data or {}).get("user", {})
                     messages.success(request, "Вход выполнен")
-                    return redirect("dashboard")
+                    response = redirect("dashboard")
+                    response.set_cookie("api_token", token, max_age=8*3600, httponly=False, samesite="Lax")
+                    return response
                 form.add_error(None, "Сервер не вернул токен авторизации")
             else:
                 form.add_error(None, (login_result.error or {}).get("message", "Ошибка входа"))
@@ -424,7 +445,9 @@ def login_view(request):
 def logout_view(request):
     request.session.flush()
     messages.info(request, "Вы вышли из системы")
-    return redirect("dashboard")
+    response = redirect("dashboard")
+    response.delete_cookie("api_token")
+    return response
 
 
 def steam_callback(request):
@@ -435,11 +458,37 @@ def steam_callback(request):
         if me_result.ok:
             request.session["current_user"] = me_result.data
             messages.success(request, "Вход через Steam выполнен")
-            return redirect("dashboard")
+            response = redirect("dashboard")
+            response.set_cookie("api_token", token, max_age=8*3600, httponly=False, samesite="Lax")
+            return response
         messages.error(request, "Не удалось получить профиль после авторизации Steam")
+        return redirect("login")
+
+    # Linking flow
+    openid_params = request.GET.dict()
+    if not openid_params:
+        messages.error(request, "Ошибка Steam: пустой ответ")
+        return redirect('profile')
+
+    user = _read_current_user(request)
+    if not user:
+        messages.error(request, "Требуется авторизация")
+        return redirect('login')
+
+    user_id = user.get("id")
+    api_token = request.session.get("api_token") or request.COOKIES.get("api_token")
+
+    result = api_client.verify_steam_openid(user_id, openid_params, token=api_token)
+    
+    if result.ok:
+        me_res = api_client.me(api_token)
+        if me_res.ok:
+            request.session["current_user"] = me_res.data
+        messages.success(request, (result.data or {}).get("message", "Steam-аккаунт успешно привязан"))
     else:
-        messages.error(request, "Ошибка авторизации Steam")
-    return redirect("login")
+        _add_api_error(request, result, "Не удалось привязать Steam-аккаунт")
+
+    return redirect('profile')
 
 
 def tournaments(request, is_pro=None):
@@ -503,7 +552,8 @@ def tournaments(request, is_pro=None):
                 _add_api_error(request, result, "Не удалось удалить турнир")
             return redirect("pro_tournaments" if is_pro else "play_tournaments")
 
-    tournaments_result = api_client.get_tournaments(token=token)
+    search_query = request.GET.get("search")
+    tournaments_result = api_client.get_tournaments(token=token, search=search_query)
     all_t = tournaments_result.data or []
     if is_pro is not None:
         all_t = [t for t in all_t if bool(t.get("isExternal")) == is_pro]
@@ -550,7 +600,7 @@ def teams(request):
                 for errors in form.errors.values():
                     for error in errors:
                         messages.error(request, error)
-            return redirect("teams")
+            return redirect("play_teams")
 
         if action == "generate_bracket":
             tournament_id = int(request.POST.get("tournament_id", "0"))
@@ -560,7 +610,7 @@ def teams(request):
                     messages.success(request, "Сетка турнира успешно сгенерирована!")
                 else:
                     _add_api_error(request, result, "Не удалось сгенерировать сетку")
-            return redirect("teams") 
+            return redirect("play_teams") 
 
         if action == "add_player":
             team_id = int(request.POST.get("team_id", "0") or 0)
@@ -572,7 +622,7 @@ def teams(request):
                 messages.success(request, "Игрок добавлен")
             else:
                 _add_api_error(request, result, "Не удалось добавить игрока")
-            return redirect("teams")
+            return redirect("play_teams")
 
         if action == "confirm_rating":
             team_id = int(request.POST.get("team_id", "0") or 0)
@@ -582,7 +632,7 @@ def teams(request):
                 messages.success(request, "Рейтинг подтверждён")
             else:
                 _add_api_error(request, result, "Не удалось подтвердить рейтинг")
-            return redirect("teams")
+            return redirect("play_teams")
 
         if action == "delete_player":
             team_id = int(request.POST.get("team_id", "0") or 0)
@@ -592,7 +642,7 @@ def teams(request):
                 messages.success(request, "Игрок удалён")
             else:
                 _add_api_error(request, result, "Не удалось удалить игрока")
-            return redirect("teams")
+            return redirect("play_teams")
 
         if action == "delete_team":
             team_id = int(request.POST.get("team_id", "0") or 0)
@@ -601,7 +651,7 @@ def teams(request):
                 messages.success(request, "Команда удалена")
             else:
                 _add_api_error(request, result, "Не удалось удалить команду")
-            return redirect("teams")
+            return redirect("play_teams")
 
         if action == "create_vacancy":
             team_id = int(request.POST.get("team_id", "0") or 0)
@@ -616,7 +666,7 @@ def teams(request):
                 for errors in form.errors.values():
                     for error in errors:
                         messages.error(request, error)
-            return redirect("teams")
+            return redirect("play_teams")
 
         if action == "delete_vacancy":
             team_id = int(request.POST.get("team_id", "0") or 0)
@@ -626,7 +676,7 @@ def teams(request):
                 messages.success(request, "Вакансия удалена")
             else:
                 _add_api_error(request, result, "Не удалось удалить вакансию")
-            return redirect("teams")
+            return redirect("play_teams")
 
     teams_result = api_client.get_teams(token=token)
     teams_data = teams_result.data if teams_result.ok else []
@@ -645,6 +695,14 @@ def tournament_detail(request, tournament_id: int):
     user = _read_current_user(request)
     roles = _role_flags(user)
 
+    tournament_result = api_client.get_tournament(tournament_id, token=token)
+    if not tournament_result.ok:
+        _add_api_error(request, tournament_result, "Турнир не найден")
+        return redirect("dashboard")
+    tournament_payload = tournament_result.data or {}
+    is_external = bool(tournament_payload.get("isExternal"))
+    tournament = _normalize_tournament(tournament_payload)
+
     # Добавляем bracket_rounds в context и возвращаем render()
     if request.method == "POST":
         action = request.POST.get("action")
@@ -655,14 +713,14 @@ def tournament_detail(request, tournament_id: int):
                 return auth_redirect
             if not roles["is_captain"]:
                 messages.error(request, "Подать заявку может только капитан команды")
-                return redirect("tournament_detail", tournament_id=tournament_id)
+                return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
             team_id = int(request.POST.get("team_id", "0") or 0)
             result = api_client.apply_to_tournament(tournament_id, team_id, token=token)
             if result.ok:
                 messages.success(request, "Заявка отправлена")
             else:
                 _add_api_error(request, result, "Не удалось отправить заявку")
-            return redirect("tournament_detail", tournament_id=tournament_id)
+            return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
 
         if action == "toggle_favorite":
             # Только вход, без проверки почты — в отличие от остальных действий
@@ -670,7 +728,7 @@ def tournament_detail(request, tournament_id: int):
                 messages.info(request, "Войдите в аккаунт")
                 return redirect("login")
             _handle_toggle_favorite(request, token)
-            return redirect("tournament_detail", tournament_id=tournament_id)
+            return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
 
         if action in {"approve_application", "reject_application", "save_planning", "generate_bracket", "save_payouts", "set_status", "attach_stream", "distribute_prizes"}:
             auth_redirect = _require_auth(request, token)
@@ -691,7 +749,7 @@ def tournament_detail(request, tournament_id: int):
                 messages.success(request, "Заявка подтверждена" if action == "approve_application" else "Заявка отклонена")
             else:
                 _add_api_error(request, result, "Ошибка обработки заявки")
-            return redirect("tournament_detail", tournament_id=tournament_id)
+            return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
 
         if action == "save_planning":
             result = api_client.save_tournament_planning(
@@ -704,7 +762,7 @@ def tournament_detail(request, tournament_id: int):
                 messages.success(request, "Параметры сетки сохранены")
             else:
                 _add_api_error(request, result, "Не удалось сохранить настройки сетки")
-            return redirect("tournament_detail", tournament_id=tournament_id)
+            return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
 
         if action == "save_payouts":
             payouts = []
@@ -716,13 +774,13 @@ def tournament_detail(request, tournament_id: int):
                         payouts.append({"place": place, "percent": float(percent)})
                     except ValueError:
                         messages.error(request, f"Некорректный процент: {place}")
-                        return redirect("tournament_detail", tournament_id=tournament_id)
+                        return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
             result = api_client.set_prize_payouts(tournament_id, token=token, payouts=payouts)
             if result.ok:
                 messages.success(request, "Распределение обновлено")
             else:
                 _add_api_error(request, result, "Не удалось сохранить распределение")
-            return redirect("tournament_detail", tournament_id=tournament_id)
+            return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
 
         if action == "set_status":
             status = request.POST.get("status", "planned")
@@ -731,7 +789,7 @@ def tournament_detail(request, tournament_id: int):
                 messages.success(request, "Статус турнира обновлён")
             else:
                 _add_api_error(request, result, "Не удалось изменить статус")
-            return redirect("tournament_detail", tournament_id=tournament_id)
+            return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
 
         if action == "attach_stream":
             match_id = int(request.POST.get("match_id", "0") or 0)
@@ -741,7 +799,8 @@ def tournament_detail(request, tournament_id: int):
                 messages.success(request, "Стрим привязан к матчу")
             else:
                 _add_api_error(request, result, "Не удалось привязать стрим")
-            return redirect(f"/tournaments/{tournament_id}/?tab=streams")
+            url = reverse("pro_tournament_detail" if is_external else "play_tournament_detail", kwargs={"tournament_id": tournament_id})
+            return redirect(f"{url}?tab=streams")
 
         if action == "distribute_prizes":
             result = api_client.distribute_prizes(tournament_id, token=token)
@@ -749,7 +808,8 @@ def tournament_detail(request, tournament_id: int):
                 messages.success(request, "Призовой фонд распределён")
             else:
                 _add_api_error(request, result, "Не удалось распределить призовые")
-            return redirect(f"/tournaments/{tournament_id}/?tab=prize")
+            url = reverse("pro_tournament_detail" if is_external else "play_tournament_detail", kwargs={"tournament_id": tournament_id})
+            return redirect(f"{url}?tab=prize")
 
         if action == "generate_bracket":
             auth_redirect = _require_auth(request, token)
@@ -762,7 +822,7 @@ def tournament_detail(request, tournament_id: int):
             else:
                 _add_api_error(request, result, "Не удалось сгенерировать сетку. Проверьте, есть ли подтвержденные команды.")
             
-            return redirect("tournament_detail", tournament_id=tournament_id)
+            return redirect("pro_tournament_detail" if is_external else "play_tournament_detail", tournament_id=tournament_id)
             
         if action == "vote_mvp":
             auth_redirect = _require_auth(request, token)
@@ -774,14 +834,10 @@ def tournament_detail(request, tournament_id: int):
                 messages.success(request, "Голос принят")
             else:
                 _add_api_error(request, result, "Ошибка голосования")
-            return redirect(f"/tournaments/{tournament_id}/?tab=mvp")
+            url = reverse("pro_tournament_detail" if is_external else "play_tournament_detail", kwargs={"tournament_id": tournament_id})
+            return redirect(f"{url}?tab=mvp")
 
-    tournament_result = api_client.get_tournament(tournament_id, token=token)
-    if not tournament_result.ok:
-        _add_api_error(request, tournament_result, "Турнир не найден")
-        return redirect("tournaments")
 
-    tournament = _normalize_tournament(tournament_result.data or {})
     matches_result = api_client.get_matches(tournament_id, token=token)
     matches = [_normalize_match(item) for item in (matches_result.data or [])] if matches_result.ok else []
 
@@ -850,28 +906,7 @@ def tournament_detail(request, tournament_id: int):
     )
 
 
-def tournaments(request, is_pro=None):
-    token = request.session.get("api_token")
-    user = _read_current_user(request)
-    roles = _role_flags(user)
 
-    api_res = api_client.get_tournaments(token=token)
-    all_t = api_res.data if api_res.ok else []
-
-    # Filter based on is_pro if it's provided
-    if is_pro is not None:
-        all_t = [t for t in all_t if bool(t.get("isExternal")) == is_pro]
-
-    tournaments_data = [_normalize_tournament(t) for t in all_t]
-
-    return render(
-        request,
-        "tournaments.html",
-        {
-            "tournaments": tournaments_data,
-            **roles,
-        },
-    )
 
 
 def match_center(request, tournament_id: int):
@@ -887,7 +922,7 @@ def match_center(request, tournament_id: int):
     if request.method == "POST":
         if is_external:
             messages.info(request, "Матчи доступны только для просмотра")
-            return redirect("match_center", tournament_id=tournament_id)
+            return redirect("pro_match_center" if is_external else "play_match_center", tournament_id=tournament_id)
         if not (roles["is_admin"] or roles["is_judge"]):
             messages.error(request, "Недостаточно прав")
             return HttpResponseForbidden("Недостаточно прав")
@@ -902,7 +937,7 @@ def match_center(request, tournament_id: int):
                 messages.success(request, "Результат обновлён")
             else:
                 _add_api_error(request, update_result, "Ошибка обновления")
-            return redirect("match_center", tournament_id=tournament_id)
+            return redirect("pro_match_center" if is_external else "play_match_center", tournament_id=tournament_id)
 
     matches_result = api_client.get_matches(tournament_id, token=token)
     matches = [_normalize_match(item) for item in (matches_result.data or [])] if matches_result.ok else []
@@ -934,12 +969,12 @@ def voting(request):
     if request.method == "POST":
         if has_voted:
             messages.info(request, "Вы уже голосовали в этой сессии")
-            return redirect("voting")
+            return redirect("pro_voting")
         nominee_id = int(request.POST.get("nominee_id", "0"))
         vote_result = api_client.vote(nominee_id, session_id, request.META.get("REMOTE_ADDR", ""))
         if vote_result.ok and (vote_result.data or {}).get("success"):
             messages.success(request, (vote_result.data or {}).get("message", "Голос засчитан"))
-            return redirect("voting")
+            return redirect("pro_voting")
         _add_api_error(request, vote_result, "Ошибка голосования")
 
     return render(request, "voting.html", {"nominees": nominees, "has_voted": has_voted, **_role_flags(_read_current_user(request))})
@@ -994,7 +1029,10 @@ def registration(request):
                         me_result = api_client.me(token)
                         request.session["current_user"] = me_result.data if me_result.ok else (login_result.data or {}).get("user", {})
                     messages.success(request, "Регистрация завершена")
-                    return redirect("tournaments")
+                    response = redirect("dashboard")
+                    if token:
+                        response.set_cookie("api_token", token, max_age=8*3600, httponly=False, samesite="Lax")
+                    return response
                 messages.success(request, "Регистрация завершена. Теперь войдите в систему")
                 return redirect("login")
             form.add_error(None, (register_result.error or {}).get("message", "Ошибка регистрации"))
@@ -1014,15 +1052,7 @@ def profile(request):
     roles = _role_flags(user)
     user_id = user.get("id")
     edit_form = ProfileEditForm(initial={
-        "nickname": user.get("nickname", ""), 
-        "bio": user.get("bio", ""),
-        "game_role": user.get("gameRole", ""),
-        "availability": user.get("availability", ""),
-        "pitch": user.get("pitch", ""),
-        "discord_id": user.get("discordId", ""),
-        "country": user.get("country", ""),
-        "city": user.get("city", ""),
-        "languages": user.get("languages", "")
+        "nickname": user.get("nickname", ""),
     })
     faceit_form = FaceitVerifyForm()
 
@@ -1044,16 +1074,16 @@ def profile(request):
             if edit_form.is_valid():
                 result = api_client.update_profile(
                     nickname=edit_form.cleaned_data["nickname"],
-                    bio=edit_form.cleaned_data.get("bio") or "",
+                    bio=user.get("bio") or "",
                     token=token,
-                    game_role=edit_form.cleaned_data.get("game_role") or "",
-                    availability=edit_form.cleaned_data.get("availability") or "",
-                    pitch=edit_form.cleaned_data.get("pitch") or "",
-                    discord_id=edit_form.cleaned_data["discord_id"],
-                    highlights_url=edit_form.cleaned_data["highlights_url"],
-                    country=edit_form.cleaned_data["country"],
-                    city=edit_form.cleaned_data["city"],
-                    languages=edit_form.cleaned_data["languages"],
+                    game_role=user.get("gameRole", ""),
+                    availability=user.get("availability", ""),
+                    pitch=user.get("pitch") or "",
+                    discord_id=user.get("discordId") or "",
+                    highlights_url=user.get("highlightsUrl") or "",
+                    country=user.get("country") or "",
+                    city=user.get("city") or "",
+                    languages=user.get("languages") or "",
                 )
                 if result.ok:
                     request.session["current_user"] = result.data
@@ -1104,6 +1134,23 @@ def profile(request):
                 _add_api_error(request, result, "Не удалось обновить статус поиска команды")
             return redirect("profile")
 
+        elif action == "verify_rating":
+            provider = request.POST.get("provider", "")
+            if provider == "faceit" and user.get("faceitProfileUrl"):
+                result = api_client.verify_rating(provider="faceit", profile_url=user.get("faceitProfileUrl"), token=token)
+            elif provider == "steam" and user.get("steamId"):
+                result = api_client.verify_rating(provider="steam", profile_url=f"https://steamcommunity.com/profiles/{user.get('steamId')}", token=token)
+            else:
+                messages.error(request, "Не указан провайдер или аккаунт не привязан")
+                return redirect("profile")
+            
+            if result.ok:
+                request.session["current_user"] = result.data.get("profile")
+                messages.success(request, "Рейтинг подтвержден!")
+            else:
+                _add_api_error(request, result, "Не удалось подтвердить рейтинг")
+            return redirect("profile")
+
     selected_game = (request.GET.get("game") or "counterstrike").strip() or "counterstrike"
     nickname = (user.get("nickname") or "").strip()
     esports_payload = None
@@ -1151,7 +1198,7 @@ def faceit_callback(request):
         return redirect('login')
 
     user_id = user.get("id")
-    token = request.session.get("token")
+    token = request.session.get("api_token") or request.COOKIES.get("api_token")
     redirect_uri = request.build_absolute_uri('/profile/faceit/callback')
 
     # Remove query string from redirect_uri if any, as build_absolute_uri keeps it
@@ -1170,45 +1217,18 @@ def faceit_callback(request):
 
     return redirect('profile')
 
-def steam_callback(request):
-    openid_params = request.GET.dict()
-    if not openid_params:
-        messages.error(request, "Ошибка Steam: пустой ответ")
-        return redirect('profile')
-
-    user = _read_current_user(request)
-    if not user:
-        messages.error(request, "Требуется авторизация")
-        return redirect('login')
-
-    user_id = user.get("id")
-    token = request.session.get("token")
-
-    result = api_client.verify_steam_openid(user_id, openid_params, token=token)
-    
-    if result.ok:
-        me_res = api_client.me(token)
-        if me_res.ok:
-            request.session["current_user"] = me_res.data
-        messages.success(request, (result.data or {}).get("message", "Steam-аккаунт успешно привязан"))
-    else:
-        _add_api_error(request, result, "Не удалось привязать Steam-аккаунт")
-
-    return redirect('profile')
+# steam_callback has been merged with the SSO login steam_callback view above.
 
 @login_required
 def smart_scouting(request, team_id: int):
     # Fetch team from backend (assumes an API endpoint exists, or just pass team_id)
     # Get first recommendation
-    token = request.COOKIES.get('api_token')
-    headers = {'Authorization': f'Bearer {token}'} if token else {}
+    token = request.session.get("api_token") or request.COOKIES.get("api_token")
     
-    res = httpx.get(f"{settings.API_BASE_URL}/api/scouting/recommendations?teamId={team_id}", headers=headers, verify=False)
+    res = api_client.get_smart_scouting_recommendations(team_id, token=token)
     recommendation = None
-    if res.status_code == 200:
-        recs = res.json()
-        if recs:
-            recommendation = recs[0]
+    if res.ok and res.data:
+        recommendation = res.data[0] if isinstance(res.data, list) and res.data else None
             
     return render(request, "smart_scouting.html", {
         "team_id": team_id,
@@ -1221,22 +1241,15 @@ def smart_scouting_swipe(request, team_id: int):
         player_id = request.POST.get("player_id")
         action = request.POST.get("action")
         
-        token = request.COOKIES.get('api_token')
-        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'} if token else {}
+        token = request.session.get("api_token") or request.COOKIES.get("api_token")
         
-        httpx.post(f"{settings.API_BASE_URL}/api/scouting/swipe", json={
-            "TeamId": team_id,
-            "PlayerId": int(player_id),
-            "Action": action
-        }, headers=headers, verify=False)
+        api_client.swipe_smart_scouting(team_id, int(player_id), action, token=token)
         
         # Fetch next recommendation
-        res = httpx.get(f"{settings.API_BASE_URL}/api/scouting/recommendations?teamId={team_id}", headers=headers, verify=False)
+        res = api_client.get_smart_scouting_recommendations(team_id, token=token)
         recommendation = None
-        if res.status_code == 200:
-            recs = res.json()
-            if recs:
-                recommendation = recs[0]
+        if res.ok and res.data:
+            recommendation = res.data[0] if isinstance(res.data, list) and res.data else None
                 
         return render(request, "partials/scouting_card.html", {
             "team_id": team_id,
@@ -1244,60 +1257,136 @@ def smart_scouting_swipe(request, team_id: int):
         })
     return HttpResponse(status=400)
 
-@login_required
 def fantasy_draft(request, tournament_id: int):
-    # Fetch tournament
-    res = httpx.get(f"{settings.API_BASE_URL}/api/tournaments/{tournament_id}", verify=False)
-    tournament = res.json() if res.status_code == 200 else {"id": tournament_id, "name": f"Турнир #{tournament_id}"}
+    token = request.session.get("api_token") or request.COOKIES.get("api_token")
+    res = api_client.get_tournament(tournament_id, token=token)
+    tournament = res.data if (res.ok and res.data) else {"id": tournament_id, "name": f"Турнир #{tournament_id}"}
     
-    # Fetch players
     players = []
-    try:
-        res_p = httpx.get(f"{settings.API_BASE_URL}/api/fantasy/{tournament_id}/players", verify=False)
-        if res_p.status_code == 200:
-            players = res_p.json()
-    except:
-        pass
+    res_p = api_client.get_fantasy_players(tournament_id, token=token)
+    if res_p.ok and res_p.data:
+        players = res_p.data
+
+    # Load session draft state
+    draft = request.session.get(f"draft_{tournament_id}", [])
+    # Verify that drafted players still exist in the pool
+    valid_player_ids = {p.get("id") for p in players}
+    draft = [pid for pid in draft if pid in valid_player_ids]
+    request.session[f"draft_{tournament_id}"] = draft
+
+    roster_players = [p for p in players if p.get("id") in draft]
+    total_cost = sum(p.get("cost", 0) for p in roster_players)
 
     return render(request, "fantasy_draft.html", {
         "tournament": tournament,
-        "players": players
+        "players": players,
+        "roster_players": roster_players,
+        "draft_ids": draft,
+        "budget_remaining": 500 - total_cost,
+        "draft_count": len(draft)
+    })
+
+@login_required
+def fantasy_draft_toggle(request, tournament_id: int, player_id: int):
+    user = _read_current_user(request)
+    if not user or not user.get("isEmailVerified"):
+        return HttpResponseForbidden("Пожалуйста, подтвердите вашу почту, чтобы участвовать в Fantasy Draft.")
+        
+    token = request.session.get("api_token") or request.COOKIES.get("api_token")
+    draft = request.session.get(f"draft_{tournament_id}", [])
+    
+    players_res = api_client.get_fantasy_players(tournament_id, token=token)
+    players = players_res.data or []
+    player = next((p for p in players if p.get("id") == player_id), None)
+    
+    error_message = None
+    if not player:
+        error_message = "Игрок не найден."
+    else:
+        cost = player.get("cost", 0)
+        if player_id in draft:
+            draft.remove(player_id)
+        else:
+            if len(draft) >= 5:
+                error_message = "Вы не можете выбрать более 5 игроков."
+            else:
+                current_cost = sum(p.get("cost", 0) for p in players if p.get("id") in draft)
+                if current_cost + cost > 500:
+                    error_message = f"Недостаточно бюджета! Лимит 500$, текущая стоимость с учетом игрока: {current_cost + cost}$"
+                else:
+                    draft.append(player_id)
+                    
+    request.session[f"draft_{tournament_id}"] = draft
+    
+    roster_players = [p for p in players if p.get("id") in draft]
+    total_cost = sum(p.get("cost", 0) for p in roster_players)
+    
+    res = api_client.get_tournament(tournament_id, token=token)
+    tournament = res.data if (res.ok and res.data) else {"id": tournament_id, "name": f"Турнир #{tournament_id}"}
+    
+    return render(request, "partials/fantasy_draft_inner.html", {
+        "tournament": tournament,
+        "players": players,
+        "roster_players": roster_players,
+        "draft_ids": draft,
+        "budget_remaining": 500 - total_cost,
+        "draft_count": len(draft),
+        "error_message": error_message
     })
 
 @login_required
 def fantasy_draft_submit(request, tournament_id: int):
+    user = _read_current_user(request)
+    if not user or not user.get("isEmailVerified"):
+        return HttpResponseForbidden("Пожалуйста, подтвердите вашу почту, чтобы участвовать в Fantasy Draft.")
+        
     if request.method == "POST":
-        team_name = request.POST.get("team_name")
-        player_ids = request.POST.getlist("player_id")
+        team_name = request.POST.get("team_name", "").strip()
+        draft = request.session.get(f"draft_{tournament_id}", [])
+        token = request.session.get("api_token") or request.COOKIES.get("api_token")
         
-        token = request.COOKIES.get('api_token')
-        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'} if token else {}
+        res = api_client.submit_fantasy_draft(
+            tournament_id=tournament_id,
+            team_name=team_name,
+            player_ids=draft,
+            token=token
+        )
         
-        try:
-            res = httpx.post(f"{settings.API_BASE_URL}/api/fantasy/draft", json={
-                "TournamentId": tournament_id,
-                "TeamName": team_name,
-                "PlayerIds": [int(pid) for pid in player_ids]
-            }, headers=headers, verify=False)
+        players_res = api_client.get_fantasy_players(tournament_id, token=token)
+        players = players_res.data or []
+        roster_players = [p for p in players if p.get("id") in draft]
+        total_cost = sum(p.get("cost", 0) for p in roster_players)
+        
+        success_message = None
+        error_message = None
+        if res.ok:
+            success_message = "Ваш состав успешно зарегистрирован!"
+        else:
+            error_message = (res.error or {}).get('message', 'Ошибка при сохранении состава')
             
-            if res.status_code == 200:
-                return HttpResponse('<div class="alert alert-success">Ваш состав успешно зарегистрирован!</div>')
-            else:
-                err = res.json().get('message', 'Ошибка при сохранении состава')
-                return HttpResponse(f'<div class="alert alert-danger">{err}</div>')
-        except Exception as e:
-            return HttpResponse(f'<div class="alert alert-danger">Ошибка сервера: {str(e)}</div>')
+        res_t = api_client.get_tournament(tournament_id, token=token)
+        tournament = res_t.data if (res_t.ok and res_t.data) else {"id": tournament_id, "name": f"Турнир #{tournament_id}"}
+        
+        return render(request, "partials/fantasy_draft_inner.html", {
+            "tournament": tournament,
+            "players": players,
+            "roster_players": roster_players,
+            "draft_ids": draft,
+            "budget_remaining": 500 - total_cost,
+            "draft_count": len(draft),
+            "success_message": success_message,
+            "error_message": error_message,
+            "team_name": team_name
+        })
     return HttpResponse(status=400)
 
 @login_required
 def fantasy_leaderboard(request, tournament_id: int):
+    token = request.session.get("api_token") or request.COOKIES.get("api_token")
     leaderboard = []
-    try:
-        res = httpx.get(f"{settings.API_BASE_URL}/api/fantasy/{tournament_id}/leaderboard", verify=False)
-        if res.status_code == 200:
-            leaderboard = res.json()
-    except:
-        pass
+    res = api_client.get_fantasy_leaderboard(tournament_id, token=token)
+    if res.ok and res.data:
+        leaderboard = res.data
     
     return render(request, "partials/fantasy_leaderboard.html", {
         "leaderboard": leaderboard
@@ -1322,6 +1411,8 @@ def streams(request):
     player_query = ""
     diagnostics = None
     host = (request.get_host() or "localhost").split(":")[0]
+    if host == "127.0.0.1":
+        host = "localhost"
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -1403,9 +1494,51 @@ def scouting(request):
     token = request.session.get("api_token")
     user = _read_current_user(request)
     roles = _role_flags(user)
+    scouting_form = None
+
+    if user:
+        scouting_form = ScoutingEditForm(initial={
+            "game_role": user.get("gameRole", ""),
+            "availability": user.get("availability", ""),
+            "pitch": user.get("pitch", ""),
+            "discord_id": user.get("discordId", ""),
+            "country": user.get("country", ""),
+            "city": user.get("city", ""),
+            "languages": user.get("languages", ""),
+            "bio": user.get("bio", ""),
+            "highlights_url": user.get("highlightsUrl", "")
+        })
 
     if request.method == "POST":
         action = request.POST.get("action")
+
+        if action == "save_scouting_profile":
+            if not token:
+                messages.info(request, "Войдите в аккаунт")
+                return redirect("login")
+            
+            form = ScoutingEditForm(request.POST)
+            if form.is_valid():
+                result = api_client.update_profile(
+                    nickname=user.get("nickname", ""),
+                    bio=form.cleaned_data.get("bio") or "",
+                    token=token,
+                    game_role=form.cleaned_data.get("game_role") or "",
+                    availability=form.cleaned_data.get("availability") or "",
+                    pitch=form.cleaned_data.get("pitch") or "",
+                    discord_id=form.cleaned_data.get("discord_id") or "",
+                    highlights_url=form.cleaned_data.get("highlights_url") or "",
+                    country=form.cleaned_data.get("country") or "",
+                    city=form.cleaned_data.get("city") or "",
+                    languages=form.cleaned_data.get("languages") or "",
+                )
+                if result.ok:
+                    request.session["current_user"] = result.data
+                    messages.success(request, "Анкета скаутинга обновлена")
+                else:
+                    _add_api_error(request, result, "Не удалось обновить анкету")
+            return redirect("play_scouting")
+
         if action == "toggle_lft":
             if not token:
                 messages.info(request, "Войдите в аккаунт")
@@ -1418,7 +1551,7 @@ def scouting(request):
                 messages.success(request, (result.data or {}).get("message", "Статус обновлён"))
             else:
                 _add_api_error(request, result, "Не удалось обновить статус поиска команды")
-            return redirect("scouting")
+            return redirect("play_scouting")
         
         elif action == "invite_player":
             if not token:
@@ -1432,7 +1565,7 @@ def scouting(request):
                     messages.success(request, f"Игрок {nickname} приглашён в команду")
                 else:
                     _add_api_error(request, result, f"Не удалось пригласить {nickname}")
-            return redirect("scouting")
+            return redirect("play_scouting")
 
     agents_result = api_client.get_free_agents(token=token)
     free_agents = (agents_result.data or []) if agents_result.ok else []
@@ -1459,6 +1592,72 @@ def scouting(request):
             "free_agents": free_agents,
             "vacancies": vacancies,
             "my_teams": my_teams,
+            "scouting_form": scouting_form,
             **roles,
         },
     )
+
+
+def scouting_agent_detail(request, agent_id: int):
+    token = request.session.get("api_token")
+    result = api_client.get_free_agent(agent_id)
+    if not result.ok:
+        return HttpResponse("Игрок не найден или ошибка API", status=404)
+    
+    agent = result.data
+    user = _read_current_user(request)
+    roles = _role_flags(user)
+    
+    my_teams = []
+    if token and user:
+        teams_result = api_client.get_teams(token=token)
+        if teams_result.ok:
+            email = (user.get("email") or "").lower()
+            my_teams = [t for t in (teams_result.data or []) if (t.get("captainEmail") or "").lower() == email]
+
+    return render(request, "partials/scouting_agent_detail.html", {
+        "agent": agent,
+        "current_user": user,
+        "my_teams": my_teams,
+        **roles,
+    })
+
+
+def predict_match(request, match_id: int):
+    user = _read_current_user(request)
+    if not user:
+        return HttpResponseForbidden("Войдите в аккаунт, чтобы делать прогнозы.")
+    if not user.get("isEmailVerified"):
+        return HttpResponseForbidden("Пожалуйста, подтвердите вашу почту, чтобы делать прогнозы.")
+
+    if request.method == "POST":
+        token = request.session.get("api_token") or request.COOKIES.get("api_token")
+        if not token:
+            return HttpResponseForbidden("Пользователь не авторизован")
+
+        predicted_team_id = request.POST.get("predicted_team_id")
+        if not predicted_team_id:
+            try:
+                import json
+                data = json.loads(request.body)
+                predicted_team_id = data.get("predicted_team_id")
+            except Exception:
+                pass
+
+        if not predicted_team_id:
+            return HttpResponse("Не указана прогнозируемая команда", status=400)
+
+        try:
+            predicted_team_id = int(predicted_team_id)
+        except ValueError:
+            return HttpResponse("Некорректный ID команды", status=400)
+
+        result = api_client.predict_match(match_id, predicted_team_id, token)
+        if result.ok:
+            html_content = (result.data or {}).get("raw", "")
+            return HttpResponse(html_content, content_type="text/html")
+        else:
+            msg = result.error.get("message") if result.error else "Ошибка при отправке прогноза"
+            return HttpResponse(f"<span class='text-danger small'>{msg}</span>", status=400)
+
+    return HttpResponse("Метод не поддерживается", status=405)

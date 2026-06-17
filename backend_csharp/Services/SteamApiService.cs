@@ -7,9 +7,9 @@ public class SteamApiService
     private readonly HttpClient _http;
     private readonly string? _apiKey;
 
-    public SteamApiService(IHttpClientFactory httpFactory, IConfiguration config)
+    public SteamApiService(HttpClient http, IConfiguration config)
     {
-        _http = httpFactory.CreateClient();
+        _http = http;
         _apiKey = config["Steam:ApiKey"];
     }
 
