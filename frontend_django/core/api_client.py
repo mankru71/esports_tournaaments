@@ -224,14 +224,20 @@ class CSharpApiClient:
     def get_streams(self, token: str | None = None) -> ApiResult:
         return self._request("GET", "streams/status", token=token)
 
-    def get_analytics(self, token: str | None = None) -> ApiResult:
-        return self._request("GET", "analytics", token=token)
+    def get_analytics(self, game: str | None = None, token: str | None = None) -> ApiResult:
+        params = {}
+        if game:
+            params["game"] = game
+        return self._request("GET", "analytics", params=params, token=token)
 
     def get_tournament_analytics(self, tournament_id: int, token: str | None = None) -> ApiResult:
         return self._request("GET", f"tournament/{tournament_id}/analytics", token=token)
 
-    def get_team_winrates(self, token: str | None = None) -> ApiResult:
-        return self._request("GET", "analytics/team-winrates", token=token)
+    def get_team_winrates(self, game: str | None = None, token: str | None = None) -> ApiResult:
+        params = {}
+        if game:
+            params["game"] = game
+        return self._request("GET", "analytics/team-winrates", params=params, token=token)
 
     def get_rating_history(self, token: str) -> ApiResult:
         return self._request("GET", "auth/profile/rating-history", token=token)

@@ -7,7 +7,6 @@ using Models;
 
 namespace Hubs;
 
-[Authorize]
 public class MatchesHub : Hub
 {
     private readonly AppDbContext _db;
@@ -33,6 +32,7 @@ public class MatchesHub : Hub
     public Task LeaveMatchLobby(string matchId)
         => Groups.RemoveFromGroupAsync(Context.ConnectionId, $"match:{matchId}");
 
+    [Authorize]
     public Task JoinUserGroup(string userId)
         => Groups.AddToGroupAsync(Context.ConnectionId, $"user:{userId}");
 

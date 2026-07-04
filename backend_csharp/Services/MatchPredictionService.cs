@@ -100,6 +100,10 @@ public class MatchPredictionService
         if (team.Players != null && team.Players.Any(p => p.Rating.HasValue))
         {
             rating = Math.Round(team.Players.Where(p => p.Rating.HasValue).Average(p => p.Rating!.Value), 2);
+            if (rating < 100m)
+            {
+                rating = rating * 2000m;
+            }
         }
         else
         {

@@ -429,7 +429,6 @@ def login_view(request):
                     request.session["api_token"] = token
                     me_result = api_client.me(token)
                     request.session["current_user"] = me_result.data if me_result.ok else (login_result.data or {}).get("user", {})
-                    messages.success(request, "Вход выполнен")
                     response = redirect("dashboard")
                     response.set_cookie("api_token", token, max_age=8*3600, httponly=False, samesite="Lax")
                     return response
@@ -457,7 +456,6 @@ def steam_callback(request):
         me_result = api_client.me(token)
         if me_result.ok:
             request.session["current_user"] = me_result.data
-            messages.success(request, "Вход через Steam выполнен")
             response = redirect("dashboard")
             response.set_cookie("api_token", token, max_age=8*3600, httponly=False, samesite="Lax")
             return response
@@ -1014,13 +1012,6 @@ def registration(request):
             if register_result.ok:
                 # Бэкенд при регистрации сам шлёт письмо подтверждения
                 email_sent = bool((register_result.data or {}).get("verificationEmailSent"))
-                if email_sent:
-                    messages.success(
-                        request,
-                        f"Письмо с подтверждением отправлено на {form.cleaned_data['email']} — проверьте почту (и папку «Спам»).",
-                    )
-                else:
-                    messages.warning(request, "Письмо не отправлено (SMTP не настроен) — запросите ссылку из профиля.")
                 login_result = api_client.login(form.cleaned_data["email"], form.cleaned_data["password"])
                 if login_result.ok:
                     token = (login_result.data or {}).get("token")
@@ -1028,12 +1019,10 @@ def registration(request):
                         request.session["api_token"] = token
                         me_result = api_client.me(token)
                         request.session["current_user"] = me_result.data if me_result.ok else (login_result.data or {}).get("user", {})
-                    messages.success(request, "Регистрация завершена")
                     response = redirect("dashboard")
                     if token:
                         response.set_cookie("api_token", token, max_age=8*3600, httponly=False, samesite="Lax")
                     return response
-                messages.success(request, "Регистрация завершена. Теперь войдите в систему")
                 return redirect("login")
             form.add_error(None, (register_result.error or {}).get("message", "Ошибка регистрации"))
     else:
@@ -1469,14 +1458,20 @@ def streams(request):
 
 def analytics(request):
     token = request.session.get("api_token")
-    result = api_client.get_analytics(token=token)
+    game = request.GET.get("game") or None
+    
+    result = api_client.get_analytics(game=game, token=token)
     payload = result.data if result.ok else {"playerStats": [], "disciplinePopularity": [], "prizePools": [], "summary": {}}
     if not result.ok:
         messages.info(request, (result.error or {}).get("message", "Аналитика временно недоступна"))
 
     # Винрейты команд: общий / группы / плей-офф / упорные матчи
-    winrates_result = api_client.get_team_winrates(token=token)
+    winrates_result = api_client.get_team_winrates(game=game, token=token)
     team_winrates = (winrates_result.data or []) if winrates_result.ok else []
+
+    # Зал славы (Hall of Fame)
+    hof_result = api_client.get_hall_of_fame()
+    hall_of_fame = (hof_result.data or []) if hof_result.ok else []
 
     return render(
         request,
@@ -1484,6 +1479,8 @@ def analytics(request):
         {
             "analytics": payload,
             "team_winrates": team_winrates,
+            "hall_of_fame": hall_of_fame,
+            "selected_game": game,
             **_role_flags(_read_current_user(request)),
         },
     )

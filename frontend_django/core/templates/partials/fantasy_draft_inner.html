@@ -17,7 +17,7 @@
 <!-- Budget Tracker Summary Panel -->
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 p-4 rounded shadow-sm border animate-fade-in" style="background: var(--surface); border-color: var(--border);">
   <div>
-    <h2 class="h4 fw-bold mb-1 text-white">Fantasy Draft: {{ tournament.name }}</h2>
+    <h2 class="h4 fw-bold mb-1">Fantasy Draft: {{ tournament.name }}</h2>
     <p class="text-muted small mb-0">Соберите команду из 5 игроков, не превысив бюджет в 500$</p>
   </div>
   <div class="d-flex align-items-center gap-4 mt-3 mt-md-0">
@@ -30,7 +30,7 @@
     <div class="vr" style="height: 40px; opacity: 0.15; width: 1px;"></div>
     <div class="text-end">
       <div class="small text-muted text-uppercase fw-semibold" style="letter-spacing: 0.05em; font-size: 0.75rem;">Игроков в составе</div>
-      <div class="h3 mb-0 fw-bold font-monospace text-white">
+      <div class="h3 mb-0 fw-bold font-monospace">
         {{ draft_count }}<span class="text-muted h5">/5</span>
       </div>
     </div>
@@ -41,7 +41,7 @@
   <!-- Left: Roster Panel -->
   <div class="col-lg-4">
     <div class="card p-3 mb-4 sticky-top border-0 animate-fade-in" style="top: 80px; background: var(--surface); box-shadow: var(--shadow); border-radius: 16px;">
-      <h5 class="fw-bold mb-3 text-white">Ваш состав</h5>
+      <h5 class="fw-bold mb-3">Ваш состав</h5>
       
       <!-- Filled and Empty Slots -->
       <div class="d-flex flex-column gap-3 mb-4">
@@ -53,7 +53,7 @@
                 {{ forloop.counter }}
               </div>
               <div>
-                <div class="fw-bold text-white">{{ p.nickname }}</div>
+                <div class="fw-bold">{{ p.nickname }}</div>
                 <div class="small text-muted">{{ p.teamName }}</div>
               </div>
             </div>
@@ -75,7 +75,7 @@
         <!-- Empty Slots -->
         {% if draft_count < 5 %}
           {% if draft_count == 4 %}
-            <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+            <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: var(--surface-2); opacity: 0.55; height: 74px; border-color: var(--border) !important;">
               <div class="d-flex align-items-center gap-3">
                 <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">5</div>
                 <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
@@ -83,7 +83,7 @@
             </div>
           {% elif draft_count == 3 %}
             {% for j in "45" %}
-              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: var(--surface-2); opacity: 0.55; height: 74px; border-color: var(--border) !important;">
                 <div class="d-flex align-items-center gap-3">
                   <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
                   <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
@@ -92,7 +92,7 @@
             {% endfor %}
           {% elif draft_count == 2 %}
             {% for j in "345" %}
-              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: var(--surface-2); opacity: 0.55; height: 74px; border-color: var(--border) !important;">
                 <div class="d-flex align-items-center gap-3">
                   <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
                   <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
@@ -101,7 +101,7 @@
             {% endfor %}
           {% elif draft_count == 1 %}
             {% for j in "2345" %}
-              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: var(--surface-2); opacity: 0.55; height: 74px; border-color: var(--border) !important;">
                 <div class="d-flex align-items-center gap-3">
                   <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
                   <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
@@ -110,7 +110,7 @@
             {% endfor %}
           {% elif draft_count == 0 %}
             {% for j in "12345" %}
-              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: rgba(255, 255, 255, 0.01); height: 74px; border-color: var(--border) !important;">
+              <div class="roster-slot-card empty-slot d-flex align-items-center p-3 border border-dashed rounded text-muted" style="background: var(--surface-2); opacity: 0.55; height: 74px; border-color: var(--border) !important;">
                 <div class="d-flex align-items-center gap-3">
                   <div class="slot-number d-flex align-items-center justify-content-center fw-bold rounded-circle border text-muted" style="width: 32px; height: 32px; font-size: 0.9rem; border-style: dashed !important; border-color: var(--border) !important;">{{ j }}</div>
                   <span class="small font-monospace text-uppercase" style="letter-spacing: 0.05em; font-size: 0.75rem;">Пустой слот</span>
@@ -155,7 +155,7 @@
           <div class="card-body d-flex flex-column justify-content-between p-3">
             <div>
               <div class="d-flex justify-content-between align-items-start mb-2">
-                <h5 class="fw-bold mb-0 text-white" style="font-size: 1.1rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 120px;" title="{{ p.nickname }}">{{ p.nickname }}</h5>
+                <h5 class="fw-bold mb-0" style="font-size: 1.1rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 120px;" title="{{ p.nickname }}">{{ p.nickname }}</h5>
                 <span class="badge font-monospace" style="background: var(--accent-soft); color: var(--accent); font-size: 0.85rem; border: 1px solid rgba(200, 169, 106, 0.2);">
                   {{ p.cost }}$
                 </span>

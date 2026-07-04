@@ -47,6 +47,10 @@ def predict_elo(team_a: TeamFeatures, team_b: TeamFeatures) -> float:
     """Elo-вероятность победы команды A по разнице средних рейтингов."""
     rating_a = team_a.avgRating if team_a.avgRating is not None else DEFAULT_RATING
     rating_b = team_b.avgRating if team_b.avgRating is not None else DEFAULT_RATING
+    if rating_a < 10.0:
+        rating_a = rating_a * 2000.0
+    if rating_b < 10.0:
+        rating_b = rating_b * 2000.0
     return 1.0 / (1.0 + math.pow(10.0, (rating_b - rating_a) / 400.0))
 
 

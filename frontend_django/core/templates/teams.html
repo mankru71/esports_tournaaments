@@ -101,7 +101,7 @@
                 {% if team.vacancies %}
                   <div class="d-flex flex-column gap-2 mb-3">
                     {% for vacancy in team.vacancies %}
-                      <div class="d-flex align-items-center justify-content-between gap-2 border rounded-3 px-3 py-2 bg-dark">
+                      <div class="d-flex align-items-center justify-content-between gap-2 border rounded-3 px-3 py-2 bg-surface-2" style="border-color: var(--border) !important;">
                         <div>
                           <div class="fw-semibold text-danger">{{ vacancy.requiredRole }}</div>
                           <div class="small text-muted">{{ vacancy.description|default:'Нет описания' }}</div>

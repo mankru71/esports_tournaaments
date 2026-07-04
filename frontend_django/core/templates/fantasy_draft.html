@@ -6,11 +6,12 @@
     transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
   }
   .fantasy-player-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3) !important;
+    transform: translateY(-4px);
+    border-color: var(--accent) !important;
+    box-shadow: var(--shadow) !important;
   }
   .selected-card {
-    background: rgba(200, 169, 106, 0.05) !important;
+    background: var(--accent-soft) !important;
   }
   .roster-slot-card {
     transition: all 0.3s ease;
@@ -45,13 +46,13 @@
   </div>
   {% else %}
   <!-- Locked state message -->
-  <div class="card p-5 text-center shadow-lg border-warning bg-dark animate-fade-in mb-4" style="border-radius:16px; border:1px solid rgba(255, 193, 7, 0.15); background-color: var(--surface) !important;">
+  <div class="card p-5 text-center shadow-lg animate-fade-in mb-4" style="border-radius: 16px; border: 1px solid var(--border) !important;">
     <div class="mb-3">
       <svg width="64" height="64" fill="var(--accent)" class="bi bi-lock-fill mx-auto" viewBox="0 0 16 16">
         <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
       </svg>
     </div>
-    <h2 class="h4 fw-bold text-white mb-2">Раздел Fantasy Draft заблокирован</h2>
+    <h2 class="h4 fw-bold mb-2">Раздел Fantasy Draft заблокирован</h2>
     <p class="text-muted mb-4 max-w-md mx-auto" style="max-width: 480px; margin: 0 auto;">
       Please log in and verify your email to participate in the Fantasy Draft.<br>
       Пожалуйста, войдите в систему и подтвердите свой адрес электронной почты для участия в Fantasy Draft.
@@ -68,7 +69,7 @@
   {% endif %}
   
   <div class="mt-5 border-top pt-4 animate-fade-in" style="border-color: var(--border) !important;">
-    <h3 class="fw-bold mb-3 text-white">Таблица лидеров</h3>
+    <h3 class="fw-bold mb-3">Таблица лидеров</h3>
     <div id="leaderboard-container" hx-get="{% url 'fantasy_leaderboard' tournament.id %}" hx-trigger="load" hx-target="this">
       <div class="text-center py-4"><div class="spinner-border text-accent"></div></div>
     </div>

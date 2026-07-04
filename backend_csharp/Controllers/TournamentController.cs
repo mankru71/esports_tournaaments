@@ -133,6 +133,63 @@ public class TournamentController : ControllerBase
         return Ok(ToDto(tournament));
     }
 
+    [HttpGet("{id:int}/lineups")]
+    public async Task<IActionResult> GetLineups(int id, [FromServices] Data.AppDbContext db, CancellationToken ct)
+    {
+        var tournament = await db.Tournaments.FindAsync(new object[] { id }, ct);
+        if (tournament == null)
+            return NotFound(new { message = "Турнир не найден" });
+
+        // 1. Get all matches for this tournament to find participating teams
+        var matches = await db.Matches
+            .Include(m => m.TeamA)!.ThenInclude(t => t!.Players)
+            .Include(m => m.TeamA)!.ThenInclude(t => t!.CaptainUser)
+            .Include(m => m.TeamB)!.ThenInclude(t => t!.Players)
+            .Include(m => m.TeamB)!.ThenInclude(t => t!.CaptainUser)
+            .Where(m => m.TournamentId == id)
+            .ToListAsync(ct);
+
+        var teamsMap = new Dictionary<int, Models.Team>();
+        foreach (var m in matches)
+        {
+            if (m.TeamA != null && m.TeamAId.HasValue && !teamsMap.ContainsKey(m.TeamAId.Value))
+                teamsMap[m.TeamAId.Value] = m.TeamA;
+            if (m.TeamB != null && m.TeamBId.HasValue && !teamsMap.ContainsKey(m.TeamBId.Value))
+                teamsMap[m.TeamBId.Value] = m.TeamB;
+        }
+
+        // Also add teams from approved applications
+        var approvedApps = await db.TournamentApplications
+            .Include(a => a.Team)!.ThenInclude(t => t!.Players)
+            .Include(a => a.Team)!.ThenInclude(t => t!.CaptainUser)
+            .Where(a => a.TournamentId == id && a.Status == "approved")
+            .ToListAsync(ct);
+
+        foreach (var app in approvedApps)
+        {
+            if (app.Team != null && !teamsMap.ContainsKey(app.TeamId))
+                teamsMap[app.TeamId] = app.Team;
+        }
+
+        var result = teamsMap.Values.Select(t => new
+        {
+            id = t.Id,
+            name = t.Name,
+            isExternal = t.IsExternal,
+            players = t.Players.Select(p => new
+            {
+                id = p.Id,
+                nickname = p.Nickname,
+                rating = p.Rating,
+                ratingSource = p.RatingSource ?? "manual",
+                ratingStatus = p.RatingStatus,
+                isCaptain = t.CaptainUser != null && t.CaptainUser.Nickname == p.Nickname
+            }).ToList()
+        }).ToList();
+
+        return Ok(result);
+    }
+
     public class CreateTournamentRequest
     {
         public string Name { get; set; } = string.Empty;

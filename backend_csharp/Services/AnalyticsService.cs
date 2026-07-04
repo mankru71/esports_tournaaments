@@ -38,18 +38,39 @@ public class AnalyticsService
         int CloseWins,
         decimal CloseWinRate);
 
-    public async Task<List<TeamWinRate>> GetTeamWinRatesAsync(CancellationToken ct = default)
+    public async Task<List<TeamWinRate>> GetTeamWinRatesAsync(string? game = null, CancellationToken ct = default)
     {
-        var finished = await _db.Matches
+        var query = _db.Matches
             .Include(m => m.TeamA)
             .Include(m => m.TeamB)
             .Include(m => m.Tournament)
             .Where(m => m.Status == "finished"
                         && m.WinnerId != null
                         && m.TeamAId != null
-                        && m.TeamBId != null
-                        && (m.Tournament == null || !m.Tournament.IsExternal))
-            .ToListAsync(ct);
+                        && m.TeamBId != null);
+
+        if (!string.IsNullOrWhiteSpace(game))
+        {
+            var lowerGame = game.Trim().ToLowerInvariant();
+            if (lowerGame == "counterstrike" || lowerGame == "cs" || lowerGame == "cs2" || lowerGame == "cs:go" || lowerGame == "counter-strike")
+            {
+                query = query.Where(m => m.Tournament!.Game.ToLower() == "counterstrike" || m.Tournament!.Game.ToLower() == "counter-strike");
+            }
+            else if (lowerGame == "dota2" || lowerGame == "dota 2" || lowerGame == "dota")
+            {
+                query = query.Where(m => m.Tournament!.Game.ToLower() == "dota 2" || m.Tournament!.Game.ToLower() == "dota2");
+            }
+            else if (lowerGame == "valorant")
+            {
+                query = query.Where(m => m.Tournament!.Game.ToLower() == "valorant");
+            }
+            else
+            {
+                query = query.Where(m => m.Tournament!.Game.ToLower() == lowerGame);
+            }
+        }
+
+        var finished = await query.ToListAsync(ct);
 
         var stats = new Dictionary<int, Accumulator>();
 

@@ -2,121 +2,228 @@
 {% load bracket_extras %}
 {% block title %}Аналитика{% endblock %}
 {% block content %}
-<section>
+<section id="analytics-content" class="fade-in">
   <div class="page-hero">
     <div>
       <h1 class="h3 mb-2">Аналитика</h1>
       <p class="text-muted mb-0">Статистика игроков, популярность дисциплин и призовые фонды.</p>
     </div>
-    <a class="btn btn-outline-accent" href="/api/analytics/export/csv" target="_blank" rel="noopener">CSV</a>
+    <a class="btn btn-outline-accent" href="/api/analytics/export/csv{% if selected_game %}?game={{ selected_game }}{% endif %}" target="_blank" rel="noopener">CSV</a>
   </div>
 
-  <div class="row g-3 mb-3">
-    <div class="col-lg-4">
-      <div class="section-panel p-3 h-100">
-        <h2 class="h5 mb-3">Сводка</h2>
-        <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>Команд</span><span class="fw-semibold">{{ analytics.summary.totalTeams|default:'0' }}</span></div>
-        <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>Игроков в выборке</span><span class="fw-semibold">{{ analytics.summary.totalPlayers|default:'0' }}</span></div>
-        <div class="card p-3 d-flex flex-row justify-content-between"><span>Подтверждённых рейтингов</span><span class="fw-semibold">{{ analytics.summary.confirmedRatings|default:'0' }}</span></div>
+  <!-- Game Filter Tabs -->
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    <a href="?game=" 
+       class="btn btn-sm {% if not selected_game %}btn-accent{% else %}btn-outline-secondary{% endif %}"
+       hx-get="?game=" 
+       hx-target="#analytics-content" 
+       hx-swap="outerHTML" 
+       hx-push-url="true">
+       Все дисциплины
+    </a>
+    <a href="?game=counterstrike" 
+       class="btn btn-sm {% if selected_game == 'counterstrike' %}btn-accent{% else %}btn-outline-secondary{% endif %}"
+       hx-get="?game=counterstrike" 
+       hx-target="#analytics-content" 
+       hx-swap="outerHTML" 
+       hx-push-url="true">
+       Counter-Strike
+    </a>
+    <a href="?game=dota2" 
+       class="btn btn-sm {% if selected_game == 'dota2' %}btn-accent{% else %}btn-outline-secondary{% endif %}"
+       hx-get="?game=dota2" 
+       hx-target="#analytics-content" 
+       hx-swap="outerHTML" 
+       hx-push-url="true">
+       Dota 2
+    </a>
+    <a href="?game=valorant" 
+       class="btn btn-sm {% if selected_game == 'valorant' %}btn-accent{% else %}btn-outline-secondary{% endif %}"
+       hx-get="?game=valorant" 
+       hx-target="#analytics-content" 
+       hx-swap="outerHTML" 
+       hx-push-url="true">
+       Valorant
+    </a>
+  </div>
+
+  <!-- Metrics Cards Row -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-4 col-xxl-2">
+      <div class="card p-3 text-center h-100 border-0 bg-dark-subtle shadow-sm">
+        <div class="text-muted small mb-1">Команд</div>
+        <div class="h3 mb-0 fw-bold text-accent">{{ analytics.summary.totalTeams|default:'0' }}</div>
       </div>
     </div>
-    <div class="col-lg-4">
-      <div class="section-panel p-3 h-100">
-        <h2 class="h5 mb-3">Статистика игроков</h2>
-        {% for p in analytics.playerStats %}
-          <div class="card p-3 mb-2">
-            <div class="d-flex flex-row justify-content-between"><span>{{ p.player }}</span><span class="fw-semibold">{{ p.rating|default:'—' }}</span></div>
-            <div class="small text-muted">{{ p.team }} · {{ p.ratingStatus }}</div>
+    <div class="col-6 col-md-4 col-xxl-2">
+      <div class="card p-3 text-center h-100 border-0 bg-dark-subtle shadow-sm">
+        <div class="text-muted small mb-1">Игроков</div>
+        <div class="h3 mb-0 fw-bold text-accent">{{ analytics.summary.totalPlayers|default:'0' }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+      <div class="card p-3 text-center h-100 border-0 bg-dark-subtle shadow-sm">
+        <div class="text-muted small mb-1">Турниров</div>
+        <div class="h3 mb-0 fw-bold text-accent">{{ analytics.summary.totalTournaments|default:'0' }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+      <div class="card p-3 text-center h-100 border-0 bg-dark-subtle shadow-sm">
+        <div class="text-muted small mb-1">Сыграно матчей</div>
+        <div class="h3 mb-0 fw-bold text-accent">{{ analytics.summary.totalMatches|default:'0' }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+      <div class="card p-3 text-center h-100 border-0 bg-dark-subtle shadow-sm">
+        <div class="text-muted small mb-1">Средний ELO</div>
+        <div class="h3 mb-0 fw-bold text-accent">{{ analytics.summary.averageRating|default:'—' }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+      <div class="card p-3 text-center h-100 border-0 bg-dark-subtle shadow-sm">
+        <div class="text-muted small mb-1">Популярная игра</div>
+        <div class="h5 mb-0 fw-bold text-truncate text-accent" title="{{ analytics.summary.popularDiscipline }}">{{ analytics.summary.popularDiscipline|default:'—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Left Column: Winrates and Prize Pools -->
+    <div class="col-lg-8">
+      <!-- Winrates section -->
+      <div class="section-panel p-3 mb-4">
+        <h2 class="h5 mb-1">Винрейт команд</h2>
+        <p class="text-muted small mb-3">
+          По завершённым матчам (включая локальные и внешние спарсенные): группы vs плей-офф и «упорные» матчи (разница в счёте ≤ 2).
+        </p>
+        {% if team_winrates %}
+        <div class="row g-3">
+          <div class="col-lg-7">
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+              <table class="table table-striped align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Команда</th>
+                    <th class="text-center">Матчи</th>
+                    <th style="min-width:140px;">Общий</th>
+                    <th class="text-center">Группы</th>
+                    <th class="text-center">Плей-офф</th>
+                    <th class="text-center" title="Винрейт в матчах с разницей в счёте не более 2">Упорные</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for t in team_winrates %}
+                  <tr>
+                    <td class="fw-semibold text-truncate" style="max-width: 140px;" title="{{ t.teamName }}">{{ t.teamName }}</td>
+                    <td class="text-center">{{ t.totalMatches }}</td>
+                    <td>
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height:8px;">
+                          <div class="progress-bar winrate-bar" role="progressbar" style="width: {{ t.winRate }}%"></div>
+                        </div>
+                        <span class="small fw-semibold">{{ t.winRate }}%</span>
+                      </div>
+                    </td>
+                    <td class="text-center">
+                      {% if t.groupMatches %}{{ t.groupWinRate }}%{% else %}<span class="text-muted">—</span>{% endif %}
+                    </td>
+                    <td class="text-center">
+                      {% if t.playoffMatches %}{{ t.playoffWinRate }}%{% else %}<span class="text-muted">—</span>{% endif %}
+                    </td>
+                    <td class="text-center">
+                      {% if t.closeMatches %}{{ t.closeWinRate }}%{% else %}<span class="text-muted">—</span>{% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
           </div>
-        {% empty %}
-          <div class="empty-state">Данные о игроках отсутствуют.</div>
-        {% endfor %}
+          <div class="col-lg-5">
+            <div class="card p-3 h-100 border-0 bg-dark-subtle">
+              <canvas id="winrateChart" style="min-height: 250px;"></canvas>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="empty-state">Завершённых матчей ещё нет — винрейты появятся после первых результатов.</div>
+        {% endif %}
+      </div>
+
+      <!-- Prize pools section -->
+      <div class="section-panel p-3">
+        <h2 class="h5 mb-3">Призовые фонды</h2>
+        <div class="row g-2">
+          {% for p in analytics.prizePools %}
+            <div class="col-md-6">
+              <div class="card p-3 h-100 d-flex flex-row justify-content-between align-items-center border-0 bg-dark-subtle">
+                <div>
+                  <div class="fw-semibold text-truncate" style="max-width: 180px;" title="{{ p.tournament }}">{{ p.tournament }}</div>
+                  <div class="small text-muted">Статус: {{ p.status }}</div>
+                </div>
+                <div class="fw-bold text-accent">{{ p.prizePool|default:'0' }} $</div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="col-12"><div class="empty-state">Данные о призовых фондах отсутствуют.</div></div>
+          {% endfor %}
+        </div>
       </div>
     </div>
+
+    <!-- Right Column: Player Stats & Discipline Popularity -->
     <div class="col-lg-4">
-      <div class="section-panel p-3 h-100">
+      <!-- Hall of Fame -->
+      <div class="section-panel p-3 mb-4">
+        <h2 class="h5 mb-1">Зал славы</h2>
+        <p class="text-muted small mb-3">Рейтинг игроков (локальные + Faceit ELO + спарсенные про-игроки).</p>
+        <div style="max-height: 400px; overflow-y: auto;">
+          {% for p in hall_of_fame %}
+            <div class="card p-3 mb-2 border-0 bg-dark-subtle shadow-sm">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="fs-5 fw-bold text-accent">#{{ p.rank }}</span>
+                  <div>
+                    <span class="fw-semibold">{{ p.nickname }}</span>
+                    {% if p.verified %}
+                      <span class="text-accent small" title="Подтверждённый игрок"><i class="bi bi-patch-check-fill"></i></span>
+                    {% endif %}
+                    <div class="small text-muted" style="font-size: 0.8rem;">
+                      {% if p.team %}{{ p.team }}{% else %}<span class="text-muted">Без команды</span>{% endif %}
+                    </div>
+                  </div>
+                </div>
+                <div class="text-end">
+                  <span class="badge text-bg-accent font-monospace" style="font-size: 0.9rem;">{{ p.rating }}</span>
+                  <div class="small text-muted mt-1">
+                    {% if p.source == 'faceit' %}
+                      <span class="badge bg-secondary text-uppercase" style="font-size: 0.6rem;">Faceit</span>
+                    {% elif p.source == 'roster' %}
+                      <span class="badge bg-dark text-uppercase" style="font-size: 0.6rem;">Roster</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="empty-state">Рейтинг пуст. Зарегистрируйте игроков или привяжите Faceit.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Discipline Popularity -->
+      <div class="section-panel p-3">
         <h2 class="h5 mb-3">Популярность дисциплин</h2>
         {% for d in analytics.disciplinePopularity %}
-          <div class="card p-3 mb-2 d-flex flex-row justify-content-between"><span>{{ d.discipline }}</span><span class="fw-semibold">{{ d.value }}</span></div>
+          <div class="card p-3 mb-2 d-flex flex-row justify-content-between align-items-center border-0 bg-dark-subtle">
+            <span>{{ d.discipline }}</span>
+            <span class="badge rounded-pill bg-secondary">{{ d.value }} турн.</span>
+          </div>
         {% empty %}
           <div class="empty-state">Данные о дисциплинах отсутствуют.</div>
         {% endfor %}
       </div>
     </div>
-  </div>
-
-  <div class="section-panel p-3 mb-3">
-    <h2 class="h5 mb-1">Винрейт команд</h2>
-    <p class="text-muted small mb-3">
-      По завершённым матчам локальных турниров: группы vs плей-офф и «упорные» матчи (разница в счёте ≤ 2).
-    </p>
-    {% if team_winrates %}
-    <div class="row g-3">
-      <div class="col-lg-7">
-        <div class="table-responsive">
-          <table class="table table-striped align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Команда</th>
-                <th class="text-center">Матчи</th>
-                <th style="min-width:160px;">Общий</th>
-                <th class="text-center">Группы</th>
-                <th class="text-center">Плей-офф</th>
-                <th class="text-center" title="Винрейт в матчах с разницей в счёте не более 2">Упорные</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for t in team_winrates %}
-              <tr>
-                <td class="fw-semibold">{{ t.teamName }}</td>
-                <td class="text-center">{{ t.totalMatches }}</td>
-                <td>
-                  <div class="d-flex align-items-center gap-2">
-                    <div class="progress flex-grow-1" style="height:8px;">
-                      <div class="progress-bar winrate-bar" role="progressbar" style="width: {{ t.winRate }}%"></div>
-                    </div>
-                    <span class="small fw-semibold">{{ t.winRate }}%</span>
-                  </div>
-                </td>
-                <td class="text-center">
-                  {% if t.groupMatches %}{{ t.groupWinRate }}% <span class="text-muted small">({{ t.groupWins }}/{{ t.groupMatches }})</span>{% else %}<span class="text-muted">—</span>{% endif %}
-                </td>
-                <td class="text-center">
-                  {% if t.playoffMatches %}{{ t.playoffWinRate }}% <span class="text-muted small">({{ t.playoffWins }}/{{ t.playoffMatches }})</span>{% else %}<span class="text-muted">—</span>{% endif %}
-                </td>
-                <td class="text-center">
-                  {% if t.closeMatches %}{{ t.closeWinRate }}% <span class="text-muted small">({{ t.closeWins }}/{{ t.closeMatches }})</span>{% else %}<span class="text-muted">—</span>{% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="col-lg-5">
-        <div class="card p-3 h-100">
-          <canvas id="winrateChart" height="260"></canvas>
-        </div>
-      </div>
-    </div>
-    {% else %}
-    <div class="empty-state">Завершённых матчей ещё нет — винрейты появятся после первых результатов.</div>
-    {% endif %}
-  </div>
-
-  <div class="section-panel p-3">
-    <h2 class="h5 mb-3">Призовые фонды</h2>
-    {% for p in analytics.prizePools %}
-      <div class="card p-3 mb-2 d-flex flex-row justify-content-between align-items-center">
-        <div>
-          <div class="fw-semibold">{{ p.tournament }}</div>
-          <div class="small text-muted">Статус: {{ p.status }}</div>
-        </div>
-        <div class="fw-semibold">{{ p.prizePool }}</div>
-      </div>
-    {% empty %}
-      <div class="empty-state">Данные о призовых фондах отсутствуют.</div>
-    {% endfor %}
   </div>
 </section>
 

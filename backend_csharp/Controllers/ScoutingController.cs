@@ -211,7 +211,33 @@ public class ScoutingController : ControllerBase
         await _db.SaveChangesAsync();
 
         if (req.Action == "invite")
+        {
             await _activity.LogAsync("team_invite_sent", $"Капитан команды {team.Name} отправил приглашение игроку ID={req.PlayerId}");
+            
+            var playerUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == req.PlayerId);
+            if (playerUser != null)
+            {
+                var exists = await _db.TeamPlayers.AnyAsync(p => p.TeamId == req.TeamId && p.Nickname.ToLower() == playerUser.Nickname.ToLower());
+                if (!exists)
+                {
+                    var teamPlayer = new TeamPlayer
+                    {
+                        TeamId = req.TeamId,
+                        Nickname = playerUser.Nickname,
+                        Game = "counterstrike",
+                        Rating = (decimal?)(playerUser.FaceitElo ?? (int?)playerUser.Rating),
+                        RatingSource = playerUser.FaceitElo.HasValue ? "faceit" : (playerUser.RatingProvider ?? "manual"),
+                        RatingStatus = "confirmed",
+                        ExternalProfileUrl = playerUser.FaceitProfileUrl ?? playerUser.RatingProfileUrl,
+                        ConfirmedAtUtc = DateTime.UtcNow
+                    };
+                    _db.TeamPlayers.Add(teamPlayer);
+                    await _db.SaveChangesAsync();
+                    
+                    await _activity.LogAsync("player_joined", $"Игрок {teamPlayer.Nickname} присоединился к команде «{team.Name}» через Tinder");
+                }
+            }
+        }
 
         return Ok(new { message = "Успешно" });
     }

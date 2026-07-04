@@ -60,12 +60,12 @@
 
       <!-- Pending Invites -->
       {% if current_user.invites %}
-      <div class="card mb-4 border-0" style="background-color: var(--surface-bg);">
+      <div class="card mb-4">
         <div class="card-body p-4">
           <h2 class="h5 mb-3 text-warning"><i class="bi bi-envelope me-2"></i>Приглашения в команды</h2>
           <div class="d-flex flex-column gap-3">
             {% for invite in current_user.invites %}
-            <div class="d-flex align-items-center justify-content-between p-3 border rounded bg-dark">
+            <div class="d-flex align-items-center justify-content-between p-3 border rounded bg-surface-2" style="border-color: var(--border) !important;">
               <div>
                 <div class="fw-semibold">{{ invite.teamName }}</div>
                 <div class="text-muted small">Приглашение отправлено</div>

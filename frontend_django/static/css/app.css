@@ -822,3 +822,15 @@ img {
     background: var(--accent-soft) !important;
     color: var(--accent) !important;
 }
+
+/* ── Theme Utility Classes ────────────────────────────────── */
+.text-accent {
+    color: var(--accent) !important;
+}
+.bg-surface {
+    background-color: var(--surface) !important;
+}
+.bg-surface-2 {
+    background-color: var(--surface-2) !important;
+}
+

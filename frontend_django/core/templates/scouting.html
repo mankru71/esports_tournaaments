@@ -304,10 +304,10 @@ document.addEventListener('DOMContentLoaded', () => {
 {% if current_user and scouting_form %}
 <div class="modal fade" id="editScoutingModal" tabindex="-1" aria-labelledby="editScoutingModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg">
-    <div class="modal-content" style="background-color: var(--surface-bg);">
+    <div class="modal-content border-0 shadow" style="background-color: var(--surface); border-radius: 16px;">
       <div class="modal-header border-bottom-0 pb-0">
         <h5 class="modal-title" id="editScoutingModalLabel">Анкета для скаутинга</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
       </div>
       <form method="post">
         <div class="modal-body">
@@ -367,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content border-0 shadow" style="background-color: var(--surface); border-radius: 16px;">
       <div class="modal-header border-0 pb-0">
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body pt-0" id="agentDetailModalBody">
         <div class="text-center py-5">

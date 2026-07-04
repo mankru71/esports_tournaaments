@@ -199,7 +199,7 @@ public class ExternalTournamentSyncService
                 return await _db.Matches.AnyAsync(m => m.TournamentId == tournament.Id, ct);
             }
 
-            var teamsByName = await ResolveExternalTeamsAsync(parsed, ct);
+            var teamsByName = await ResolveExternalTeamsAsync(parsed, tournament.Game, ct);
 
             var oldMatches = await _db.Matches.Where(m => m.TournamentId == tournament.Id).ToListAsync(ct);
             var oldMatchesByRoundAndTeams = oldMatches
@@ -358,7 +358,7 @@ public class ExternalTournamentSyncService
     /// Команды внешних турниров живут в Teams с флагом IsExternal = true —
     /// локальные команды не затрагиваются и не смешиваются с ними.
     /// </summary>
-    private async Task<Dictionary<string, Team>> ResolveExternalTeamsAsync(List<LpMatch> matches, CancellationToken ct)
+    private async Task<Dictionary<string, Team>> ResolveExternalTeamsAsync(List<LpMatch> matches, string game, CancellationToken ct)
     {
         var names = matches
             .SelectMany(m => new[] { m.TeamA, m.TeamB })
@@ -389,8 +389,11 @@ public class ExternalTournamentSyncService
                 team.Players.Add(new TeamPlayer
                 {
                     Nickname = $"{name} Player {i}",
-                    Game = "counterstrike",
-                    Cost = rng.Next(8, 13) * 10 // Random cost 80, 90, 100, 110, 120
+                    Game = game,
+                    Cost = rng.Next(8, 13) * 10, // Random cost 80, 90, 100, 110, 120
+                    Rating = Math.Round(0.85m + (decimal)rng.NextDouble() * 0.50m, 2),
+                    RatingStatus = "confirmed",
+                    RatingSource = "liquipedia"
                 });
             }
             

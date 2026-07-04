@@ -227,6 +227,31 @@ public class MatchesController : ControllerBase
     [HttpGet("{id}/comments")]
     public async Task<IActionResult> GetMatchComments(int id, [FromQuery] bool internalLobby = false, CancellationToken ct = default)
     {
+        if (internalLobby)
+        {
+            var userId = User.GetUserId();
+            if (userId == null)
+                return Unauthorized(new { message = "Необходима авторизация для доступа к внутреннему лобби" });
+
+            var user = await _db.Users.FindAsync(new object[] { userId.Value }, ct);
+            if (user == null)
+                return Unauthorized(new { message = "Пользователь не найден" });
+
+            var match = await _db.Matches.Include(m => m.TeamA).Include(m => m.TeamB).FirstOrDefaultAsync(m => m.Id == id, ct);
+            if (match == null)
+                return NotFound(new { message = "Матч не найден" });
+
+            bool isParticipant = false;
+            var isTeamA = match.TeamA != null && await _db.TeamPlayers.AnyAsync(tp => tp.TeamId == match.TeamAId && tp.Nickname == user.Nickname, ct);
+            var isTeamB = match.TeamB != null && await _db.TeamPlayers.AnyAsync(tp => tp.TeamId == match.TeamBId && tp.Nickname == user.Nickname, ct);
+            
+            if (isTeamA || isTeamB || user.Role == "admin" || user.Role == "judge")
+                isParticipant = true;
+
+            if (!isParticipant)
+                return StatusCode(403, new { message = "У вас нет доступа к внутреннему лобби этого матча" });
+        }
+
         var query = _db.MatchComments
             .Include(c => c.User)
             .Where(c => c.MatchId == id);
